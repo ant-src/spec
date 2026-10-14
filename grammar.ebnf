@@ -1,0 +1,203 @@
+(* Ant grammar, draft 0.1. Companion to ant-lang.md; section numbers refer to it.
+
+   Notation: "x" terminal, [x] optional, {x} zero or more, (x) grouping, x | y alternative.
+   Terminals that are themselves "|" or "{" are quoted. Comments are (* ... *).
+
+   Every production needs one token of lookahead, except where a note says how
+   the parser decides.                                                          *)
+
+
+(* ===== Layout (section 2) ================================================= *)
+
+(* The lexer emits a NEWLINE token for a line break unless
+     - the previous token cannot end an expression: a binary operator, "|", "??",
+       ",", ":", "(", "[", "{", "=", "=>", "...", or a prefix operator; or
+     - the next non-blank line starts with ".", "?.", or "|"; or
+     - the break is inside "(", "[", or a non-block "{": a literal, a record type,
+       a match body, an import list, or a parameter list.
+   Comments are removed first. A NEWLINE or ";" terminates a statement.
+   "else" must follow "}" on the same line; a NEWLINE between them ends the if. *)
+
+term            = NEWLINE | ";" ;
+
+
+(* ===== Lexical (section 2) ================================================ *)
+
+letter          = "a" | ... | "z" | "A" | ... | "Z" ;
+digit           = "0" | ... | "9" ;
+hex_digit       = digit | "a" | ... | "f" | "A" | ... | "F" ;
+ident           = ( letter | "_" ) { letter | digit | "_" } ;
+                  (* not a keyword, not a reserved word, and not "_" alone *)
+
+keyword         = "break" | "continue" | "defer" | "else" | "export" | "false"
+                | "for" | "func" | "go" | "if" | "import" | "in" | "match"
+                | "null" | "return" | "true" | "try" | "type" | "var" | "void"
+                | "while" ;
+reserved        = "as" | "async" | "await" | "class" | "const" | "enum"
+                | "interface" | "is" | "switch" | "undefined" | "yield" ;
+
+dec_digits      = digit { digit | "_" } ;
+int_lit         = dec_digits
+                | "0x" hex_digit { hex_digit | "_" }
+                | "0b" ( "0" | "1" ) { "0" | "1" | "_" } ;
+float_lit       = dec_digits "." dec_digits [ exponent ]
+                | dec_digits exponent ;
+exponent        = ( "e" | "E" ) [ "+" | "-" ] dec_digits ;
+
+string_lit      = '"' { string_char | escape } '"' ;            (* single line *)
+template_lit    = "`" { template_char | escape | "${" expression "}" } "`" ;
+                  (* may span lines; braces nest inside ${ } *)
+escape          = "\n" | "\t" | "\r" | "\\" | '\"' | "\`" | "\$"
+                | "\u{" hex_digit { hex_digit } "}" ;
+string_char     = (* any character except '"', "\", and line break *) ;
+template_char   = (* any character except "`", "\", and "$" followed by "{" *) ;
+
+
+(* ===== Module (section 10) ================================================ *)
+
+file            = { import_decl } { declaration } ;
+
+import_decl     = "import" string_lit import_pattern term ;
+import_pattern  = ident
+                | "{" [ import_item { "," import_item } [ "," ] ] "}" ;
+import_item     = ident [ ":" ident ] ;                          (* export: local *)
+
+declaration     = [ "export" ] ( var_decl | func_decl | type_decl ) term ;
+
+var_decl        = "var" ( ident [ ":" type ] | record_pattern ) "=" expression ;
+func_decl       = "func" ident [ type_params ] signature block ;
+type_decl       = "type" ident [ type_params ] "=" type ;
+
+type_params     = "[" ident { "," ident } [ "," ] "]" ;
+signature       = "(" [ param { "," param } [ "," ] ] ")" [ ":" type ] ;
+param           = ident ":" type [ "=" expression ] ;
+
+
+(* ===== Types (section 4) ================================================== *)
+
+type            = type_term { "|" type_term } ;
+type_term       = type_path [ type_args ]
+                | "null" | "void"
+                | string_lit                                    (* literal type *)
+                | record_type
+                | func_type
+                | "(" type ")" ;
+type_path       = ident { "." ident } ;      (* int, bool, never, Array, Geometry.Point, ... *)
+type_args       = "[" type { "," type } [ "," ] "]" ;
+record_type     = "{" [ field_type { "," field_type } [ "," ] ] "}" ;
+field_type      = ident ":" type ;
+func_type       = "func" "(" [ ft_param { "," ft_param } [ "," ] ] ")" ":" type ;
+                  (* the return type is greedy: func(T): A | B returns A | B *)
+ft_param        = [ ident ":" ] type ;       (* ident followed by ":" names the parameter *)
+
+
+(* ===== Statements and blocks (section 5) ================================== *)
+
+block           = "{" [ statement { term statement } [ term ] ] "}" ;
+statement       = var_decl | expression ;
+
+(* Braces are a block only directly after: "func" signature, "else", "go",
+   "defer", "=>", and at the end of an if, while, for, or match header.
+   After an identifier path they are a record or map literal (brace_lit).
+   Anywhere else they are a lambda.                                           *)
+
+
+(* ===== Expressions (section 5) ============================================ *)
+
+expression      = assignment ;
+
+assignment      = pipe [ assign_op pipe ] ;                      (* type void, not chainable *)
+assign_op       = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+
+pipe            = pipe_operand { "|" postfix } ;
+                  (* each right-hand postfix must end in call_args; a | f(b) is f(a, b) *)
+
+pipe_operand    = equality [ nullish_tail | logical_tail ] ;
+nullish_tail    = "??" equality { "??" equality } ;
+logical_tail    = { "&&" equality } { "||" logical_and } ;
+logical_and     = equality { "&&" equality } ;
+                  (* a && b || c && d is (a && b) || (c && d);
+                     "??" never mixes with "&&" or "||" without parentheses *)
+
+equality        = comparison { ( "==" | "!=" ) comparison } ;
+comparison      = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
+additive        = multiplicative { ( "+" | "-" ) multiplicative } ;
+multiplicative  = unary { ( "*" | "/" | "%" ) unary } ;
+
+unary           = ( "-" | "!" | "try" ) unary
+                | postfix ;
+
+postfix         = primary { postfix_op } ;
+postfix_op      = "." ident
+                | "?." ident
+                | "[" expression "]"
+                | "?." "[" expression "]"
+                | call_args
+                | "?." call_args ;
+call_args       = "(" [ arg { "," arg } [ "," ] ] ")" ;
+arg             = [ ident ":" ] expression ;
+                  (* the parser reads an expression; a lone identifier followed by ":"
+                     is reinterpreted as the argument name. ft_param works the same way *)
+
+primary         = literal
+                | ident
+                | brace_lit
+                | array_lit
+                | lambda
+                | anon_func
+                | "(" expression ")"
+                | if_expr | while_expr | for_expr | match_expr
+                | go_expr | defer_expr
+                | return_expr | break_expr | continue_expr ;
+
+literal         = int_lit | float_lit | string_lit | template_lit
+                | "true" | "false" | "null" | "void" ;
+
+(* A primary that is an identifier path directly followed by "{" is a brace_lit,
+   except inside a header (see if_expr).  The path "Map" builds a map; any other
+   path builds a record of that type. Type arguments are never written here.   *)
+brace_lit       = ident_path "{" [ brace_entry { "," brace_entry } [ "," ] ] "}" ;
+ident_path      = ident { "." ident } ;
+brace_entry     = "..." expression                               (* records only *)
+                | expression ":" expression ;
+                  (* record: the key is an ident and names a field;
+                     map:    the key is any expression                           *)
+
+array_lit       = "[" [ array_elem { "," array_elem } [ "," ] ] "]" ;
+array_elem      = [ "..." ] expression ;
+
+lambda          = "{" [ statement { term statement } [ term ] ] "}" ;
+                  (* implicit parameter x; accepts zero or one argument at run time *)
+anon_func       = "func" signature block ;
+
+(* A header is an expression in which a "{" that directly follows an identifier
+   path, a literal, or a closing ")" or "]" ends the header and opens the block.
+   Write a brace_lit in a header inside parentheses.                           *)
+if_expr         = "if" expression block [ "else" ( if_expr | block ) ] ;
+while_expr      = "while" expression block ;
+for_expr        = "for" ( ident | record_pattern ) "in" expression block ;
+match_expr      = "match" expression "{" [ arm { "," arm } [ "," ] ] "}" ;
+arm             = pattern [ "if" expression ] "=>" ( block | expression ) ;
+
+go_expr         = "go" block ;
+defer_expr      = "defer" block ;
+
+return_expr     = "return" [ expression ] ;    (* the expression must start on the same line *)
+break_expr      = "break" ;
+continue_expr   = "continue" ;
+
+
+(* ===== Patterns (section 5) =============================================== *)
+
+pattern         = literal_pattern
+                | "_"
+                | ident [ ":" type ]                             (* binding, or typed union member *)
+                | record_pattern
+                | array_pattern ;
+literal_pattern = [ "-" ] int_lit | [ "-" ] float_lit | string_lit
+                | "true" | "false" | "null" ;
+record_pattern  = "{" [ field_pattern { "," field_pattern } [ "," ] ] "}" ;
+field_pattern   = ident [ ":" pattern ] ;
+array_pattern   = "[" [ array_items ] "]" ;
+array_items     = "..." ident
+                | pattern { "," pattern } [ "," [ "..." ident ] ] ;
