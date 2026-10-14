@@ -133,6 +133,8 @@ var p: Point = { x: 1.0, y: 2.0 }
 p.x = 3.0
 ```
 
+A record has no dynamic access: `p["x"]` is a compile error, and `for` does not iterate a record. When the keys are data rather than part of the type, use a `Map` (next section).
+
 Records are structural with width subtyping: a value with extra fields is accepted where fewer are required. A record *literal* written directly against a known type must match it exactly, which catches typos.
 
 ```ant
@@ -150,7 +152,7 @@ The spread `...` copies all fields of a record into a new literal. Later fields 
 var moved = { ...p, x: 0.0 }
 ```
 
-Records, arrays, and maps are reference values: assigning or passing one shares it, and `==` compares identity. Structural comparison is a library call (`Array.equals`, `Map.equals`, `Record.equals`).
+Records, arrays, and maps are reference values: assigning or passing one shares it, and `==` compares identity. Structural comparison is a library call (`Array.equals`, `Map.equals`, `Record.equals`). `Record.equals` compares every run-time field recursively, including fields the static type does not mention, so it agrees with `String.from` and `Json.stringify`.
 
 ### Arrays and maps
 
@@ -666,7 +668,7 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 | `Bits` | `and`, `or`, `xor`, `not`, `shiftLeft`, `shiftRight`, `popCount` |
 | `Result` | constructors and combinators (section 8) |
 | `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic` | synchronization (section 9) |
-| `Record` | `equals`, `keys` for structural operations on records |
+| `Record` | `equals` for structural comparison of records |
 | `Json` | `parse`, `stringify` |
 | `File`, `Http`, `Time`, `Os` | I/O; every operation that can fail returns `Result` |
 | `print` | the only global function: writes `String.from(value)` and a newline to standard output |
