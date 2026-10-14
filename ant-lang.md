@@ -136,7 +136,7 @@ var p = Point{ x: 1.0, y: 2.0 }
 p.x = 3.0
 ```
 
-Every record type therefore has a name; there are no anonymous record literals. The name is erased at run time and is not part of the type. It tells the checker what shape the literal must have, and it keeps string literals inside the literal at their literal types (see below).
+Every record type therefore has a name; there are no anonymous record literals. A literal has no shorthand entries: write `Point{ x: x }`, not `Point{ x }`. The name is erased at run time and is not part of the type. It tells the checker what shape the literal must have, and it keeps string literals inside the literal at their literal types (see below).
 
 A record has no dynamic access: `p["x"]` is a compile error, and `for` does not iterate a record. When the keys are data rather than part of the type, use a `Map` (next section).
 
@@ -164,11 +164,11 @@ Records, arrays, and maps are reference values: assigning or passing one shares 
 
 ```ant
 var xs: Array[int] = [1, 2, 3]
-var ages = { "ada": 36, "linus": 54 }       // Map[string, int]
-var empty: Map[string, int] = {}
+var ages = Map{ "ada": 36, "linus": 54 }    // Map[string, int]
+var empty: Map[string, int] = Map{}
 ```
 
-Square brackets build arrays. Braces build a map, a block, or a lambda, and a record when a type name precedes them. Map keys are expressions, so `{ name: 1 }` keys on the variable `name`; write `{ "name": 1 }` for the string. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does: primitives by value, everything else by identity. Section 11 covers the operations.
+Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. Map keys are expressions, so `Map{ name: 1 }` keys on the variable `name`; write `Map{ "name": 1 }` for the string. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does: primitives by value, everything else by identity. Section 11 covers the operations.
 
 ### Literal types
 
@@ -319,11 +319,11 @@ var names = users
 
 A block is a sequence of expressions separated by newlines or semicolons. Its value is the value of the last expression. A block that ends in a declaration or assignment has type `void`.
 
-Braces are a block only in these positions: after `func(...)`, `else`, `go`, `defer`, or `=>` in a `match` arm, and at the end of an `if`, `while`, `for`, or `match` header. Anywhere else, braces are a map literal, a lambda (section 6), or, directly after a type name, a record literal.
+Braces mean one of three things, decided by the token before them. After a type name, including `Map`, they build a value of that type. After `func(...)`, `else`, `go`, `defer`, or `=>` in a `match` arm, and at the end of an `if`, `while`, `for`, or `match` header, they are a block. Anywhere else they are a lambda (section 6).
 
-So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is an empty map. A branch that produces a map literal nests it inside the block: `if c { { "a": 1 } } else { {} }`.
+So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is a lambda that returns `void`. A record or map literal inside a block needs no extra braces: `if c { Point{ x: 1.0, y: 0.0 } } else { origin }`.
 
-A header has no parentheses, as in Go. It ends at the first `{` that does not directly follow an operator. A record literal in a header would put `{` after a type name, so it must be parenthesized, as in Go: `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a newline would end the header expression (section 2).
+A header has no parentheses, as in Go. It ends at the first `{` that does not directly follow an operator. A record or map literal in a header would put `{` after a type name, so it must be parenthesized, as in Go: `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a newline would end the header expression (section 2).
 
 ### `if`
 
@@ -434,8 +434,6 @@ Mutex.withLock(lock, { counter += 1 })
 ```
 
 A lambda's parameter type comes from the function type the context expects. With no expected type, as in an unannotated `var`, a lambda is a compile error. Nested lambdas each bind their own `x`; use `func` when you need both.
-
-Because `{ x }` is a lambda, record and map literals have no shorthand entries: write `Point{ x: x, y: y }`.
 
 ### Closures and first-class values
 
@@ -732,7 +730,7 @@ func report(accounts: Map[int, Account]): string {
 }
 
 func main() {
-  var accounts: Map[int, Account] = {}
+  var accounts: Map[int, Account] = Map{}
   accounts[1] = Account{ id: 1, owner: "ada", balance: 100.0, status: Active{ kind: "active" } }
   accounts[2] = Account{ id: 2, owner: "linus", balance: 20.0, status: Suspended{ kind: "suspended", reason: "audit" } }
 
@@ -764,12 +762,12 @@ Each item below is a choice this draft made for the sake of having examples, not
 11. **Modules** are sketched. Package resolution, versioning, and whether selective import is needed are open.
 12. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
 13. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-14. **`{ x }` is a lambda, so record and map literals have no shorthand entries.** Patterns do allow `{ x, y }`. The asymmetry is deliberate but may confuse.
+14. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
 15. **Unions must be distinguishable at run time,** which limits them to one array, map, and function member and requires records to be tagged. Narrowing through a field path such as `source.status.kind` is unsound if another goroutine or an aliased reference reassigns the field, exactly as in TypeScript.
 16. **Literal types are strings only.** Boolean and integer literal types (`ok: true`) are deferred until a need appears.
 17. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
 18. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
 19. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
 20. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
-21. **Map keys are expressions.** `{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+21. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
 22. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
