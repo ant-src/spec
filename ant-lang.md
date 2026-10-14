@@ -11,7 +11,7 @@ The name "Ant" is a placeholder.
 - **One obvious way.** When two constructs would do the same job, the language keeps one.
 - **No implicit coercion.** A value never changes type without a visible conversion.
 - **Everything is an expression.** Blocks, `if`, `match`, and loops produce values.
-- **Errors are values.** `Result` and `Option` carry expected failures. `panic` is for bugs.
+- **Errors are values.** `Result` carries expected failures and `null` carries absence. `panic` is for bugs.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
 
 Section 13 lists the decisions this draft leaves open.
@@ -38,7 +38,7 @@ break continue defer else export false for func go if import
 in match null panic return true try type var void while
 ```
 
-Names such as `Array`, `Union`, and `Option` are ordinary identifiers bound by the standard library. They are not keywords.
+Names such as `Array`, `Map`, and `Result` are ordinary identifiers bound by the standard library. They are not keywords.
 
 ### Literals
 
@@ -61,7 +61,7 @@ A newline ends an expression, except when:
 - the line ends with a token that cannot end an expression, such as a binary operator, `,`, `(`, `[`, `{`, `=`, or `=>`; or
 - the next non-blank line starts with `.`, `?.`, or `|`.
 
-A semicolon also ends an expression. Nothing else is inferred. The second rule exists so that pipelines read top to bottom:
+A semicolon also ends an expression. Nothing else is inferred. The second rule exists so that pipelines, and union types, read top to bottom:
 
 ```ant
 var total = orders
@@ -94,7 +94,7 @@ There is no `++`, `--`, or `const`.
 
 ## 4. Types
 
-Ant is statically typed. Types are checked before the program runs, and most annotations are inferred. All types except enums are structural: two types with the same shape are the same type.
+Ant is statically typed. Types are checked before the program runs, and most annotations are inferred. All types are structural: two types with the same shape are the same type.
 
 ### Primitives
 
@@ -111,7 +111,7 @@ Ant is statically typed. Types are checked before the program runs, and most ann
 
 `int` is an alias for `int64` and `byte` is an alias for `uint8`.
 
-`void` is both a type and its only value, like `null`. A block that ends in a declaration or assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly when a value is required, as in `Ok(void)`.
+`void` is both a type and its only value, like `null`. A block that ends in a declaration or assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly when a value is required, as in `Result.ok(void)`.
 
 Numeric types never mix. Convert explicitly by calling the target type as a function. Conversions that lose information panic rather than wrap or truncate silently; float-to-int conversion truncates toward zero and panics when out of range.
 
@@ -162,12 +162,30 @@ var empty: Map[string, int] = [:]
 
 Square brackets always build a collection; braces always build a record, block, or lambda. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does: primitives by value, everything else by identity. Section 11 covers the operations.
 
-### Unions
+### Literal types
 
-`Union[A, B, ...]` is a value of any listed type. Members must be distinguishable at run time, so a union of two record types with the same fields, or of two function types, is rejected.
+A string literal is also a type. `"circle"` is the type whose only value is `"circle"`. Literal types appear almost only inside unions, where they serve as enumerations and as tags:
 
 ```ant
-type Id = Union[int, string]
+type Color = "red" | "green" | "blue"
+
+var c: Color = "green"
+c = "purple"                      // compile error
+```
+
+A string literal expression has its literal type when the context expects one, and `string` otherwise. Context comes from annotations, parameter types, return types, and the expected type of an enclosing record literal. An unannotated `var` therefore holds a `string`:
+
+```ant
+var a = "red"                     // string
+var b: Color = "red"              // Color
+```
+
+### Unions
+
+`A | B` is a type whose values belong to `A` or to `B`. In a type, `|` builds a union; in an expression, it is the pipe (section 5). A union may span several lines when each continuation line starts with `|`.
+
+```ant
+type Id = int | string
 
 func describe(id: Id): string {
   match (id) {
@@ -177,36 +195,35 @@ func describe(id: Id): string {
 }
 ```
 
-`Option[T]` is defined as `Union[T, null]`. See section 7.
+A nullable type is written `T | null`. See section 7.
 
-### Enums
+The members of a union must be distinguishable at run time. A union may contain at most one array type, one map type, and one function type. It may contain several record types only when they are tagged, as described next.
 
-`Enum[...]` declares a tagged union. Each variant has a name and zero or more named fields. Variants are constructed like functions and taken apart with `match`. Enums are nominal: two enum types are different even if their variants look alike.
+### Tagged unions
+
+A tagged union is a union of record types that share a field whose type is a different string literal in each member. By convention the field is named `kind`. The compiler uses it to tell the members apart: matching on the record, or comparing the field with `==`, narrows the value to one member.
 
 ```ant
-type Shape = Enum[
-  Circle(radius: float64),
-  Rect(width: float64, height: float64),
-  Empty,
-]
+type Circle = { kind: "circle", radius: float64 }
+type Rect = { kind: "rect", width: float64, height: float64 }
+type Shape = Circle | Rect | { kind: "empty" }
 
-var s = Circle(radius: 2.0)
-var r = Rect(3.0, 4.0)          // positional arguments also work
+var s: Shape = { kind: "circle", radius: 2.0 }
 
 func area(s: Shape): float64 {
   match (s) {
-    Circle(r) => 3.14159 * r * r,
-    Rect(w, h) => w * h,
-    Empty => 0.0,
+    { kind: "circle", radius } => 3.14159 * radius * radius,
+    { kind: "rect", width, height } => width * height,
+    { kind: "empty" } => 0.0,
   }
 }
+
+if (s.kind == "circle") { print(s.radius) }     // s: Circle here
 ```
 
-Variant names are declared in the module that declares the enum, so `Circle` is used without a prefix. Two enums in one module cannot share a variant name.
+Through a value of union type, a field can be read when every member has it, and its type is the union of the members' field types. A field can never be assigned through a union type; narrow first, then assign.
 
-Enum values are immutable. `==` compares them by variant and then by fields.
-
-`Result[T, E]` is a standard enum: `Enum[Ok(value: T), Err(error: E)]`. See section 8.
+`Result[T, E]` is a standard tagged union: `{ kind: "ok", value: T } | { kind: "err", error: E }`. See section 8.
 
 ### Function types
 
@@ -240,7 +257,7 @@ Type parameters have no constraints in this draft. `==` and `Map` keys work on e
 
 ### Type declarations
 
-`type` declares a name for a type. For records, unions, functions, and primitives it is an alias: `type UserId = int` makes `UserId` interchangeable with `int`. For `Enum[...]` it creates a new nominal type. There are no classes, interfaces, or prototypes.
+`type` declares a name for a type. The name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. There are no classes, interfaces, or prototypes.
 
 ### Inference
 
@@ -264,7 +281,7 @@ From tightest to loosest binding:
 | equality | `==` `!=` | both operands must have the same type |
 | logical | `&&` then `\|\|` | short-circuit, `bool` only |
 | null | `??` | cannot mix with `&&` or `\|\|` without parentheses |
-| pipe | `\|` | left associative |
+| pipe | `\|` | left associative; in a type, `\|` is a union (section 4) |
 | assignment | `=` `+=` `-=` `*=` `/=` `%=` | type `void` |
 
 There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`. Integer overflow panics. Division by zero panics for integers and follows IEEE 754 for floats.
@@ -324,7 +341,7 @@ while (!done) { done = step() }
 
 ### `match`
 
-`match` compares a value against patterns in order and evaluates the first arm that fits. Arms are separated by commas or newlines. Every arm has the same type, and the patterns must cover every possible value, so a `match` can never fall through.
+`match` compares a value against patterns in order and evaluates the first arm that fits. Arms are separated by commas or newlines. Every arm has the same type, and the patterns must cover every possible value, so a `match` can never fall through. For a tagged union that means every `kind`; for a primitive it usually means a final `_`.
 
 ```ant
 func describe(n: int): string {
@@ -341,11 +358,10 @@ Patterns:
 | Pattern | Matches |
 |---|---|
 | `42` `"a"` `true` `null` | the literal value |
-| `name` | anything; binds `name`, unless `name` is a variant in scope |
+| `name` | anything; binds `name` |
 | `_` | anything; binds nothing |
 | `name: Type` | a union member of `Type`; binds `name` |
-| `Circle(r)` `Rect(width: w, height: h)` | an enum variant; sub-patterns are positional or named |
-| `{ x, y }` `{ x: px }` | a record; binds fields, optionally renamed |
+| `{ x, y }` `{ x: px }` `{ kind: "circle", radius }` | a record; each field pattern binds the field, renames it, or tests it against a sub-pattern |
 | `[]` `[first, ...rest]` | an array of matching length, or a prefix with the rest |
 | `pattern if condition` | the pattern, when the guard is true |
 
@@ -361,7 +377,7 @@ var [head, ...tail] = items          // compile error: could be empty
 These have type `never`, so they can appear anywhere an expression is expected:
 
 ```ant
-var user = Map.get(users, id) ?? return Err({ message: "no such user" })
+var user = Map.get(users, id) ?? return Result.err({ message: "no such user" })
 ```
 
 ## 6. Functions
@@ -423,85 +439,81 @@ next()    // 1
 next()    // 2
 ```
 
-## 7. Nullability and `Option`
+## 7. Nullability
 
-`null` is a value of type `null` and nothing else. There is no `undefined`. A variable of type `string` can never hold `null`; a variable of type `Option[string]` can.
-
-`Option[T]` is `Union[T, null]`. There is no wrapper, so `Option[Option[T]]` is the same type as `Option[T]` (see section 13).
+`null` is a value of type `null` and nothing else. There is no `undefined`. A variable of type `string` can never hold `null`; a variable of type `string | null` can. There is no `Option` wrapper: a nullable type is just a union with `null`, so `T | null | null` is `T | null`. Where the difference between absent and null matters, ask the container instead of the value: `Map.has(m, k)` tells a missing key from a stored `null`.
 
 ```ant
-func find(users: Array[User], id: int): Option[User] {
+func find(users: Array[User], id: int): User | null {
   Array.find(users, { x.id == id })
 }
 ```
 
-Three constructs handle optional values:
+Four constructs handle nullable values, and together they replace the combinators other languages attach to an option type:
 
 ```ant
 var user = find(users, 7)
 
-var city = user?.address?.city          // Option[string]: null if any link is null
+var city = user?.address?.city          // string | null: null if any link is null
 var label = user?.name ?? "anonymous"   // string: right side when left is null
 
 match (user) {
   null => print("not found"),
   u => print(u.name),                   // u: User
 }
-```
 
-`?.` applies to field access, indexing, and calls: `f?.(x)` calls `f` when it is not null. The type checker narrows after a null test, so this also works:
-
-```ant
 if (user != null) {
-  print(user.name)        // user: User here
+  print(user.name)                      // user: User here
 }
 ```
 
-The `Option` namespace holds the usual combinators for cases the operators do not cover: `Option.map`, `Option.flatMap`, `Option.isSome`, `Option.unwrap` (panics on `null`), and `Option.toResult`.
+`?.` applies to field access, indexing, and calls: `f?.(x)` calls `f` when it is not null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The type checker narrows after a `null` test, as shown in the last two examples.
 
 ## 8. Errors
 
 ### `Result`
 
-Expected failures are values of `Result[T, E]`:
+Expected failures are values of `Result[T, E]`, a tagged union:
 
 ```ant
-type Result[T, E] = Enum[Ok(value: T), Err(error: E)]
+type Result[T, E] = { kind: "ok", value: T } | { kind: "err", error: E }
 ```
 
-The error type is whatever the author chooses. The standard library uses `Error`, a record `{ message: string }`, and user code often uses an enum.
+`Result.ok(value)` and `Result.err(error)` build the two cases. The error type is whatever the author chooses. The standard library uses `Error`, a record `{ message: string }`; user code often declares a tagged union of its own.
 
 ```ant
-type ParseError = Enum[Empty, BadDigit(at: int)]
+type ParseError = { kind: "empty" } | { kind: "badDigit", at: int }
 
 func parseInt(s: string): Result[int, ParseError] {
-  if (String.isEmpty(s)) { return Err(Empty) }
+  if (String.isEmpty(s)) { return Result.err({ kind: "empty" }) }
   ...
-  Ok(n)
+  Result.ok(n)
 }
 
 match (parseInt(input)) {
-  Ok(n) => print(`parsed ${n}`),
-  Err(Empty) => print("nothing to parse"),
-  Err(BadDigit(at)) => print(`bad digit at ${at}`),
+  { kind: "ok", value } => print(`parsed ${value}`),
+  { kind: "err", error: { kind: "empty" } } => print("nothing to parse"),
+  { kind: "err", error: { kind: "badDigit", at } } => print(`bad digit at ${at}`),
 }
 ```
 
+Because unions are structural, error types compose without wrapping. A function that parses a file can return `Result[Config, ParseError | Error]` and `try` both kinds of call.
+
 ### `try`
 
-`try` unwraps a `Result` or an `Option`. On `Ok(v)` or a non-null value it evaluates to `v`. On `Err(e)` it returns `Err(e)` from the enclosing function; on `null` it returns `null`. The enclosing function must therefore return a `Result` with a compatible error type, or an `Option`.
+`try` unwraps a `Result` or a nullable value. On `{ kind: "ok", value }` or a non-null value it evaluates to the value. On `{ kind: "err", ... }` it returns that record from the enclosing function; on `null` it returns `null`. The enclosing function must therefore return a `Result` whose error type accepts the error, or a type that includes `null`.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
   var text = try File.read(path)
   var json = try Json.parse(text)
-  Ok(Config.fromJson(json))
+  Result.ok(Config.fromJson(json))
 }
 ```
 
 `try` binds like a prefix operator: `try f(x) | g()` means `(try f(x)) | g()`.
 
-The `Result` namespace provides `Result.map`, `Result.mapErr`, `Result.unwrap` (panics on `Err`), `Result.unwrapOr`, and `Result.isOk`.
+Besides the two constructors, the `Result` namespace provides `Result.map`, `Result.mapErr`, `Result.unwrap` (panics on an error), `Result.unwrapOr`, and `Result.isOk`.
 
 ### `panic`
 
@@ -550,7 +562,7 @@ There are no channels. Goroutines coordinate through shared memory guarded by th
 
 ```ant
 func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
-  var results: Array[Result[Response, Error]] = Array.filled(Array.length(urls), Err({ message: "pending" }))
+  var results: Array[Result[Response, Error]] = Array.filled(Array.length(urls), Result.err({ message: "pending" }))
   var lock = Mutex.new()
   var wg = WaitGroup.new()
 
@@ -605,10 +617,10 @@ The standard library is a set of global namespaces. Each is a plain record of fu
 
 ### Arrays
 
-`Array[T]` is dense and growable. `xs[i]` reads and `xs[i] = v` writes; both panic when `i` is out of range. `Array.get(xs, i)` returns an `Option[T]` instead.
+`Array[T]` is dense and growable. `xs[i]` reads and `xs[i] = v` writes; both panic when `i` is out of range. `Array.get(xs, i)` returns `T | null` instead.
 
 ```ant
-Array.length(xs)              Array.push(xs, v)            Array.pop(xs): Option[T]
+Array.length(xs)              Array.push(xs, v)            Array.pop(xs): T | null 
 Array.get(xs, i)              Array.slice(xs, from, to)    Array.concat(xs, ys)
 Array.map(xs, f)              Array.filter(xs, f)          Array.reduce(xs, init, f)
 Array.find(xs, f)             Array.some(xs, f)            Array.every(xs, f)
@@ -622,7 +634,7 @@ Only `Array.push` and `Array.pop` modify their input. Every other function retur
 
 ### Maps
 
-`Map[K, V]` is an unordered hash map. `m[k]` reads an `Option[V]`; `m[k] = v` inserts or replaces.
+`Map[K, V]` is an unordered hash map. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes `null`, `Map.has` is the only way to tell a missing key from a stored `null`.
 
 ```ant
 Map.size(m)         Map.has(m, k)        Map.get(m, k)        Map.set(m, k, v)
@@ -644,7 +656,7 @@ String.toUpper(s)        String.toLower(s)            String.chars(s): Array[str
 String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 ```
 
-`String.from` renders any value. Primitives render as their literal form; records, arrays, maps, and enum variants render in literal syntax as well; functions render as `func`. It is the only implicit use of this function, and only inside template strings.
+`String.from` renders any value. Primitives render as their literal form; records, arrays, and maps render in literal syntax as well; functions render as `func`. It is the only implicit use of this function, and only inside template strings.
 
 ### Others
 
@@ -652,7 +664,7 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 |---|---|
 | `Math` | `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, constants |
 | `Bits` | `and`, `or`, `xor`, `not`, `shiftLeft`, `shiftRight`, `popCount` |
-| `Option`, `Result` | combinators (sections 7 and 8) |
+| `Result` | constructors and combinators (section 8) |
 | `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic` | synchronization (section 9) |
 | `Record` | `equals`, `keys` for structural operations on records |
 | `Json` | `parse`, `stringify` |
@@ -662,7 +674,7 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 ## 12. Example
 
 ```ant
-type Status = Enum[Active, Suspended(reason: string)]
+type Status = { kind: "active" } | { kind: "suspended", reason: string }
 
 type Account = {
   id: int,
@@ -671,30 +683,30 @@ type Account = {
   status: Status,
 }
 
-type TransferError = Enum[
-  NotFound(id: int),
-  Insufficient(needed: float64),
-  AccountSuspended(id: int, reason: string),
-]
+type TransferError =
+  | { kind: "notFound", id: int }
+  | { kind: "insufficient", needed: float64 }
+  | { kind: "suspended", id: int, reason: string }
 
 func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64): Result[void, TransferError] {
-  var source = accounts[from] ?? return Err(NotFound(from))
-  var target = accounts[to] ?? return Err(NotFound(to))
+  var source = accounts[from] ?? return Result.err({ kind: "notFound", id: from })
+  var target = accounts[to] ?? return Result.err({ kind: "notFound", id: to })
 
-  match (source.status) {
-    Suspended(reason) => return Err(AccountSuspended(id: from, reason: reason)),
-    Active => void,
+  if (source.status.kind == "suspended") {
+    return Result.err({ kind: "suspended", id: from, reason: source.status.reason })
   }
-  if (source.balance < amount) { return Err(Insufficient(needed: amount - source.balance)) }
+  if (source.balance < amount) {
+    return Result.err({ kind: "insufficient", needed: amount - source.balance })
+  }
 
   source.balance -= amount
   target.balance += amount
-  Ok(void)
+  Result.ok(void)
 }
 
 func report(accounts: Map[int, Account]): string {
   Map.values(accounts)
-    | Array.filter({ x.status == Active })
+    | Array.filter({ x.status.kind == "active" })
     | Array.sortBy({ x.balance })
     | Array.map({ `${x.owner}: ${x.balance}` })
     | String.join("\n")
@@ -702,14 +714,14 @@ func report(accounts: Map[int, Account]): string {
 
 func main() {
   var accounts: Map[int, Account] = [:]
-  accounts[1] = { id: 1, owner: "ada", balance: 100.0, status: Active }
-  accounts[2] = { id: 2, owner: "linus", balance: 20.0, status: Suspended(reason: "audit") }
+  accounts[1] = { id: 1, owner: "ada", balance: 100.0, status: { kind: "active" } }
+  accounts[2] = { id: 2, owner: "linus", balance: 20.0, status: { kind: "suspended", reason: "audit" } }
 
   match (transfer(accounts, 1, 2, 50.0)) {
-    Ok(_) => print("ok"),
-    Err(NotFound(id)) => print(`unknown account ${id}`),
-    Err(Insufficient(needed)) => print(`short by ${needed}`),
-    Err(AccountSuspended(id, reason)) => print(`account ${id} is suspended: ${reason}`),
+    { kind: "ok" } => print("ok"),
+    { kind: "err", error: { kind: "notFound", id } } => print(`unknown account ${id}`),
+    { kind: "err", error: { kind: "insufficient", needed } } => print(`short by ${needed}`),
+    { kind: "err", error: { kind: "suspended", id, reason } } => print(`account ${id} is suspended: ${reason}`),
   }
 
   print(report(accounts))
@@ -720,22 +732,22 @@ func main() {
 
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
-1. **`Option` is `Union[T, null]`.** Simple and makes `?.` and `??` the only null tools, but `Option[Option[T]]` collapses, so `Map.get` cannot distinguish a missing key from a stored `null`. The alternative is a real `Enum[Some(value: T), None]` with `?.` and `??` defined over it, which makes `null` redundant.
-2. **Tagged unions are `Enum[...]`** with variant names declared unqualified in the module. The alternative is qualified names (`Shape.Circle`) with the qualifier optional in patterns when the type is known. The name `Enum` itself is open.
-3. **Records, arrays, and maps are references, and `==` is identity on them.** This follows JavaScript but surprises anyone expecting `{ x: 1 } == { x: 1 }`. Value semantics for records would change `==`, map keys, and the mutation model. Enum values compare structurally, which is a second rule.
-4. **No explicit type arguments at call sites.** Keeps `f[T](x)` out of the grammar, so `a[b]` is always indexing. Needs confirmation that inference plus annotation is always enough.
-5. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
-6. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-7. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
-8. **Record literals are checked exactly, values structurally.** This mirrors TypeScript's excess-property check. Whether optional fields (`age?: int`) are worth adding on top of `Option` fields is open.
-9. **Newline rule.** The two-rule description in section 2 needs a precise token table, and the leading-`|` continuation should be tested against real code.
-10. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
-11. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
-12. **Modules** are sketched. Package resolution, versioning, and whether selective import is needed are open.
-13. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
-14. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-15. **`{ x }` is a lambda, so record literals have no shorthand properties.** Patterns do allow `{ x, y }`. The asymmetry is deliberate but may confuse.
-16. **Untagged unions require run-time distinguishable members.** The exact rule for records, and whether union members may be generic parameters, is unspecified.
-17. **Nothing is immutable** except strings and enum values. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+1. **Tagged unions follow TypeScript:** records with a literal `kind` field, no constructors, no nominal types. Building a value is verbose (`Result.err({ kind: "notFound", id: from })`), and an unannotated `var` widens the tag to `string`, so values built outside a typed context need an annotation. Generated constructor functions or a `const`-style declaration that keeps literal types may be wanted.
+2. **Records, arrays, and maps are references, and `==` is identity on them.** This follows JavaScript but surprises anyone expecting `{ x: 1 } == { x: 1 }`. Value semantics for records would change `==`, map keys, and the mutation model.
+3. **No explicit type arguments at call sites.** Keeps `f[T](x)` out of the grammar, so `a[b]` is always indexing. Needs confirmation that inference from arguments and expected type is always enough; `Result.err` relies on the expected type flowing into the call.
+4. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
+5. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
+6. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
+7. **Record literals are checked exactly, values structurally.** This mirrors TypeScript's excess-property check. Whether optional fields (`age?: int`) are worth adding on top of `int | null` fields is open.
+8. **Newline rule.** The two-rule description in section 2 needs a precise token table, and the leading-`|` continuation should be tested against real code, in both expression and type context.
+9. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
+10. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
+11. **Modules** are sketched. Package resolution, versioning, and whether selective import is needed are open.
+12. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
+13. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+14. **`{ x }` is a lambda, so record literals have no shorthand properties.** Patterns do allow `{ x, y }`. The asymmetry is deliberate but may confuse.
+15. **Unions must be distinguishable at run time,** which limits them to one array, map, and function member and requires records to be tagged. Narrowing through a field path such as `source.status.kind` is unsound if another goroutine or an aliased reference reassigns the field, exactly as in TypeScript.
+16. **Literal types are strings only.** Boolean and integer literal types (`ok: true`) are deferred until a need appears.
+17. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
 18. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
 19. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
