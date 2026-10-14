@@ -28,18 +28,26 @@ Source files are UTF-8 text. The file extension is `.ant`.
 /* block comment */
 ```
 
+Block comments do not nest.
+
 ### Identifiers and keywords
 
-An identifier starts with a letter or `_` and continues with letters, digits, or `_`. Case carries no meaning. `_` on its own is the wildcard pattern and cannot be read.
+An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`. Case carries no meaning. `_` on its own is the wildcard pattern and cannot be read.
 
 Keywords:
 
 ```
 break continue defer else export false for func go if import
-in match null panic return true try type var void while
+in match null return true try type var void while
 ```
 
-Names such as `Array`, `Map`, and `Result` are ordinary identifiers bound by the standard library. They are not keywords.
+These words are reserved so that they stay available and so that JavaScript habits produce an error rather than an identifier:
+
+```
+as async await class const enum interface is switch undefined yield
+```
+
+Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordinary identifiers bound by the standard library. They are not keywords.
 
 ### Literals
 
@@ -51,9 +59,9 @@ Names such as `Array`, `Map`, and `Result` are ordinary identifiers bound by the
 true        false         null
 ```
 
-An integer literal is always an `int` and a float literal is always a `float64`. Other numeric types are reached through a conversion, as in `byte(255)` or `float32(1.5)`. `1` is never a float; write `1.0`.
+An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowed between digits. A float literal has digits on both sides of the point, an exponent, or both; `.5` and `1.` are errors. An integer literal is always an `int` and a float literal is always a `float64`. Other numeric types are reached through a conversion, as in `byte(255)` or `float32(1.5)`. `1` is never a float; write `1.0`.
 
-Template strings interpolate any expression. Each `${...}` is converted with `String.from`, which is defined for every type (section 11).
+The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`. A plain string stays on one line; a template string may span lines. Template strings interpolate any expression. Each `${...}` is converted with `String.from`, which is defined for every type (section 11), and braces nest inside it, so a lambda or a record literal can appear there. There are no raw strings and no character literals.
 
 ### Line endings
 
@@ -62,7 +70,11 @@ A newline ends an expression, except when:
 - the line ends with a token that cannot end an expression, such as a binary operator, `,`, `(`, `[`, `{`, `=`, or `=>`; or
 - the next non-blank line starts with `.`, `?.`, or `|`.
 
-A semicolon also ends an expression. Nothing else is inferred. The second rule exists so that pipelines, and union types, read top to bottom:
+A semicolon also ends an expression. Nothing else is inferred. In particular, a line that starts with `(` or `[` begins a new statement, so `a` followed by `(b)` on the next line is two statements and not a call, and a `return` at the end of a line returns `void`, which the checker rejects in a function with another return type. `else` must follow the closing `}` on the same line. A trailing comment does not change any of this.
+
+Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. The items of a call, a literal, a record type, a parameter list, a `match`, and an import list are separated by commas, with an optional trailing comma. Only blocks separate their items by newlines.
+
+The continuation rule for a leading `.`, `?.`, or `|` exists so that pipelines, and union types, read top to bottom:
 
 ```ant
 var total = orders
@@ -91,7 +103,7 @@ count += 1                // also -= *= /= %=
 if count = 5 { ... }    // compile error: void is not bool
 ```
 
-There is no `++`, `--`, or `const`.
+An assignment target is a variable, a field such as `p.x`, or an element such as `xs[i]`. Patterns are not assignment targets. There is no `++`, `--`, or `const`.
 
 ## 4. Types
 
@@ -136,7 +148,7 @@ var p = Point{ x: 1.0, y: 2.0 }
 p.x = 3.0
 ```
 
-Every record type therefore has a name; there are no anonymous record literals. A literal has no shorthand entries: write `Point{ x: x }`, not `Point{ x }`. The name is erased at run time and is not part of the type. It tells the checker what shape the literal must have, and it keeps string literals inside the literal at their literal types (see below).
+Every record type therefore has a name; there are no anonymous record literals. The head of a literal is an identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A literal has no shorthand entries: write `Point{ x: x }`, not `Point{ x }`. The name is erased at run time and is not part of the type. It tells the checker what shape the literal must have, and it keeps string literals inside the literal at their literal types (see below).
 
 A record has no dynamic access: `p["x"]` is a compile error, and `for` does not iterate a record. When the keys are data rather than part of the type, use a `Map` (next section).
 
@@ -164,6 +176,7 @@ Records, arrays, and maps are reference values: assigning or passing one shares 
 
 ```ant
 var xs: Array[int] = [1, 2, 3]
+var more = [...xs, 4]                       // spread copies elements
 var ages = Map{ "ada": 36, "linus": 54 }    // Map[string, int]
 var empty: Map[string, int] = Map{}
 ```
@@ -190,7 +203,7 @@ var b: Color = "red"              // Color
 
 ### Unions
 
-`A | B` is a type whose values belong to `A` or to `B`. In a type, `|` builds a union; in an expression, it is the pipe (section 5). A union may span several lines when each continuation line starts with `|`.
+`A | B` is a type whose values belong to `A` or to `B`. In a type, `|` builds a union; in an expression, it is the pipe (section 5). A union may span several lines when each continuation line starts with `|`. A function type's return type extends as far right as possible, so `func(T): A | B` returns `A | B`; parenthesize the function type to put it inside a union.
 
 ```ant
 type Id = int | string
@@ -268,7 +281,7 @@ Type parameters have no constraints in this draft. `==` and `Map` keys work on e
 
 ### Type declarations
 
-`type` declares a name for a type. The name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. There are no classes, interfaces, or prototypes.
+`type` declares a name for a type and appears only at the top level of a module. The name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. There are no classes, interfaces, or prototypes.
 
 ### Inference
 
@@ -323,7 +336,7 @@ Braces mean one of three things, decided by the token before them. After a type 
 
 So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is a lambda that returns `void`. A record or map literal inside a block needs no extra braces: `if c { Point{ x: 1.0, y: 0.0 } } else { origin }`.
 
-A header has no parentheses, as in Go. It ends at the first `{` that does not directly follow an operator. A record or map literal in a header would put `{` after a type name, so it must be parenthesized, as in Go: `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a newline would end the header expression (section 2).
+A header has no parentheses, as in Go. It ends at the first `{` that is not an operand: one that directly follows an identifier path, a literal, or a closing `)` or `]`. A `{` directly after an operator or an opening bracket starts a lambda. A record or map literal in a header would put `{` after an identifier path, so it must be parenthesized, as in Go: `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a newline would end the header expression (section 2).
 
 ### `if`
 
@@ -343,8 +356,8 @@ for user in users {
   notify(user)
 }
 
-for entry in ages {           // entry: Entry[string, int]
-  print(`${entry.key}: ${entry.value}`)
+for { key, value } in ages {  // destructures each Entry[string, int]
+  print(`${key}: ${value}`)
 }
 
 for i in Array.range(0, 10) { ... }
@@ -354,7 +367,7 @@ while !done { done = step() }
 
 ### `match`
 
-`match` compares a value against patterns in order and evaluates the first arm that fits. Arms are separated by commas or newlines. Every arm has the same type, and the patterns must cover every possible value, so a `match` can never fall through. For a tagged union that means every `kind`; for a primitive it usually means a final `_`.
+`match` compares a value against patterns in order and evaluates the first arm that fits. Arms are separated by commas. Every arm has the same type, and the patterns must cover every possible value, so a `match` can never fall through. For a tagged union that means every `kind`; for a primitive it usually means a final `_`.
 
 ```ant
 func describe(n: int): string {
@@ -370,24 +383,23 @@ Patterns:
 
 | Pattern | Matches |
 |---|---|
-| `42` `"a"` `true` `null` | the literal value |
+| `42` `-1` `"a"` `true` `null` | the literal value |
 | `name` | anything; binds `name` |
 | `_` | anything; binds nothing |
-| `name: Type` | a union member of `Type`; binds `name` |
+| `name: Type` | a union member; `Type` is a primitive, `null`, `Array`, `Map`, or `func`; binds `name` |
 | `{ x, y }` `{ x: px }` `{ kind: "circle", radius }` | a record; each field pattern binds the field, renames it, or tests it against a sub-pattern; no type name |
 | `[]` `[first, ...rest]` | an array of matching length, or a prefix with the rest |
 | `pattern if condition` | the pattern, when the guard is true |
 
-Patterns nest. A record pattern ignores fields it does not mention. `var` accepts a record or array pattern on the left side when it cannot fail:
+Patterns nest. A record pattern ignores fields it does not mention. There are no or-patterns. `var` and `for` accept a record pattern on the left side; array patterns can always fail to match, so they appear only in `match`.
 
 ```ant
 var { x, y } = origin
-var [head, ...tail] = items          // compile error: could be empty
 ```
 
-### `return`, `break`, `continue`, `panic`
+### `return`, `break`, `continue`
 
-These have type `never`, so they can appear anywhere an expression is expected:
+These have type `never`, so they can appear anywhere an expression is expected. `return` takes the whole expression to its right, so `x ?? return y + 1` returns `y + 1`; parenthesize it to end earlier. `panic` is an ordinary function of type `never` (section 8).
 
 ```ant
 var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
@@ -395,7 +407,7 @@ var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user
 
 ## 6. Functions
 
-`func` declares a named function. Parameters are annotated; the return type may be inferred. The body is a block, so the last expression is the result and `return` is only needed to leave early.
+`func` declares a named function at the top level of a module; inside a block, bind a function with `var`. Parameters are annotated; the return type may be inferred. The body is a block, so the last expression is the result and `return` is only needed to leave early.
 
 ```ant
 func clamp(value: int, low: int, high: int): int {
@@ -422,7 +434,7 @@ Named arguments require the callee to be a declared function or a value whose fu
 
 ### Anonymous functions
 
-An anonymous function is `func` without a name. A lambda is a bare block with one implicit parameter named `x`. At run time a lambda accepts zero or one argument, so it also serves where a zero-parameter function is expected; the checker gives it the arity of the expected function type.
+An anonymous function is `func` without a name. Its parameters are annotated and it may state a return type, exactly like a declaration. A lambda is a bare block with one implicit parameter named `x`. At run time a lambda accepts zero or one argument, so it also serves where a zero-parameter function is expected; the checker gives it the arity of the expected function type.
 
 ```ant
 var add = func(a: int, b: int) { a + b }
@@ -478,7 +490,7 @@ if user != null {
 }
 ```
 
-`?.` applies to field access, indexing, and calls: `f?.(x)` calls `f` when it is not null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The type checker narrows after a `null` test, as shown in the last two examples.
+`?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The type checker narrows after a `null` test, as shown in the last two examples.
 
 ## 8. Errors
 
@@ -532,7 +544,7 @@ Besides the two constructors, the `Result` namespace provides `Result.map`, `Res
 
 ### `panic`
 
-`panic(message)` stops the current goroutine immediately. It is for bugs and impossible states, never for expected failures. Panics cannot be caught. A panic in the main goroutine ends the program with a non-zero exit status; a panic in any other goroutine ends only that goroutine (section 9).
+`panic(message)` is a prelude function of type `never`. It stops the current goroutine immediately. It is for bugs and impossible states, never for expected failures. Panics cannot be caught. A panic in the main goroutine ends the program with a non-zero exit status; a panic in any other goroutine ends only that goroutine (section 9).
 
 Operations that panic are listed with the operation. The common ones: integer overflow, integer division by zero, array index out of range, lossy numeric conversion, and `unwrap` on the wrong case.
 
@@ -603,7 +615,7 @@ A panic ends the goroutine it occurs in, after running that goroutine's deferred
 
 ## 10. Modules
 
-Each file is a module. A declaration prefixed with `export` is visible to other modules; everything else is private.
+Each file is a module: a sequence of `import` declarations followed by `var`, `func`, and `type` declarations. Nothing else appears at the top level. A declaration prefixed with `export` is visible to other modules; everything else is private. Top-level `var` initializers run in source order the first time the module is imported, after the modules it imports.
 
 ```ant
 // geometry.ant
@@ -688,7 +700,7 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 | `Record` | `equals` for structural comparison of records |
 | `Json` | `parse`, `stringify` |
 | `File`, `Http`, `Time`, `Os` | I/O; every operation that can fail returns `Result` |
-| `print` | the only global function: writes `String.from(value)` and a newline to standard output |
+| `print`, `panic` | the only global functions; `print` writes `String.from(value)` and a newline to standard output |
 
 ## 12. Example
 
@@ -760,7 +772,7 @@ Each item below is a choice this draft made for the sake of having examples, not
 5. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
 6. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
 7. **A record literal must match its named type exactly, while values are checked structurally.** Whether optional fields (`age?: int`) are worth adding on top of `int | null` fields is open.
-8. **Newline rule.** The two-rule description in section 2 needs a precise token table, and the leading-`|` continuation should be tested against real code, in both expression and type context.
+8. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
 9. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
 10. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
 11. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
@@ -775,3 +787,4 @@ Each item below is a choice this draft made for the sake of having examples, not
 20. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
 21. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
 22. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
+23. **Deferred syntax.** Raw strings, character literals, or-patterns, labeled loops, and destructuring assignment are left out until a need appears.
