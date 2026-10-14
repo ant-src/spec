@@ -614,15 +614,19 @@ export func distance(a: Point, b: Point): float64 {
 }
 ```
 
-`import` binds a whole module to a name. Members are accessed through that name, so user modules look like standard-library namespaces.
+A module is a record of its exports, and `import` destructures it with a pattern. A record pattern brings chosen exports into scope, with the usual `name: alias` renaming. A bare name binds the whole module as a namespace, so user modules look like standard-library namespaces.
 
 ```ant
-import Geometry from "./geometry"
+import "./geometry.ant" { distance, Point }
+import "./geometry.ant" { distance: dist, Point }
+import "./geometry.ant" Geometry
 
 var d = Geometry.distance(p, q)
 ```
 
-There is no selective import and no re-export. Module paths are relative to the importing file or name a package; package resolution is outside this document. Import cycles are a compile error.
+The path is a file path relative to the importing file, extension included. It comes first so that an editor knows the module before the pattern is typed. Types and values import alike. The interpreter reads the name of every `type` declaration even though it discards the body, so a misspelled name fails at the import whether or not the program was checked.
+
+Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. There is no re-export. Import cycles are a compile error.
 
 Execution starts at `func main()` in the module given to the compiler.
 
@@ -759,7 +763,7 @@ Each item below is a choice this draft made for the sake of having examples, not
 8. **Newline rule.** The two-rule description in section 2 needs a precise token table, and the leading-`|` continuation should be tested against real code, in both expression and type context.
 9. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
 10. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
-11. **Modules** are sketched. Package resolution, versioning, and whether selective import is needed are open.
+11. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
 12. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
 13. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
 14. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
