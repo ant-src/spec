@@ -87,7 +87,7 @@ Assignment is an expression of type `void`, so it cannot be chained or used as a
 ```ant
 count = count + 1
 count += 1                // also -= *= /= %=
-if (count = 5) { ... }    // compile error: void is not bool
+if count = 5 { ... }    // compile error: void is not bool
 ```
 
 There is no `++`, `--`, or `const`.
@@ -190,7 +190,7 @@ var b: Color = "red"              // Color
 type Id = int | string
 
 func describe(id: Id): string {
-  match (id) {
+  match id {
     n: int => `number ${n}`,
     s: string => `text ${s}`,
   }
@@ -213,14 +213,14 @@ type Shape = Circle | Rect | { kind: "empty" }
 var s: Shape = { kind: "circle", radius: 2.0 }
 
 func area(s: Shape): float64 {
-  match (s) {
+  match s {
     { kind: "circle", radius } => 3.14159 * radius * radius,
     { kind: "rect", width, height } => width * height,
     { kind: "empty" } => 0.0,
   }
 }
 
-if (s.kind == "circle") { print(s.radius) }     // s: Circle here
+if s.kind == "circle" { print(s.radius) }     // s: Circle here
 ```
 
 Through a value of union type, a field can be read when every member has it, and its type is the union of the members' field types. A field can never be assigned through a union type; narrow first, then assign.
@@ -310,14 +310,16 @@ var names = users
 
 A block is a sequence of expressions separated by newlines or semicolons. Its value is the value of the last expression. A block that ends in a declaration or assignment has type `void`.
 
-Braces are a block only directly after `func(...)`, `if (...)`, `else`, `for (...)`, `while (...)`, `go`, `defer`, or `=>` in a `match` arm. Anywhere else, braces are a record literal or a lambda (section 6).
+Braces are a block only in these positions: after `func(...)`, `else`, `go`, `defer`, or `=>` in a `match` arm, and at the end of an `if`, `while`, `for`, or `match` header. Anywhere else, braces are a record literal or a lambda (section 6).
 
-So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is an empty record. A branch that produces a record literal nests it inside the block: `if (c) { { x: 1 } } else { { x: 2 } }`.
+So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is an empty record. A branch that produces a record literal nests it inside the block: `if c { { x: 1 } } else { { x: 2 } }`.
+
+A header has no parentheses, as in Go. It ends at the first `{` that does not directly follow an operator, so `if x == { a: 1 } { ... }` compares against a record literal and then opens the block. The `{` must sit on the same line as the header, because a newline would end the header expression (section 2).
 
 ### `if`
 
 ```ant
-var label = if (n < 0) { "negative" } else if (n == 0) { "zero" } else { "positive" }
+var label = if n < 0 { "negative" } else if n == 0 { "zero" } else { "positive" }
 ```
 
 Both branches must have the same type. An `if` without `else` has type `void`.
@@ -327,18 +329,18 @@ Both branches must have the same type. An `if` without `else` has type `void`.
 `for` iterates over an array, a map, or a string. Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have type `void`. `break` and `continue` work as in JavaScript, without labels.
 
 ```ant
-for (user in users) {
-  if (user.banned) { continue }
+for user in users {
+  if user.banned { continue }
   notify(user)
 }
 
-for (entry in ages) {           // entry: { key: string, value: int }
+for entry in ages {           // entry: { key: string, value: int }
   print(`${entry.key}: ${entry.value}`)
 }
 
-for (i in Array.range(0, 10)) { ... }
+for i in Array.range(0, 10) { ... }
 
-while (!done) { done = step() }
+while !done { done = step() }
 ```
 
 ### `match`
@@ -347,7 +349,7 @@ while (!done) { done = step() }
 
 ```ant
 func describe(n: int): string {
-  match (n) {
+  match n {
     0 => "zero",
     x if x < 0 => "negative",
     _ => "positive",
@@ -388,8 +390,8 @@ var user = Map.get(users, id) ?? return Result.err({ message: "no such user" })
 
 ```ant
 func clamp(value: int, low: int, high: int): int {
-  if (value < low) { return low }
-  if (value > high) { return high }
+  if value < low { return low }
+  if value > high { return high }
   value
 }
 ```
@@ -459,12 +461,12 @@ var user = find(users, 7)
 var city = user?.address?.city          // string | null: null if any link is null
 var label = user?.name ?? "anonymous"   // string: right side when left is null
 
-match (user) {
+match user {
   null => print("not found"),
   u => print(u.name),                   // u: User
 }
 
-if (user != null) {
+if user != null {
   print(user.name)                      // user: User here
 }
 ```
@@ -487,12 +489,12 @@ type Result[T, E] = { kind: "ok", value: T } | { kind: "err", error: E }
 type ParseError = { kind: "empty" } | { kind: "badDigit", at: int }
 
 func parseInt(s: string): Result[int, ParseError] {
-  if (String.isEmpty(s)) { return Result.err({ kind: "empty" }) }
+  if String.isEmpty(s) { return Result.err({ kind: "empty" }) }
   ...
   Result.ok(n)
 }
 
-match (parseInt(input)) {
+match parseInt(input) {
   { kind: "ok", value } => print(`parsed ${value}`),
   { kind: "err", error: { kind: "empty" } } => print("nothing to parse"),
   { kind: "err", error: { kind: "badDigit", at } } => print(`bad digit at ${at}`),
@@ -568,7 +570,7 @@ func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
   var lock = Mutex.new()
   var wg = WaitGroup.new()
 
-  for (entry in Array.entries(urls)) {
+  for entry in Array.entries(urls) {
     WaitGroup.add(wg, 1)
     go {
       defer { WaitGroup.done(wg) }
@@ -694,10 +696,10 @@ func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64):
   var source = accounts[from] ?? return Result.err({ kind: "notFound", id: from })
   var target = accounts[to] ?? return Result.err({ kind: "notFound", id: to })
 
-  if (source.status.kind == "suspended") {
+  if source.status.kind == "suspended" {
     return Result.err({ kind: "suspended", id: from, reason: source.status.reason })
   }
-  if (source.balance < amount) {
+  if source.balance < amount {
     return Result.err({ kind: "insufficient", needed: amount - source.balance })
   }
 
@@ -719,7 +721,7 @@ func main() {
   accounts[1] = { id: 1, owner: "ada", balance: 100.0, status: { kind: "active" } }
   accounts[2] = { id: 2, owner: "linus", balance: 20.0, status: { kind: "suspended", reason: "audit" } }
 
-  match (transfer(accounts, 1, 2, 50.0)) {
+  match transfer(accounts, 1, 2, 50.0) {
     { kind: "ok" } => print("ok"),
     { kind: "err", error: { kind: "notFound", id } } => print(`unknown account ${id}`),
     { kind: "err", error: { kind: "insufficient", needed } } => print(`short by ${needed}`),
