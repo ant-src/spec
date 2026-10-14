@@ -12,6 +12,7 @@ The name "Ant" is a placeholder.
 - **No implicit coercion.** A value never changes type without a visible conversion.
 - **Everything is an expression.** Blocks, `if`, `match`, and loops produce values.
 - **Errors are values.** `Result` carries expected failures and `null` carries absence. `panic` is for bugs.
+- **Types are advisory.** A separate checker reads annotations and the interpreter discards them. No runtime behavior depends on a type that was written down.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
 
 Section 13 lists the decisions this draft leaves open.
@@ -50,7 +51,7 @@ Names such as `Array`, `Map`, and `Result` are ordinary identifiers bound by the
 true        false         null
 ```
 
-An integer literal takes any integer type the context requires and defaults to `int`. A float literal takes any float type and defaults to `float64`. `1` is never a float; write `1.0`.
+An integer literal is always an `int` and a float literal is always a `float64`. Other numeric types are reached through a conversion, as in `byte(255)` or `float32(1.5)`. `1` is never a float; write `1.0`.
 
 Template strings interpolate any expression. Each `${...}` is converted with `String.from`, which is defined for every type (section 11).
 
@@ -96,6 +97,8 @@ There is no `++`, `--`, or `const`.
 
 Ant is statically typed. Types are checked before the program runs, and most annotations are inferred. All types are structural: two types with the same shape are the same type.
 
+Types are checked by a separate checker and erased before the program runs. The interpreter parses annotations and discards them. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `==` or `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record.
+
 ### Primitives
 
 | Type | Values |
@@ -124,32 +127,35 @@ var bad = int8(300)               // panic: out of range
 
 ### Records
 
-A record type lists named fields. A record literal uses the same shape. Fields are mutable.
+A record type lists named fields. A record literal names the type and lists the fields, as in Go. Fields are mutable.
 
 ```ant
 type Point = { x: float64, y: float64 }
 
-var p: Point = { x: 1.0, y: 2.0 }
+var p = Point{ x: 1.0, y: 2.0 }
 p.x = 3.0
 ```
 
+Every record type therefore has a name; there are no anonymous record literals. The name is erased at run time and is not part of the type. It tells the checker what shape the literal must have, and it keeps string literals inside the literal at their literal types (see below).
+
 A record has no dynamic access: `p["x"]` is a compile error, and `for` does not iterate a record. When the keys are data rather than part of the type, use a `Map` (next section).
 
-Records are structural with width subtyping: a value with extra fields is accepted where fewer are required. A record *literal* written directly against a known type must match it exactly, which catches typos.
+Records are structural with width subtyping: a value with extra fields is accepted where fewer are required. A record literal must list exactly the fields of its named type, which catches typos.
 
 ```ant
 type Named = { name: string }
+type Person = { name: string, age: int }
 func greet(n: Named): string { `hi ${n.name}` }
 
-var user = { name: "ada", age: 36 }
-greet(user)                       // ok: user has a name field
-greet({ name: "ada", age: 36 })   // compile error: literal has extra field age
+var user = Person{ name: "ada", age: 36 }
+greet(user)                                 // ok: user has a name field
+greet(Named{ name: "ada", age: 36 })        // compile error: Named has no field age
 ```
 
 The spread `...` copies all fields of a record into a new literal. Later fields win.
 
 ```ant
-var moved = { ...p, x: 0.0 }
+var moved = Point{ ...p, x: 0.0 }
 ```
 
 Records, arrays, and maps are reference values: assigning or passing one shares it, and `==` compares identity. Structural comparison is a library call (`Array.equals`, `Map.equals`, `Record.equals`). `Record.equals` compares every run-time field recursively, including fields the static type does not mention, so it agrees with `String.from` and `Json.stringify`.
@@ -158,11 +164,11 @@ Records, arrays, and maps are reference values: assigning or passing one shares 
 
 ```ant
 var xs: Array[int] = [1, 2, 3]
-var ages: Map[string, int] = ["ada": 36, "linus": 54]
-var empty: Map[string, int] = [:]
+var ages = { "ada": 36, "linus": 54 }       // Map[string, int]
+var empty: Map[string, int] = {}
 ```
 
-Square brackets always build a collection; braces always build a record, block, or lambda. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does: primitives by value, everything else by identity. Section 11 covers the operations.
+Square brackets build arrays. Braces build a map, a block, or a lambda, and a record when a type name precedes them. Map keys are expressions, so `{ name: 1 }` keys on the variable `name`; write `{ "name": 1 }` for the string. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does: primitives by value, everything else by identity. Section 11 covers the operations.
 
 ### Literal types
 
@@ -175,7 +181,7 @@ var c: Color = "green"
 c = "purple"                      // compile error
 ```
 
-A string literal expression has its literal type when the context expects one, and `string` otherwise. Context comes from annotations, parameter types, return types, and the expected type of an enclosing record literal. An unannotated `var` therefore holds a `string`:
+A string literal expression has its literal type when the context expects one, and `string` otherwise. Context comes from annotations, parameter types, return types, and the field types of a named record literal. An unannotated `var` therefore holds a `string`:
 
 ```ant
 var a = "red"                     // string
@@ -208,9 +214,10 @@ A tagged union is a union of record types that share a field whose type is a dif
 ```ant
 type Circle = { kind: "circle", radius: float64 }
 type Rect = { kind: "rect", width: float64, height: float64 }
-type Shape = Circle | Rect | { kind: "empty" }
+type Empty = { kind: "empty" }
+type Shape = Circle | Rect | Empty
 
-var s: Shape = { kind: "circle", radius: 2.0 }
+var s: Shape = Circle{ kind: "circle", radius: 2.0 }
 
 func area(s: Shape): float64 {
   match s {
@@ -223,9 +230,11 @@ func area(s: Shape): float64 {
 if s.kind == "circle" { print(s.radius) }     // s: Circle here
 ```
 
+Patterns never name a type. They test shape, and the `kind` test is what tells the members apart at run time, because type names are erased.
+
 Through a value of union type, a field can be read when every member has it, and its type is the union of the members' field types. A field can never be assigned through a union type; narrow first, then assign.
 
-`Result[T, E]` is a standard tagged union: `{ kind: "ok", value: T } | { kind: "err", error: E }`. See section 8.
+`Result[T, E]` is a standard tagged union of `Ok[T]` and `Err[E]`. See section 8.
 
 ### Function types
 
@@ -244,7 +253,7 @@ Type parameters go in square brackets after the name. They apply to types and fu
 type Pair[A, B] = { first: A, second: B }
 
 func swap[A, B](p: Pair[A, B]): Pair[B, A] {
-  { first: p.second, second: p.first }
+  Pair{ first: p.second, second: p.first }
 }
 ```
 
@@ -310,11 +319,11 @@ var names = users
 
 A block is a sequence of expressions separated by newlines or semicolons. Its value is the value of the last expression. A block that ends in a declaration or assignment has type `void`.
 
-Braces are a block only in these positions: after `func(...)`, `else`, `go`, `defer`, or `=>` in a `match` arm, and at the end of an `if`, `while`, `for`, or `match` header. Anywhere else, braces are a record literal or a lambda (section 6).
+Braces are a block only in these positions: after `func(...)`, `else`, `go`, `defer`, or `=>` in a `match` arm, and at the end of an `if`, `while`, `for`, or `match` header. Anywhere else, braces are a map literal, a lambda (section 6), or, directly after a type name, a record literal.
 
-So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is an empty record. A branch that produces a record literal nests it inside the block: `if c { { x: 1 } } else { { x: 2 } }`.
+So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is an empty map. A branch that produces a map literal nests it inside the block: `if c { { "a": 1 } } else { {} }`.
 
-A header has no parentheses, as in Go. It ends at the first `{` that does not directly follow an operator, so `if x == { a: 1 } { ... }` compares against a record literal and then opens the block. The `{` must sit on the same line as the header, because a newline would end the header expression (section 2).
+A header has no parentheses, as in Go. It ends at the first `{` that does not directly follow an operator. A record literal in a header would put `{` after a type name, so it must be parenthesized, as in Go: `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a newline would end the header expression (section 2).
 
 ### `if`
 
@@ -334,7 +343,7 @@ for user in users {
   notify(user)
 }
 
-for entry in ages {           // entry: { key: string, value: int }
+for entry in ages {           // entry: Entry[string, int]
   print(`${entry.key}: ${entry.value}`)
 }
 
@@ -365,7 +374,7 @@ Patterns:
 | `name` | anything; binds `name` |
 | `_` | anything; binds nothing |
 | `name: Type` | a union member of `Type`; binds `name` |
-| `{ x, y }` `{ x: px }` `{ kind: "circle", radius }` | a record; each field pattern binds the field, renames it, or tests it against a sub-pattern |
+| `{ x, y }` `{ x: px }` `{ kind: "circle", radius }` | a record; each field pattern binds the field, renames it, or tests it against a sub-pattern; no type name |
 | `[]` `[first, ...rest]` | an array of matching length, or a prefix with the rest |
 | `pattern if condition` | the pattern, when the guard is true |
 
@@ -381,7 +390,7 @@ var [head, ...tail] = items          // compile error: could be empty
 These have type `never`, so they can appear anywhere an expression is expected:
 
 ```ant
-var user = Map.get(users, id) ?? return Result.err({ message: "no such user" })
+var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
 ```
 
 ## 6. Functions
@@ -413,7 +422,7 @@ Named arguments require the callee to be a declared function or a value whose fu
 
 ### Anonymous functions
 
-An anonymous function is `func` without a name. A lambda is a bare block whose single parameter is implicitly named `x`. If the expected type is a zero-parameter function, the lambda takes no parameter.
+An anonymous function is `func` without a name. A lambda is a bare block with one implicit parameter named `x`. At run time a lambda accepts zero or one argument, so it also serves where a zero-parameter function is expected; the checker gives it the arity of the expected function type.
 
 ```ant
 var add = func(a: int, b: int) { a + b }
@@ -426,7 +435,7 @@ Mutex.withLock(lock, { counter += 1 })
 
 A lambda's parameter type comes from the function type the context expects. With no expected type, as in an unannotated `var`, a lambda is a compile error. Nested lambdas each bind their own `x`; use `func` when you need both.
 
-Because `{ x }` is a lambda, record literals have no shorthand properties: write `{ x: x }`.
+Because `{ x }` is a lambda, record and map literals have no shorthand entries: write `Point{ x: x, y: y }`.
 
 ### Closures and first-class values
 
@@ -480,16 +489,20 @@ if user != null {
 Expected failures are values of `Result[T, E]`, a tagged union:
 
 ```ant
-type Result[T, E] = { kind: "ok", value: T } | { kind: "err", error: E }
+type Ok[T] = { kind: "ok", value: T }
+type Err[E] = { kind: "err", error: E }
+type Result[T, E] = Ok[T] | Err[E]
 ```
 
-`Result.ok(value)` and `Result.err(error)` build the two cases. The error type is whatever the author chooses. The standard library uses `Error`, a record `{ message: string }`; user code often declares a tagged union of its own.
+`Result.ok(value)` and `Result.err(error)` build the two cases and spare the caller the `kind` field. The error type is whatever the author chooses. The standard library uses `Error`, a record `{ message: string }`; user code often declares a tagged union of its own.
 
 ```ant
-type ParseError = { kind: "empty" } | { kind: "badDigit", at: int }
+type EmptyInput = { kind: "empty" }
+type BadDigit = { kind: "badDigit", at: int }
+type ParseError = EmptyInput | BadDigit
 
 func parseInt(s: string): Result[int, ParseError] {
-  if String.isEmpty(s) { return Result.err({ kind: "empty" }) }
+  if String.isEmpty(s) { return Result.err(EmptyInput{ kind: "empty" }) }
   ...
   Result.ok(n)
 }
@@ -566,7 +579,7 @@ There are no channels. Goroutines coordinate through shared memory guarded by th
 
 ```ant
 func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
-  var results: Array[Result[Response, Error]] = Array.filled(Array.length(urls), Result.err({ message: "pending" }))
+  var results: Array[Result[Response, Error]] = Array.filled(Array.length(urls), Result.err(Error{ message: "pending" }))
   var lock = Mutex.new()
   var wg = WaitGroup.new()
 
@@ -634,7 +647,7 @@ Array.range(from, to)         Array.filled(n, v)           Array.equals(xs, ys)
 Array.sum(xs)                 Array.flatten(xs)            Array.isEmpty(xs)
 ```
 
-Only `Array.push` and `Array.pop` modify their input. Every other function returns a new array and leaves the argument untouched, so `Array.sort(xs)` is a sorted copy. `Array.entries(xs)` yields `{ index: int, value: T }` records.
+Only `Array.push` and `Array.pop` modify their input. Every other function returns a new array and leaves the argument untouched, so `Array.sort(xs)` is a sorted copy. `Array.entries(xs)` yields `Indexed[T]` records, `{ index: int, value: T }`.
 
 ### Maps
 
@@ -646,7 +659,7 @@ Map.remove(m, k)    Map.keys(m)          Map.values(m)        Map.entries(m)
 Map.map(m, f)       Map.filter(m, f)     Map.merge(m, n)      Map.equals(m, n)
 ```
 
-Iterating a map with `for` yields `{ key: K, value: V }` records in unspecified order.
+Iterating a map with `for` yields `Entry[K, V]` records, `{ key: K, value: V }`, in unspecified order.
 
 ### Strings
 
@@ -660,7 +673,7 @@ String.toUpper(s)        String.toLower(s)            String.chars(s): Array[str
 String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 ```
 
-`String.from` renders any value. Primitives render as their literal form; records, arrays, and maps render in literal syntax as well; functions render as `func`. It is the only implicit use of this function, and only inside template strings.
+`String.from` renders any value. Primitives, arrays, and maps render in literal syntax; records render as `{ x: 1.0, y: 2.0 }` without a type name, since names are erased; functions render as `func`. It is the only implicit use of this function, and only inside template strings.
 
 ### Others
 
@@ -678,7 +691,9 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 ## 12. Example
 
 ```ant
-type Status = { kind: "active" } | { kind: "suspended", reason: string }
+type Active = { kind: "active" }
+type Suspended = { kind: "suspended", reason: string }
+type Status = Active | Suspended
 
 type Account = {
   id: int,
@@ -687,20 +702,20 @@ type Account = {
   status: Status,
 }
 
-type TransferError =
-  | { kind: "notFound", id: int }
-  | { kind: "insufficient", needed: float64 }
-  | { kind: "suspended", id: int, reason: string }
+type NotFound = { kind: "notFound", id: int }
+type Insufficient = { kind: "insufficient", needed: float64 }
+type AccountSuspended = { kind: "suspended", id: int, reason: string }
+type TransferError = NotFound | Insufficient | AccountSuspended
 
 func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64): Result[void, TransferError] {
-  var source = accounts[from] ?? return Result.err({ kind: "notFound", id: from })
-  var target = accounts[to] ?? return Result.err({ kind: "notFound", id: to })
+  var source = accounts[from] ?? return Result.err(NotFound{ kind: "notFound", id: from })
+  var target = accounts[to] ?? return Result.err(NotFound{ kind: "notFound", id: to })
 
   if source.status.kind == "suspended" {
-    return Result.err({ kind: "suspended", id: from, reason: source.status.reason })
+    return Result.err(AccountSuspended{ kind: "suspended", id: from, reason: source.status.reason })
   }
   if source.balance < amount {
-    return Result.err({ kind: "insufficient", needed: amount - source.balance })
+    return Result.err(Insufficient{ kind: "insufficient", needed: amount - source.balance })
   }
 
   source.balance -= amount
@@ -717,9 +732,9 @@ func report(accounts: Map[int, Account]): string {
 }
 
 func main() {
-  var accounts: Map[int, Account] = [:]
-  accounts[1] = { id: 1, owner: "ada", balance: 100.0, status: { kind: "active" } }
-  accounts[2] = { id: 2, owner: "linus", balance: 20.0, status: { kind: "suspended", reason: "audit" } }
+  var accounts: Map[int, Account] = {}
+  accounts[1] = Account{ id: 1, owner: "ada", balance: 100.0, status: Active{ kind: "active" } }
+  accounts[2] = Account{ id: 2, owner: "linus", balance: 20.0, status: Suspended{ kind: "suspended", reason: "audit" } }
 
   match transfer(accounts, 1, 2, 50.0) {
     { kind: "ok" } => print("ok"),
@@ -736,22 +751,25 @@ func main() {
 
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
-1. **Tagged unions follow TypeScript:** records with a literal `kind` field, no constructors, no nominal types. Building a value is verbose (`Result.err({ kind: "notFound", id: from })`), and an unannotated `var` widens the tag to `string`, so values built outside a typed context need an annotation. Generated constructor functions or a `const`-style declaration that keeps literal types may be wanted.
-2. **Records, arrays, and maps are references, and `==` is identity on them.** This follows JavaScript but surprises anyone expecting `{ x: 1 } == { x: 1 }`. Value semantics for records would change `==`, map keys, and the mutation model.
-3. **No explicit type arguments at call sites.** Keeps `f[T](x)` out of the grammar, so `a[b]` is always indexing. Needs confirmation that inference from arguments and expected type is always enough; `Result.err` relies on the expected type flowing into the call.
+1. **Tagged unions follow TypeScript,** as records with a literal `kind` field. Naming the literal keeps the tag at its literal type, but the tag is written twice, as in `NotFound{ kind: "notFound", id: from }`, and patterns cannot use the name because it is erased. The remedy would be an interpreter that keeps `type` declarations as a table and fills in or tests literal-typed fields. That gives enum-like ergonomics at the cost of runtime behavior that depends on declarations.
+2. **Records, arrays, and maps are references, and `==` is identity on them.** This follows JavaScript but surprises anyone expecting `Point{ x: 1.0 } == Point{ x: 1.0 }`. Value semantics for records would change `==`, map keys, and the mutation model.
+3. **No explicit type arguments at call sites.** Keeps `f[T](x)` out of the grammar, so `a[b]` is always indexing. Needs confirmation that inference from arguments and expected type is always enough.
 4. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
 5. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
 6. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
-7. **Record literals are checked exactly, values structurally.** This mirrors TypeScript's excess-property check. Whether optional fields (`age?: int`) are worth adding on top of `int | null` fields is open.
+7. **A record literal must match its named type exactly, while values are checked structurally.** Whether optional fields (`age?: int`) are worth adding on top of `int | null` fields is open.
 8. **Newline rule.** The two-rule description in section 2 needs a precise token table, and the leading-`|` continuation should be tested against real code, in both expression and type context.
 9. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
 10. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
 11. **Modules** are sketched. Package resolution, versioning, and whether selective import is needed are open.
 12. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
 13. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-14. **`{ x }` is a lambda, so record literals have no shorthand properties.** Patterns do allow `{ x, y }`. The asymmetry is deliberate but may confuse.
+14. **`{ x }` is a lambda, so record and map literals have no shorthand entries.** Patterns do allow `{ x, y }`. The asymmetry is deliberate but may confuse.
 15. **Unions must be distinguishable at run time,** which limits them to one array, map, and function member and requires records to be tagged. Narrowing through a field path such as `source.status.kind` is unsound if another goroutine or an aliased reference reassigns the field, exactly as in TypeScript.
 16. **Literal types are strings only.** Boolean and integer literal types (`ok: true`) are deferred until a need appears.
 17. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
 18. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
 19. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
+20. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
+21. **Map keys are expressions.** `{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+22. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
