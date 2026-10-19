@@ -78,7 +78,6 @@ param           = ident ":" type [ "=" expression ] ;
 type            = type_term { "|" type_term } ;
 type_term       = type_path [ type_args ]
                 | "null" | "void"
-                | string_lit                                    (* literal type *)
                 | record_type
                 | func_type
                 | "(" type ")" ;
@@ -191,6 +190,7 @@ continue_expr   = "continue" ;
 
 pattern         = literal_pattern
                 | "_"
+                | ident_path record_pattern                     (* tagged record; chosen when "{" or "." follows the identifier *)
                 | ident [ ":" type ]                             (* binding, or typed union member *)
                 | record_pattern
                 | array_pattern ;
