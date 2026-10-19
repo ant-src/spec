@@ -124,7 +124,7 @@ Types are checked by a separate checker and erased before the program runs. The 
 | `void` | the single value `void`, which carries no information |
 | `never` | the type of expressions that do not return, such as `panic(...)` or `return` |
 
-`int` is an alias for `int64` and `byte` is an alias for `uint8`.
+`int` is an alias for `int64` and `byte` is an alias for `uint8`. The prelude also declares `Number`, the union of the ten numeric types, and `Ordered`, which is `Number | string`; they exist to bound type parameters (see Generics).
 
 `void` is both a type and its only value, like `null`. A block that ends in a declaration or assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly when a value is required, as in `Result.ok(void)`.
 
@@ -278,7 +278,18 @@ var xs = Array.map([1, 2, 3], { x * 2 })   // Array[int]
 var ys: Array[string] = []                  // annotation needed
 ```
 
-Type parameters have no constraints in this draft. `==` and `Map` keys work on every type, so most generic code needs none. A generic type with different type arguments is a different type: `Array[Circle]` is not an `Array[Shape]` (see Assignability).
+A type parameter may carry a bound, written `[T: Bound]`, where the bound is any type. A solution for `T` must be assignable to the bound. Inside the body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and assigned, and an operator applies to `T` when it applies to every member of the bound. Without a bound, `T` is opaque; `==` and `Map` keys still work, because they work on every type. Bounds are the way to accept any array whose elements have a given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing changes at run time; the interpreter never sees a bound.
+
+```ant
+func max[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
+func names[T: { name: string }](xs: Array[T]): Array[string] { Array.map(xs, { x.name }) }
+
+names(people)                     // ok with Array[Person]: T = Person, which has a name
+max(1, 2)                         // int
+max(1, 2.0)                       // compile error: int and float64 are different T
+```
+
+There are no interfaces, no `where` clauses, and no bounds on type constructors. A user type cannot customize `String.from` or ordering, so records sort through `Array.sortBy` or `Array.sortWith`. A generic type with different type arguments is a different type: `Array[Circle]` is not an `Array[Shape]` (see Assignability).
 
 ### Type declarations
 
@@ -701,10 +712,20 @@ Array.length(xs)              Array.push(xs, v)            Array.pop(xs): T | nu
 Array.get(xs, i)              Array.slice(xs, from, to)    Array.concat(xs, ys)
 Array.map(xs, f)              Array.filter(xs, f)          Array.reduce(xs, init, f)
 Array.find(xs, f)             Array.some(xs, f)            Array.every(xs, f)
-Array.sort(xs)                Array.sortBy(xs, f)          Array.reverse(xs)
-Array.contains(xs, v)         Array.indexOf(xs, v)         Array.entries(xs)
-Array.range(from, to)         Array.filled(n, v)           Array.same(xs, ys)
-Array.sum(xs)                 Array.flatten(xs)            Array.isEmpty(xs)
+Array.sort(xs)                Array.sortBy(xs, key)        Array.sortWith(xs, cmp)
+Array.reverse(xs)             Array.contains(xs, v)        Array.indexOf(xs, v)
+Array.entries(xs)             Array.range(from, to)        Array.filled(n, v)
+Array.same(xs, ys)            Array.sum(xs)                Array.flatten(xs)
+Array.isEmpty(xs)
+```
+
+The functions that compare or add elements carry bounds (section 4, Generics):
+
+```
+Array.sort[T: Ordered](xs: Array[T]): Array[T]
+Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]
+Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]
+Array.sum[T: Number](xs: Array[T]): T
 ```
 
 Only `Array.push` and `Array.pop` modify their input. Every other function returns a new array and leaves the argument untouched, so `Array.sort(xs)` is a sorted copy. `Array.entries(xs)` yields `Indexed[T]` records, `{ index: int, value: T }`.
@@ -739,7 +760,7 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 
 | Namespace | Purpose |
 |---|---|
-| `Math` | `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, constants |
+| `Math` | `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, constants; `min` and `max` are `[T: Ordered]`, the rest take `float64` |
 | `Bits` | `and`, `or`, `xor`, `not`, `shiftLeft`, `shiftRight`, `popCount` |
 | `Result` | constructors and combinators (section 8) |
 | `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic` | synchronization (section 9) |
@@ -826,14 +847,13 @@ Each item below is a choice this draft made for the sake of having examples, not
 5. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
 6. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
 7. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-8. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
-9. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-10. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
-11. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-12. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-13. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
-14. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
-15. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
-16. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-17. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
-18. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
+8. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+9. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
+10. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+11. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+12. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
+13. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
+14. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
+15. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+16. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
+17. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.

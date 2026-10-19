@@ -68,7 +68,8 @@ var_decl        = "var" ( ident [ ":" type ] | record_pattern ) "=" expression ;
 func_decl       = "func" ident [ type_params ] signature block ;
 type_decl       = "type" ident [ type_params ] "=" type ;
 
-type_params     = "[" ident { "," ident } [ "," ] "]" ;
+type_params     = "[" type_param { "," type_param } [ "," ] "]" ;
+type_param      = ident [ ":" type ] ;
 signature       = "(" [ param { "," param } [ "," ] ] ")" [ ":" type ] ;
 param           = ident ":" type [ "=" expression ] ;
 
