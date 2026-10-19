@@ -252,7 +252,7 @@ Through a value of union type, a field can be read when every member has it, and
 
 ### Function types
 
-A function type lists parameter types and the return type. Parameter names are optional. When present, callers may pass those parameters by name (section 6).
+A function type lists parameter types and the return type. Parameter names are optional and only document intent: a call through a function value is always positional (section 6).
 
 ```ant
 type Predicate[T] = func(T): bool
@@ -278,11 +278,35 @@ var xs = Array.map([1, 2, 3], { x * 2 })   // Array[int]
 var ys: Array[string] = []                  // annotation needed
 ```
 
-Type parameters have no constraints in this draft. `==` and `Map` keys work on every type, so most generic code needs none.
+Type parameters have no constraints in this draft. `==` and `Map` keys work on every type, so most generic code needs none. A generic type with different type arguments is a different type: `Array[Circle]` is not an `Array[Shape]` (see Assignability).
 
 ### Type declarations
 
 `type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records). Otherwise the name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. There are no classes, interfaces, or prototypes.
+
+### Assignability
+
+A value of type `S` can be used where `T` is expected when one of these holds:
+
+- `S` and `T` are the same type. Primitives never widen; `int8` is not an `int`.
+- `T` is a union and `S` is assignable to one of its members, or `S` is a union and every member of `S` is assignable to `T`. Members flatten and deduplicate, so `T | null | null` is `T | null`.
+- `S` is `never`. `void` is assignable only to `void`, and `null` only to a type that includes it.
+- `T` is an anonymous record type and `S` is a record type with at least the fields of `T`, each with exactly the type `T` gives it. A named record type accepts only its own tag.
+- `S` and `T` are the same generic type with identical type arguments. Type arguments are invariant, because contents are mutable: if `Array[Circle]` were an `Array[Shape]`, a widened alias could store a `Rect` among the circles for a later read to panic on, and the checker's guarantee would be gone.
+- `S` and `T` are function types with the same number of parameters, each parameter of `T` assignable to the corresponding parameter of `S`, and the result of `S` assignable to the result of `T`. A function with default parameters is also assignable to a type that lists its required parameters plus any prefix of the optional ones.
+
+Widening a container is therefore always by construction, which also makes the copy visible:
+
+```ant
+var circles = [Circle{ radius: 1.0 }]
+var shapes: Array[Shape] = circles          // compile error: Array[Circle] is not Array[Shape]
+var widened: Array[Shape] = [...circles]    // ok: a new array; the expected type widens the elements
+
+var f: func(Circle): float64 = area         // ok: area takes any Shape
+var g: func(Shape): float64 = circleArea    // compile error: circleArea takes only a Circle
+```
+
+For a `Result`, `try` is the widening step (section 8).
 
 ### Inference
 
@@ -432,7 +456,7 @@ connect("example.com", tls: false)
 connect(port: 80, host: "example.com")
 ```
 
-Named arguments require the callee to be a declared function or a value whose function type names its parameters. There are no variadic parameters; pass an array.
+Named arguments apply only to a direct call of a declared function, by its name or through a namespace. A call through a function value is positional, because the value may be a lambda whose only parameter is `x`, and the interpreter resolves names against the callee's own parameter list. There are no variadic parameters; pass an array.
 
 ### Anonymous functions
 
@@ -526,11 +550,11 @@ match parseInt(input) {
 }
 ```
 
-Because unions are flat, error types compose without wrapping. A function that parses a file can return `Result[Config, ParseError | Error]` and `try` both kinds of call.
+Because unions are flat, error types compose without wrapping. A function that parses a file can return `Result[Config, ParseError | Error]` and `try` both kinds of call. The narrower `Result[Config, ParseError]` is not itself assignable to the wider type, since type arguments are invariant (section 4): `try` widens on the way out, and `Result.mapErr(r, { x })` widens explicitly where `try` does not apply.
 
 ### `try`
 
-`try` unwraps a `Result` or a nullable value. On `Ok{ value }` or a non-null value it evaluates to the value. On an `Err` it returns that record from the enclosing function; on `null` it returns `null`. The enclosing function must therefore return a `Result` whose error type accepts the error, or a type that includes `null`.
+`try` unwraps a `Result` or a nullable value. On `Ok{ value }` or a non-null value it evaluates to the value. On an `Err` it returns a fresh `Err` carrying the same error from the enclosing function, typed by that function's return type; on `null` it returns `null`. The enclosing function must therefore return a `Result` whose error type accepts the error, or a type that includes `null`.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
@@ -780,19 +804,17 @@ Each item below is a choice this draft made for the sake of having examples, not
 3. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
 4. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
 5. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
-6. **A record literal must match its named type exactly, while anonymous record types are checked structurally.** Whether optional fields (`age?: int`) are worth adding on top of `int | null` fields is open.
-7. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
-8. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
-9. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
-10. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-11. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
-12. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-13. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
-14. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-15. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-16. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
-17. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
-18. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
-19. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-20. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
-21. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
+6. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
+7. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
+8. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+9. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
+10. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+11. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
+12. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+13. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+14. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
+15. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
+16. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
+17. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+18. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
+19. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
