@@ -44,7 +44,7 @@ in is null return true try type var void while
 These words are reserved so that they stay available and so that JavaScript habits produce an error rather than an identifier:
 
 ```
-as async await class const enum interface match switch undefined yield
+as async await class const enum interface match switch undefined
 ```
 
 Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordinary identifiers bound by the standard library. They are not keywords.
@@ -401,7 +401,7 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 ### Loops
 
-`for` iterates over an array, a map, or a string; over a string it yields each code point as a one-character string. Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have type `void`. `break` and `continue` work as in JavaScript, without labels.
+`for` iterates over an array, a map, a string, or a sequence function; over a string it yields each code point as a one-character string. Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have type `void`. `break` and `continue` work as in JavaScript, without labels.
 
 ```ant
 for user in users {
@@ -413,9 +413,26 @@ for { key, value } in ages {  // destructures each Entry[string, int]
   print(`${key}: ${value}`)
 }
 
-for i in Array.range(0, 10) { ... }
+for i in Iter.range(0, 10) { ... }
 
 while !done { done = step() }
+```
+
+A sequence is a function that pushes elements to a callback, as in Go: `Seq[T]` is the prelude alias `func(func(T): bool): void`. `for x in seq` calls `seq` with a `yield` function; each call of `yield` runs the body once and returns `true`, or `false` after a `break`, after which the sequence must return. `return` and panics in the body propagate through the sequence as through any call. Writing a sequence is an ordinary loop that calls `yield`, so user types and lazy ranges need no other protocol.
+
+```ant
+func evens(limit: int): Seq[int] {
+  func(yield: func(int): bool) {
+    var i = 0
+    while i < limit {
+      if !yield(i) { return }
+      i += 2
+    }
+  }
+}
+
+for n in evens(10) { print(n) }
+Iter.range(0, 1000) | Iter.filter({ x % 7 == 0 }) | Iter.take(5) | Iter.toArray()
 ```
 
 ### Destructuring
@@ -685,6 +702,7 @@ type Result[T, E] = Ok[T] | Err[E]
 type Error = { message: string }                 // the library's error type
 type Entry[K, V] = { key: K, value: V }          // yielded by maps
 type Indexed[T] = { index: int, value: T }       // yielded by Array.entries
+type Seq[T] = func(func(T): bool): void          // a sequence: pushes elements to yield until it returns false
 type Integer = int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 type Number = Integer | float32 | float64
 type Ordered = Number | string
@@ -778,6 +796,19 @@ String.from[T](value: T): string
 ```
 
 `String.from` renders any value. Primitives, arrays, and maps render in literal syntax; records render as `Point{ x: 1.0, y: 2.0 }` with the name of their tag; functions render as `func`, tags as their name, and sync objects as their namespace name. It is the only function the language calls implicitly, and only inside template strings.
+
+### Iter
+
+Lazy sequences (section 5, Loops). Every function here returns a new `Seq` without running the source; `Iter.toArray` and `for` run it. A sequence may be run more than once if its source allows.
+
+```
+Iter.range(from: int, to: int): Seq[int]                       // from inclusive, to exclusive
+Iter.fromArray[T](xs: Array[T]): Seq[T]
+Iter.map[T, U](s: Seq[T], f: func(T): U): Seq[U]
+Iter.filter[T](s: Seq[T], f: func(T): bool): Seq[T]
+Iter.take[T](s: Seq[T], n: int): Seq[T]                        // ◆ n < 0
+Iter.toArray[T](s: Seq[T]): Array[T]
+```
 
 ### Math and Bits
 
@@ -907,7 +938,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Block.** Opens a scope and evaluates its statements in order. Its value is that of the last expression, or `void` when the block is empty or ends in a declaration or an assignment. Deferred blocks registered in it run when it exits (below).
 - **`if`.** The condition must be a `bool`. The value is the chosen branch's value; with no `else` and a `false` condition it is `void`.
 - **`while`.** Evaluates the condition, which must be a `bool`, before each iteration. The value is `void`.
-- **`for x in e`.** `e` must be an array, a map, or a string. Over an array it iterates by index from zero while the index is below the current length, so elements appended during the loop are visited and removed ones are not. Over a map it visits each entry once as an `Entry` record in unspecified order; inserting or removing during the loop is a program error of the data-race kind, and entries may be skipped or seen twice. Over a string it yields each code point as a one-character string. A destructuring on the left reads the named fields of each element, which must be a record with those fields. The value is `void`.
+- **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates by index from zero while the index is below the current length, so elements appended during the loop are visited and removed ones are not. Over a map it visits each entry once as an `Entry` record in unspecified order; inserting or removing during the loop is a program error of the data-race kind, and entries may be skipped or seen twice. Over a string it yields each code point as a one-character string. Over a function it calls the function with a fresh `yield` function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or after the sequence function has returned, panics; a `return` or a panic in the body propagates through the sequence function like any other call. A destructuring on the left reads the named fields of each element, which must be a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop, running the deferred blocks of every block they exit.
 - **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body or lambda, running the deferred blocks of every block it exits.
 - **`try e`.** If the value is `null`, returns `null` from the enclosing function. If it is a record tagged `Err`, returns a new `Err` record with the same `error` field. If it is a record tagged `Ok`, yields its `value` field. Any other value is yielded unchanged.
@@ -944,7 +975,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | record literal | the head is not a tag; a spread operand is not a record |
 | array literal | a spread operand is not an array |
 | `is` | the right side is a path that does not evaluate to a tag |
-| `for` | the operand is not an array, a map, or a string; a destructuring meets an element without the field |
+| `for` | the operand is not an array, a map, a string, or a function; a destructuring meets an element without the field; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned |
 | library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Array.pop` on an empty array |
 | ◆ top-level `var` | read before its initializer has run |
 | ◆ `panic` | always |
@@ -1019,10 +1050,9 @@ Each item below is a choice this draft made for the sake of having examples, not
 1. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
 2. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
 3. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
-4. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both. A protocol-free extension would be `for x in next` with `next` a function returning `T | null`.
-5. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-6. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-7. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-8. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-9. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-10. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.
+4. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+5. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+6. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+7. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+8. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+9. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.

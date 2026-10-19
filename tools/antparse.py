@@ -15,7 +15,7 @@ KEYWORDS = {
 }
 RESERVED = {
     "as", "async", "await", "class", "const", "enum", "interface", "match",
-    "switch", "undefined", "yield",
+    "switch", "undefined",
 }
 # Keywords that can end an expression; every other keyword continues the line.
 ENDING_KW = {"return", "break", "continue", "true", "false", "null", "void"}

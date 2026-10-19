@@ -12,5 +12,7 @@ func headers(xs: Array[int], m: Map[string, int], s: Shape, u: User | null) {
   for i in Array.range(0, 10) { print(i) }
   for c in "abc" { print(c) }
   for e in [1, 2, 3] { print(e) }
+  for n in evens(10) { print(n) }
+  for n in Iter.range(0, 1000) | Iter.filter({ x % 7 == 0 }) | Iter.take(5) { print(n) }
   if count = 5 { print("assignment in header parses; the checker rejects it") }
 }

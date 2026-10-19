@@ -34,7 +34,7 @@ keyword         = "break" | "continue" | "defer" | "else" | "export" | "false"
                 | "null" | "return" | "true" | "try" | "type" | "var" | "void"
                 | "while" ;
 reserved        = "as" | "async" | "await" | "class" | "const" | "enum"
-                | "interface" | "match" | "switch" | "undefined" | "yield" ;
+                | "interface" | "match" | "switch" | "undefined" ;
 
 dec_digits      = digit { digit | "_" } ;
 int_lit         = dec_digits
