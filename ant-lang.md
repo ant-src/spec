@@ -124,7 +124,7 @@ Types are checked by a separate checker and erased before the program runs. The 
 | `void` | the single value `void`, which carries no information |
 | `never` | the type of expressions that do not return, such as `panic(...)` or `return` |
 
-`int` is an alias for `int64` and `byte` is an alias for `uint8`: `int` is the default, and the sized names are for when the size matters. The prelude also declares `Number`, the union of the ten numeric types, and `Ordered`, which is `Number | string`; they exist to bound type parameters (see Generics).
+`int` is an alias for `int64` and `byte` is an alias for `uint8`: `int` is the default, and the sized names are for when the size matters. The prelude also declares `Integer`, the union of the eight integer types, `Number`, which adds the two float types, and `Ordered`, which is `Number | string`; they exist to bound type parameters (see Generics).
 
 `void` is both a type and its only value, like `null`. A block that ends in a declaration or assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly when a value is required, as in `Result.ok(void)`.
 
@@ -609,16 +609,7 @@ The program exits when the main goroutine returns, regardless of other goroutine
 
 ### Synchronization
 
-There are no channels. Goroutines coordinate through shared memory guarded by the primitives in the standard library. Each is a reference value created by its `new` function:
-
-| Type | Operations |
-|---|---|
-| `Mutex` | `Mutex.lock`, `Mutex.unlock`, `Mutex.withLock(m, { ... })` |
-| `RwMutex` | `RwMutex.read`, `RwMutex.write`, `RwMutex.withRead`, `RwMutex.withWrite` |
-| `WaitGroup` | `WaitGroup.add`, `WaitGroup.done`, `WaitGroup.wait` |
-| `Once` | `Once.do(once, { ... })` |
-| `Cond` | `Cond.wait`, `Cond.signal`, `Cond.broadcast` |
-| `Atomic[T]` | `Atomic.load`, `Atomic.store`, `Atomic.add`, `Atomic.compareAndSwap` |
+There are no channels. Goroutines coordinate through shared memory guarded by the sync objects in the standard library: `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, and `Atomic[T]`. Each is a reference value created by its `new` function; section 11 lists their operations.
 
 ```ant
 func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
@@ -679,75 +670,192 @@ Execution starts at `func main()` in the module given to the interpreter. `main`
 
 ## 11. Standard library
 
-The standard library is a set of namespaces in the prelude. Each is a plain record of functions, exactly like an imported module (section 10); none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section lists the shape of the library, not its full contents.
+The standard library is a set of namespaces in the prelude. Each is a plain record of functions, exactly like an imported module (section 10); none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`, `Time`, `Os`, and `Json` are policy rather than language and live in `stdlib.md`.
 
-### Arrays
+Signatures are written in Ant's own notation with bounds (section 4, Generics). A function marked `mutates` changes its first argument and returns `void` or the removed element; every other function leaves its arguments untouched and returns a new value. A function marked ◆ has a value-dependent panic, named in its comment; every function also panics when an argument has a kind it does not take (section 12).
 
-`Array[T]` is dense and growable. `xs[i]` reads and `xs[i] = v` writes; both panic when `i` is out of range. `Array.get(xs, i)` returns `T | null` instead.
+### Prelude
 
-```
-Array.length(xs)              Array.push(xs, v)            Array.pop(xs): T | null 
-Array.get(xs, i)              Array.slice(xs, from, to)    Array.concat(xs, ys)
-Array.map(xs, f)              Array.filter(xs, f)          Array.reduce(xs, init, f)
-Array.find(xs, f)             Array.some(xs, f)            Array.every(xs, f)
-Array.sort(xs)                Array.sortBy(xs, key)        Array.sortWith(xs, cmp)
-Array.reverse(xs)             Array.contains(xs, v)        Array.indexOf(xs, v)
-Array.entries(xs)             Array.range(from, to)        Array.filled(n, v)
-Array.same(xs, ys)            Array.sum(xs)                Array.flatten(xs)
-Array.isEmpty(xs)
-```
-
-The functions that compare or add elements carry bounds (section 4, Generics):
+Besides the namespaces below, the prelude declares these names in every module:
 
 ```
-Array.sort[T: Ordered](xs: Array[T]): Array[T]
+type Ok[T] = { value: T }
+type Err[E] = { error: E }
+type Result[T, E] = Ok[T] | Err[E]
+type Error = { message: string }                 // the library's error type
+type Entry[K, V] = { key: K, value: V }          // yielded by maps
+type Indexed[T] = { index: int, value: T }       // yielded by Array.entries
+type Integer = int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
+type Number = Integer | float32 | float64
+type Ordered = Number | string
+
+print[T](value: T): void                         // String.from(value) and a newline to standard output
+panic(message: string): never
+int8[T: Number](x: T): int8                      // ◆ out of range, NaN, or infinite; likewise the other nine
+```
+
+### Array
+
+`Array[T]` is dense and growable. `xs[i]` reads and `xs[i] = v` writes, and both panic when `i` is out of range; `Array.get` returns `null` instead. Indices are `int`s from `0` up to but excluding the length, and ranges are half-open: `from` inclusive, `to` exclusive.
+
+```
+Array.length[T](xs: Array[T]): int
+Array.isEmpty[T](xs: Array[T]): bool
+Array.get[T](xs: Array[T], i: int): T | null
+Array.push[T](xs: Array[T], v: T): void                        // mutates
+Array.pop[T](xs: Array[T]): T | null                           // mutates; null when empty
+Array.slice[T](xs: Array[T], from: int, to: int): Array[T]     // ◆ from > to, or either out of 0 ..= length
+Array.concat[T](xs: Array[T], ys: Array[T]): Array[T]
+Array.map[T, U](xs: Array[T], f: func(T): U): Array[U]
+Array.filter[T](xs: Array[T], f: func(T): bool): Array[T]
+Array.reduce[T, A](xs: Array[T], init: A, f: func(A, T): A): A
+Array.find[T](xs: Array[T], f: func(T): bool): T | null
+Array.some[T](xs: Array[T], f: func(T): bool): bool
+Array.every[T](xs: Array[T], f: func(T): bool): bool
+Array.contains[T](xs: Array[T], v: T): bool                    // by ==
+Array.indexOf[T](xs: Array[T], v: T): int | null               // first index, by ==
+Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending, stable
 Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]
-Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]
-Array.sum[T: Number](xs: Array[T]): T
+Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b
+Array.reverse[T](xs: Array[T]): Array[T]
+Array.entries[T](xs: Array[T]): Array[Indexed[T]]
+Array.range(from: int, to: int): Array[int]                    // empty when to <= from
+Array.filled[T](n: int, v: T): Array[T]                        // ◆ n < 0; the same v in every slot
+Array.flatten[T](xs: Array[Array[T]]): Array[T]
+Array.sum[T: Number](xs: Array[T]): T | null                   // ◆ overflow; null when empty
+Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 ```
 
-Only `Array.push` and `Array.pop` modify their input. Every other function returns a new array and leaves the argument untouched, so `Array.sort(xs)` is a sorted copy. `Array.entries(xs)` yields `Indexed[T]` records, `{ index: int, value: T }`.
+`Array.sum` returns `null` on an empty array rather than zero because the interpreter never knows `T` and so cannot produce the zero of the right kind (section 4, erasure). Write `Array.sum(xs) ?? 0.0`.
 
-### Maps
+### Map
 
-`Map[K, V]` is an unordered hash map. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes `null`, `Map.has` is the only way to tell a missing key from a stored `null`.
-
-```
-Map.size(m)         Map.has(m, k)        Map.get(m, k)        Map.set(m, k, v)
-Map.remove(m, k)    Map.keys(m)          Map.values(m)        Map.entries(m)
-Map.map(m, f)       Map.filter(m, f)     Map.merge(m, n)      Map.same(m, n)
-```
-
-Iterating a map with `for` yields `Entry[K, V]` records, `{ key: K, value: V }`, in unspecified order.
-
-### Strings
-
-A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear, so a loop over indices would be quadratic, and indexing by byte would be a trap. `String.length`, `String.slice`, and `String.chars` count code points, `for` iterates them (section 5), and `String.toBytes` gives the bytes.
+`Map[K, V]` is an unordered hash map keyed by `==`. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes `null`, `Map.has` is the only way to tell a missing key from a stored `null`. Functions that take a predicate or a mapper receive each `Entry[K, V]`.
 
 ```
-String.length(s)         String.slice(s, from, to)    String.concat(parts)
-String.split(s, sep)     String.join(parts, sep)      String.trim(s)
-String.contains(s, t)    String.startsWith(s, t)      String.replace(s, old, new)
-String.toUpper(s)        String.toLower(s)            String.chars(s): Array[string]
-String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
-String.toInt(s): int | null                   String.toFloat(s): float64 | null
+Map.size[K, V](m: Map[K, V]): int
+Map.isEmpty[K, V](m: Map[K, V]): bool
+Map.has[K, V](m: Map[K, V], k: K): bool
+Map.get[K, V](m: Map[K, V], k: K): V | null
+Map.set[K, V](m: Map[K, V], k: K, v: V): void                  // mutates; same as m[k] = v
+Map.remove[K, V](m: Map[K, V], k: K): V | null                 // mutates; the removed value
+Map.keys[K, V](m: Map[K, V]): Array[K]                         // unspecified order
+Map.values[K, V](m: Map[K, V]): Array[V]
+Map.entries[K, V](m: Map[K, V]): Array[Entry[K, V]]
+Map.fromEntries[K, V](entries: Array[Entry[K, V]]): Map[K, V]  // later entries win
+Map.map[K, V, W](m: Map[K, V], f: func(Entry[K, V]): W): Map[K, W]
+Map.filter[K, V](m: Map[K, V], f: func(Entry[K, V]): bool): Map[K, V]
+Map.merge[K, V](m: Map[K, V], n: Map[K, V]): Map[K, V]         // entries of n win
+Map.same[K, V](m: Map[K, V], n: Map[K, V]): bool               // identity
 ```
 
-`String.from` renders any value. Primitives, arrays, and maps render in literal syntax; records render as `Point{ x: 1.0, y: 2.0 }` with the name of their tag; functions render as `func`. It is the only implicit use of this function, and only inside template strings.
+### String
 
-### Others
+A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear, so a loop over indices would be quadratic, and indexing by byte would be a trap. Lengths, indices, and slices count code points, `for` iterates them (section 5), and `String.toBytes` gives the bytes.
 
-| Namespace | Purpose |
-|---|---|
-| `Math` | `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, constants; `min` and `max` are `[T: Ordered]`, the rest take `float64` |
-| `Bits` | `and`, `or`, `xor`, `not`, `shiftLeft`, `shiftRight`, `popCount`, `wrapAdd`, `wrapSub`, `wrapMul` |
-| `Result` | constructors and combinators (section 8) |
-| `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic` | synchronization (section 9) |
-| `Record` | `same` for identity comparison of records |
-| `Json` | `parse`, `stringify` |
-| `File`, `Http`, `Time`, `Os` | I/O; every operation that can fail returns `Result` |
-| `print`, `panic` | prelude functions; `print` writes `String.from(value)` and a newline to standard output |
-| `int8` … `uint64`, `float32`, `float64` | prelude conversion functions, one per numeric type (section 4) |
+```
+String.length(s: string): int
+String.isEmpty(s: string): bool
+String.slice(s: string, from: int, to: int): string            // ◆ as Array.slice
+String.concat(parts: Array[string]): string
+String.split(s: string, sep: string): Array[string]            // ◆ sep is empty
+String.join(parts: Array[string], sep: string): string
+String.repeat(s: string, n: int): string                       // ◆ n < 0
+String.trim(s: string): string                                 // Unicode white space at both ends
+String.contains(s: string, t: string): bool
+String.startsWith(s: string, t: string): bool
+String.endsWith(s: string, t: string): bool
+String.indexOf(s: string, t: string): int | null               // first code point index
+String.replace(s: string, old: string, new: string): string    // every occurrence; ◆ old is empty
+String.toUpper(s: string): string
+String.toLower(s: string): string
+String.chars(s: string): Array[string]                         // one code point each
+String.toBytes(s: string): Array[byte]                         // UTF-8
+String.fromBytes(bytes: Array[byte]): string | null            // null on invalid UTF-8
+String.toInt(s: string): int | null                            // decimal, optional sign; null otherwise
+String.toFloat(s: string): float64 | null
+String.from[T](value: T): string
+```
+
+`String.from` renders any value. Primitives, arrays, and maps render in literal syntax; records render as `Point{ x: 1.0, y: 2.0 }` with the name of their tag; functions render as `func`, tags as their name, and sync objects as their namespace name. It is the only function the language calls implicitly, and only inside template strings.
+
+### Math and Bits
+
+```
+Math.abs[T: Number](x: T): T                                   // ◆ the most negative integer
+Math.min[T: Ordered](a: T, b: T): T
+Math.max[T: Ordered](a: T, b: T): T
+Math.pow(x: float64, y: float64): float64
+Math.sqrt(x: float64): float64
+Math.floor(x: float64): float64
+Math.ceil(x: float64): float64
+Math.round(x: float64): float64                                // half away from zero
+Math.PI: float64
+Math.E: float64
+
+Bits.and[T: Integer](a: T, b: T): T
+Bits.or[T: Integer](a: T, b: T): T
+Bits.xor[T: Integer](a: T, b: T): T
+Bits.not[T: Integer](a: T): T
+Bits.shiftLeft[T: Integer](a: T, n: int): T                    // ◆ n < 0 or n >= width
+Bits.shiftRight[T: Integer](a: T, n: int): T                   // arithmetic for signed, logical for unsigned; ◆ as above
+Bits.popCount[T: Integer](a: T): int
+Bits.wrapAdd[T: Integer](a: T, b: T): T                        // two's complement, never panics
+Bits.wrapSub[T: Integer](a: T, b: T): T
+Bits.wrapMul[T: Integer](a: T, b: T): T
+```
+
+### Result and Record
+
+```
+Result.ok[T, E](value: T): Result[T, E]
+Result.err[T, E](error: E): Result[T, E]
+Result.isOk[T, E](r: Result[T, E]): bool
+Result.map[T, U, E](r: Result[T, E], f: func(T): U): Result[U, E]
+Result.mapErr[T, E, F](r: Result[T, E], f: func(E): F): Result[T, F]
+Result.unwrap[T, E](r: Result[T, E]): T                        // ◆ r is an Err
+Result.unwrapOr[T, E](r: Result[T, E], fallback: T): T
+
+Record.same[T: {}](a: T, b: T): bool                           // identity; {} bounds T to any record
+```
+
+### Synchronization
+
+The sync objects of section 9. Each is created by its `new` function and compared by identity. The `with` forms acquire, run the function, and release even if it panics.
+
+```
+Mutex.new(): Mutex
+Mutex.lock(m: Mutex): void                                     // blocks
+Mutex.unlock(m: Mutex): void                                   // ◆ not locked
+Mutex.withLock[T](m: Mutex, f: func(): T): T
+
+RwMutex.new(): RwMutex
+RwMutex.readLock(m: RwMutex): void
+RwMutex.readUnlock(m: RwMutex): void                           // ◆ not read-locked
+RwMutex.writeLock(m: RwMutex): void
+RwMutex.writeUnlock(m: RwMutex): void                          // ◆ not write-locked
+RwMutex.withRead[T](m: RwMutex, f: func(): T): T
+RwMutex.withWrite[T](m: RwMutex, f: func(): T): T
+
+WaitGroup.new(): WaitGroup
+WaitGroup.add(wg: WaitGroup, n: int): void                     // ◆ counter would go negative
+WaitGroup.done(wg: WaitGroup): void                            // ◆ counter already zero
+WaitGroup.wait(wg: WaitGroup): void                            // blocks until the counter is zero
+
+Once.new(): Once
+Once.do(once: Once, f: func(): void): void                     // runs f the first time only; later calls wait for it
+
+Cond.new(m: Mutex): Cond
+Cond.wait(c: Cond): void                                       // ◆ m not locked; releases m, waits, reacquires
+Cond.signal(c: Cond): void
+Cond.broadcast(c: Cond): void
+
+Atomic.new[T](v: T): Atomic[T]
+Atomic.load[T](a: Atomic[T]): T
+Atomic.store[T](a: Atomic[T], v: T): void
+Atomic.add[T: Number](a: Atomic[T], d: T): T                   // ◆ overflow; returns the new value
+Atomic.compareAndSwap[T](a: Atomic[T], expected: T, v: T): bool   // compares with ==
+```
 
 ## 12. Dynamic semantics
 
