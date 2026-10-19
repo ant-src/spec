@@ -10,7 +10,7 @@ The name "Ant" is a placeholder.
 
 - **One obvious way.** When two constructs would do the same job, the language keeps one.
 - **No implicit coercion.** A value never changes type without a visible conversion.
-- **Everything is an expression.** Blocks, `if`, `match`, and loops produce values.
+- **Everything is an expression.** Blocks, `if`, and loops produce values.
 - **Errors are values.** `Result` carries expected failures and `null` carries absence. `panic` is for bugs.
 - **Types are advisory.** A separate checker reads annotations and the interpreter discards them. The only thing the interpreter keeps from a `type` declaration is its name, which becomes a tag (section 4). No runtime behavior depends on a type that was written down.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
@@ -32,19 +32,19 @@ Block comments do not nest.
 
 ### Identifiers and keywords
 
-An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`. Case carries no meaning. `_` on its own is the wildcard pattern and cannot be read.
+An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`. Case carries no meaning. `_` on its own is not an identifier.
 
 Keywords:
 
 ```
 break continue defer else export false for func go if import
-in match null return true try type var void while
+in is null return true try type var void while
 ```
 
 These words are reserved so that they stay available and so that JavaScript habits produce an error rather than an identifier:
 
 ```
-as async await class const enum interface is switch undefined yield
+as async await class const enum interface match switch undefined yield
 ```
 
 Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordinary identifiers bound by the standard library. They are not keywords.
@@ -67,12 +67,12 @@ The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`. A p
 
 A newline ends an expression, except when:
 
-- the line ends with a token that cannot end an expression, such as a binary operator, `,`, `(`, `[`, `{`, `=`, or `=>`; or
+- the line ends with a token that cannot end an expression, such as a binary operator, `,`, `(`, `[`, `{`, or `=`; or
 - the next non-blank line starts with `.`, `?.`, or `|`.
 
 A semicolon also ends an expression. Nothing else is inferred. In particular, a line that starts with `(` or `[` begins a new statement, so `a` followed by `(b)` on the next line is two statements and not a call, and a `return` at the end of a line returns `void`, which the checker rejects in a function with another return type. `else` must follow the closing `}` on the same line. A trailing comment does not change any of this.
 
-Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. The items of a call, a literal, a record type, a parameter list, a `match`, and an import list are separated by commas, with an optional trailing comma. Only blocks separate their items by newlines.
+Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. The items of a call, a literal, a record type, a parameter list, and an import list are separated by commas, with an optional trailing comma. Only blocks separate their items by newlines.
 
 The continuation rule for a leading `.`, `?.`, or `|` exists so that pipelines, and union types, read top to bottom:
 
@@ -103,13 +103,13 @@ count += 1                // also -= *= /= %=
 if count = 5 { ... }    // compile error: void is not bool
 ```
 
-An assignment target is a variable, a field such as `p.x`, or an element such as `xs[i]`. Patterns are not assignment targets. There is no `++`, `--`, or `const`.
+An assignment target is a variable, a field such as `p.x`, or an element such as `xs[i]`. A destructuring such as `{ x, y }` is not an assignment target. There is no `++`, `--`, or `const`.
 
 ## 4. Types
 
 Ant is statically typed. Types are checked before the program runs, and most annotations are inferred. A named record type is nominal: each `type` declaration of a record is a distinct type, identified by its tag. Every other type is structural: two types with the same shape are the same type.
 
-Types are checked by a separate checker and erased before the program runs. The interpreter parses annotations and discards them. A `type` declaration is the one exception: its body is discarded, but its name is bound to a fresh tag value, and a record literal with that name stores the tag (see Records). Every `type` declaration binds a tag, even an alias, because the interpreter does not look at the body; only record literals and patterns use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `==` or `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record.
+Types are checked by a separate checker and erased before the program runs. The interpreter parses annotations and discards them. A `type` declaration is the one exception: its body is discarded, but its name is bound to a fresh tag value, and a record literal with that name stores the tag (see Records). Every `type` declaration binds a tag, even an alias, because the interpreter does not look at the body; only record literals and `is` tests use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `==` or `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record.
 
 ### Primitives
 
@@ -207,10 +207,7 @@ Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with th
 type Id = int | string
 
 func describe(id: Id): string {
-  match id {
-    n: int => `number ${n}`,
-    s: string => `text ${s}`,
-  }
+  if id is int { `number ${id}` } else { `text ${id}` }
 }
 ```
 
@@ -220,7 +217,7 @@ The members of a union must be distinguishable at run time. A union may contain 
 
 ### Tagged unions
 
-A union of named record types is a tagged union: the tag each record carries tells the members apart. Matching on the record narrows the value to one member. There is no `kind` field and no `is` test; `match` is the only way to narrow a union of records, and a single-member test is a `match` with a `_` arm.
+A union of named record types is a tagged union: the tag each record carries tells the members apart. `s is Circle` tests the tag (section 5). In the branch it guards, `s` has type `Circle`; in the `else` branch, `s` has the union minus `Circle` (section 7). There is no `kind` field and no pattern matching: `is` with `if` is the only way to narrow a union of records.
 
 ```ant
 type Circle = { radius: float64 }
@@ -231,20 +228,15 @@ type Shape = Circle | Rect | Empty
 var s: Shape = Circle{ radius: 2.0 }
 
 func area(s: Shape): float64 {
-  match s {
-    Circle{ radius } => 3.14159 * radius * radius,
-    Rect{ width, height } => width * height,
-    Empty{} => 0.0,
-  }
+  if s is Circle { 3.14159 * s.radius * s.radius }
+  else if s is Rect { s.width * s.height }
+  else if s is Empty { 0.0 }
 }
 
-match s {
-  Circle{ radius } => print(radius),
-  _ => {},
-}
+if s is Circle { print(s.radius) }
 ```
 
-A pattern with a head, such as `Circle{ radius }`, tests the tag and then the fields; a headless pattern `{ radius }` tests only the fields. Tags are compared by identity, so a pattern matches records built from the same declaration, under whatever name it was imported. A union of empty records is an enumeration, and each member is also a type of its own that a function can take as a parameter.
+The chain in `area` has no final `else` and still has type `float64`: after the third test `s` has no member left, so the checker knows the chain is complete (section 5, `if`). Adding a member to `Shape` later breaks the chain, and `area` fails to check until it handles the new member. That is the exhaustiveness check. A union of empty records is an enumeration, and each member is also a type of its own that a function can take as a parameter.
 
 Through a value of union type, a field can be read when every member has it, and its type is the union of the members' field types. A field can never be assigned through a union type; narrow first, then assign.
 
@@ -321,7 +313,7 @@ For a `Result`, `try` is the widening step (section 8).
 
 ### Inference
 
-Inference is local and bidirectional. Every expression either synthesizes a type or is checked against an expected type. Expected types come from annotations, parameter types, declared return types, the field types of a record literal, the element types of an expected array or map, and the branches of an `if` or `match` whose whole has an expected type. Nothing is inferred across statements: an unannotated `var` takes exactly the type of its initializer, so `var s = Active{}` has type `Active`, and a later `s = Suspended{ reason: "x" }` is a compile error unless the declaration says `var s: Status`.
+Inference is local and bidirectional. Every expression either synthesizes a type or is checked against an expected type. Expected types come from annotations, parameter types, declared return types, the field types of a record literal, the element types of an expected array or map, and the branches of an `if` whose whole has an expected type. Nothing is inferred across statements: an unannotated `var` takes exactly the type of its initializer, so `var s = Active{}` has type `Active`, and a later `s = Suspended{ reason: "x" }` is a compile error unless the declaration says `var s: Status`.
 
 A generic call solves its type parameters in a fixed order: from the expected type first, then from the non-lambda arguments left to right, then from the lambdas. The expected type goes first because type arguments are invariant: `Result.err(NotFound{ id: from })` under an expected `Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it. Lambdas go last so that the other arguments have fixed the type their `x` depends on, which is also what lets an editor complete `x.` inside a lambda. A type parameter that nothing fixes is a compile error: annotate the result, or use `func` with annotated parameters.
 
@@ -333,7 +325,7 @@ var zs = []                               // compile error: annotate
 
 Every function parameter is annotated, except lambda parameters. A lambda needs an expected function type with zero or one parameter; its result type is synthesized from the body, and when the expected result is an unsolved type parameter, the body solves it. A function's return type is inferred from its body unless the function is exported or recursive. Exported functions state it so that a module's interface reads without its bodies. Recursion is found on demand: the checker infers a callee's type when it meets a call, and meeting a function whose inference is already in progress is a compile error asking for an annotation.
 
-The branches of an `if` and the arms of a `match` are each checked against the expected type when there is one. Otherwise the expression has the union of the branch types, with `never` dropped, so `if n > 0 { "positive" } else { null }` has type `string | null`.
+The branches of an `if` are each checked against the expected type when there is one. Otherwise the expression has the union of the branch types, with `never` dropped, so `if n > 0 { "positive" } else { null }` has type `string | null`.
 
 Literals get no help from context: an integer literal is always `int` and a float literal always `float64`, because the interpreter never sees the expected type (see Primitives).
 
@@ -351,7 +343,7 @@ From tightest to loosest binding:
 | prefix | `-a` `!a` `try a` | |
 | multiplicative | `*` `/` `%` | integer `/` truncates toward zero |
 | additive | `+` `-` | `+` also concatenates strings |
-| comparison | `<` `<=` `>` `>=` | numbers and strings |
+| comparison | `<` `<=` `>` `>=` `is` | numbers and strings; `is` tests a union member |
 | equality | `==` `!=` | both operands must have the same type; structural (section 4) |
 | logical | `&&` then `\|\|` | short-circuit, `bool` only |
 | null | `??` | cannot mix with `&&` or `\|\|` without parentheses |
@@ -382,7 +374,7 @@ var names = users
 
 A block is a sequence of expressions separated by newlines or semicolons. Its value is the value of the last expression. A block that ends in a declaration or assignment has type `void`.
 
-Braces mean one of three things, decided by the token before them. After a type name, including `Map`, they build a value of that type. After `func(...)`, `else`, `go`, `defer`, or `=>` in a `match` arm, and at the end of an `if`, `while`, `for`, or `match` header, they are a block. Anywhere else they are a lambda (section 6).
+Braces mean one of three things, decided by the token before them. After a type name, including `Map`, they build a value of that type. After `func(...)`, `else`, `go`, or `defer`, and at the end of an `if`, `while`, or `for` header, they are a block. Anywhere else they are a lambda (section 6).
 
 So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is a lambda that returns `void`. A record or map literal inside a block needs no extra braces: `if c { Point{ x: 1.0, y: 0.0 } } else { origin }`.
 
@@ -394,7 +386,15 @@ A header has no parentheses, as in Go. It ends at the first `{` that is not an o
 var label = if n < 0 { "negative" } else if n == 0 { "zero" } else { "positive" }
 ```
 
-The branches are checked against the expected type, or the `if` has the union of their types (section 4, Inference). An `if` without `else` has type `void`.
+The branches are checked against the expected type, or the `if` has the union of their types (section 4, Inference). An `if` without `else` has an implicit `else` branch of type `void`. That branch disappears when the condition narrows its subject to `never`, as at the end of a complete chain of `is` tests (section 4, Tagged unions); an explicit `else` there cannot run and is a compile error.
+
+### `is`
+
+`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record type, a primitive, `null`, `Array`, `Map`, or `func`, written without type arguments, because the runtime has only tags and kinds to look at. The static type of `x` must be a union with `T` as a member; otherwise the test is always true or always false, which is a compile error. `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
+
+```ant
+Array.filter(shapes, { x is Circle })
+if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 ### Loops
 
@@ -415,37 +415,13 @@ for i in Array.range(0, 10) { ... }
 while !done { done = step() }
 ```
 
-### `match`
+### Destructuring
 
-`match` compares a value against patterns in order and evaluates the first arm that fits. Arms are separated by commas. The arms type like the branches of an `if`, and the patterns must cover every possible value, so a `match` can never fall through. For a union of records that means every member; for a primitive it usually means a final `_`.
-
-```ant
-func describe(n: int): string {
-  match n {
-    0 => "zero",
-    x if x < 0 => "negative",
-    _ => "positive",
-  }
-}
-```
-
-Patterns:
-
-| Pattern | Matches |
-|---|---|
-| `42` `-1` `"a"` `true` `null` | the literal value |
-| `name` | anything; binds `name` |
-| `_` | anything; binds nothing |
-| `name: Type` | a union member; `Type` is a primitive, `null`, `Array`, `Map`, `func`, or a named record type; binds `name` |
-| `{ x, y }` `{ x: px }` `{ status: Active{} }` | a record of any tag; each field pattern binds the field, renames it, or tests it against a sub-pattern |
-| `Circle{ radius }` `Empty{}` `Geometry.Point{ x }` | a record carrying the tag of the named type, then its fields as above |
-| `[]` `[first, ...rest]` | an array of matching length, or a prefix with the rest |
-| `pattern if condition` | the pattern, when the guard is true |
-
-Patterns nest. A record pattern ignores fields it does not mention. There are no or-patterns. `var` and `for` accept a record pattern on the left side; array patterns can always fail to match, so they appear only in `match`.
+`var` and `for` accept a record destructuring on the left side. `{ x, y }` binds the fields `x` and `y`; `{ x: px }` binds the field `x` as `px`. Fields not mentioned are ignored. Destructuring never fails, so there is nothing to match against, and it does not nest. There is no array destructuring; index instead.
 
 ```ant
 var { x, y } = origin
+for { key, value } in ages { print(`${key}: ${value}`) }
 ```
 
 ### `return`, `break`, `continue`
@@ -523,7 +499,7 @@ func find(users: Array[User], id: int): User | null {
 }
 ```
 
-Four constructs handle nullable values, and together they replace the combinators other languages attach to an option type:
+Three constructs handle nullable values, and together they replace the combinators other languages attach to an option type:
 
 ```ant
 var user = find(users, 7)
@@ -531,17 +507,12 @@ var user = find(users, 7)
 var city = user?.address?.city          // string | null: null if any link is null
 var label = user?.name ?? "anonymous"   // string: right side when left is null
 
-match user {
-  null => print("not found"),
-  u => print(u.name),                   // u: User
-}
-
 if user != null {
   print(user.name)                      // user: User here
 }
 ```
 
-`?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The checker narrows after a `null` test, as in the last two examples, but only for a local variable or a parameter. A `match` arm narrows by its pattern; a condition narrows after `x == null` or `x != null`, through `&&`, `||`, and `!`; and `x ?? return ...` or `x ?? panic(...)` narrows what follows. A field path such as `user.address` never narrows, because any call between the test and the use may reassign it: bind it to a local first, or use `?.`, `??`, or `match`. A local that a nested function assigns does not narrow either, for the same reason.
+`?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The checker narrows after a `null` test, as in the last example, but only for a local variable or a parameter. A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`, and the `else` branch gets the complement: the union minus the tested member. `x ?? return ...` and `x ?? panic(...)` narrow what follows. A field path such as `user.address` never narrows, because any call between the test and the use may reassign it: bind it to a local first, or use `?.` or `??`. A local that a nested function assigns does not narrow either, for the same reason.
 
 ```ant
 if user.address != null { print(user.address.city) }   // compile error: a path does not narrow
@@ -574,10 +545,12 @@ func parseInt(s: string): Result[int, ParseError] {
   Result.ok(n)
 }
 
-match parseInt(input) {
-  Ok{ value } => print(`parsed ${value}`),
-  Err{ error: EmptyInput{} } => print("nothing to parse"),
-  Err{ error: BadDigit{ at } } => print(`bad digit at ${at}`),
+var parsed = parseInt(input)
+if parsed is Ok { print(`parsed ${parsed.value}`) }
+else {
+  var error = parsed.error                 // parsed: Err[ParseError] here
+  if error is EmptyInput { print("nothing to parse") }
+  else { print(`bad digit at ${error.at}`) }   // error: BadDigit here
 }
 ```
 
@@ -683,7 +656,7 @@ export func distance(a: Point, b: Point): float64 {
 }
 ```
 
-A module is a record of its exports, and `import` destructures it with a pattern. A record pattern brings chosen exports into scope, with the usual `name: alias` renaming. A bare name binds the whole module as a namespace, so user modules look like standard-library namespaces.
+A module is a record of its exports, and `import` destructures it. A record destructuring brings chosen exports into scope, with the usual `name: alias` renaming. A bare name binds the whole module as a namespace, so user modules look like standard-library namespaces.
 
 ```ant
 import "./geometry.ant" { distance, Point }
@@ -693,7 +666,7 @@ import "./geometry.ant" Geometry
 var d = Geometry.distance(p, q)
 ```
 
-The path is a file path relative to the importing file, extension included. It comes first so that an editor knows the module before the pattern is typed. Types and values import alike: a `type` export is its tag, so a record built in one module matches a pattern written against the imported name in another, under whatever local name it was given.
+The path is a file path relative to the importing file, extension included. It comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given.
 
 Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. There is no re-export. Import cycles are a compile error.
 
@@ -792,9 +765,9 @@ func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64):
   var source = accounts[from] ?? return Result.err(NotFound{ id: from })
   var target = accounts[to] ?? return Result.err(NotFound{ id: to })
 
-  match source.status {
-    Suspended{ reason } => return Result.err(AccountSuspended{ id: from, reason: reason }),
-    _ => {},
+  var status = source.status
+  if status is Suspended {
+    return Result.err(AccountSuspended{ id: from, reason: status.reason })
   }
   if source.balance < amount {
     return Result.err(Insufficient{ needed: amount - source.balance })
@@ -805,16 +778,9 @@ func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64):
   Result.ok(void)
 }
 
-func isActive(account: Account): bool {
-  match account.status {
-    Active{} => true,
-    Suspended{} => false,
-  }
-}
-
 func report(accounts: Map[int, Account]): string {
   Map.values(accounts)
-    | Array.filter(isActive)
+    | Array.filter({ x.status is Active })
     | Array.sortBy({ x.balance })
     | Array.map({ `${x.owner}: ${x.balance}` })
     | String.join("\n")
@@ -825,11 +791,13 @@ func main() {
   accounts[1] = Account{ id: 1, owner: "ada", balance: 100.0, status: Active{} }
   accounts[2] = Account{ id: 2, owner: "linus", balance: 20.0, status: Suspended{ reason: "audit" } }
 
-  match transfer(accounts, 1, 2, 50.0) {
-    Ok{} => print("ok"),
-    Err{ error: NotFound{ id } } => print(`unknown account ${id}`),
-    Err{ error: Insufficient{ needed } } => print(`short by ${needed}`),
-    Err{ error: AccountSuspended{ id, reason } } => print(`account ${id} is suspended: ${reason}`),
+  var result = transfer(accounts, 1, 2, 50.0)
+  if result is Ok { print("ok") }
+  else {
+    var error = result.error
+    if error is NotFound { print(`unknown account ${error.id}`) }
+    else if error is Insufficient { print(`short by ${error.needed}`) }
+    else { print(`account ${error.id} is suspended: ${error.reason}`) }
   }
 
   print(report(accounts))
@@ -840,20 +808,19 @@ func main() {
 
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
-1. **Narrowing a union of records is `match` only.** Testing one member inside an expression needs a two-arm `match` or a helper such as `isActive` in section 12. A boolean pattern test, perhaps `x is Active{}`, would remove that cost; `is` is reserved for it.
-2. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
-3. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-4. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
-5. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
-6. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
-7. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-8. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-9. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
-10. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-11. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-12. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
-13. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
-14. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
-15. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-16. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
-17. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
+1. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
+2. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
+3. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
+4. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
+5. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
+6. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+7. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+8. **Record literals have no shorthand entries, but destructuring does.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
+9. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+10. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+11. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
+12. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
+13. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
+14. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+15. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
+16. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.

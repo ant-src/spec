@@ -11,10 +11,10 @@
 
 (* The lexer emits a NEWLINE token for a line break unless
      - the previous token cannot end an expression: a binary operator, "|", "??",
-       ",", ":", "(", "[", "{", "=", "=>", "...", or a prefix operator; or
+       ",", ":", "(", "[", "{", "=", "...", or a prefix operator; or
      - the next non-blank line starts with ".", "?.", or "|"; or
      - the break is inside "(", "[", or a non-block "{": a literal, a record type,
-       a match body, an import list, or a parameter list.
+       an import list, or a parameter list.
    Comments are removed first. A NEWLINE or ";" terminates a statement.
    "else" must follow "}" on the same line; a NEWLINE between them ends the if. *)
 
@@ -30,11 +30,11 @@ ident           = ( letter | "_" ) { letter | digit | "_" } ;
                   (* not a keyword, not a reserved word, and not "_" alone *)
 
 keyword         = "break" | "continue" | "defer" | "else" | "export" | "false"
-                | "for" | "func" | "go" | "if" | "import" | "in" | "match"
+                | "for" | "func" | "go" | "if" | "import" | "in" | "is"
                 | "null" | "return" | "true" | "try" | "type" | "var" | "void"
                 | "while" ;
 reserved        = "as" | "async" | "await" | "class" | "const" | "enum"
-                | "interface" | "is" | "switch" | "undefined" | "yield" ;
+                | "interface" | "match" | "switch" | "undefined" | "yield" ;
 
 dec_digits      = digit { digit | "_" } ;
 int_lit         = dec_digits
@@ -57,14 +57,14 @@ template_char   = (* any character except "`", "\", and "$" followed by "{" *) ;
 
 file            = { import_decl } { declaration } ;
 
-import_decl     = "import" string_lit import_pattern term ;
-import_pattern  = ident
+import_decl     = "import" string_lit import_list term ;
+import_list  = ident
                 | "{" [ import_item { "," import_item } [ "," ] ] "}" ;
 import_item     = ident [ ":" ident ] ;                          (* export: local *)
 
 declaration     = [ "export" ] ( var_decl | func_decl | type_decl ) term ;
 
-var_decl        = "var" ( ident [ ":" type ] | record_pattern ) "=" expression ;
+var_decl        = "var" ( ident [ ":" type ] | destructure ) "=" expression ;
 func_decl       = "func" ident [ type_params ] signature block ;
 type_decl       = "type" ident [ type_params ] "=" type ;
 
@@ -97,7 +97,7 @@ block           = "{" [ statement { term statement } [ term ] ] "}" ;
 statement       = var_decl | expression ;
 
 (* Braces are a block only directly after: "func" signature, "else", "go",
-   "defer", "=>", and at the end of an if, while, for, or match header.
+   "defer", and at the end of an if, while, or for header.
    After an identifier path they are a record or map literal (brace_lit).
    Anywhere else they are a lambda.                                           *)
 
@@ -120,7 +120,8 @@ logical_and     = equality { "&&" equality } ;
                      "??" never mixes with "&&" or "||" without parentheses *)
 
 equality        = comparison { ( "==" | "!=" ) comparison } ;
-comparison      = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
+comparison      = additive { ( "<" | "<=" | ">" | ">=" ) additive | "is" is_target } ;
+is_target       = ident_path | "null" | "func" ;                (* a type name without arguments *)
 additive        = multiplicative { ( "+" | "-" ) multiplicative } ;
 multiplicative  = unary { ( "*" | "/" | "%" ) unary } ;
 
@@ -146,7 +147,7 @@ primary         = literal
                 | lambda
                 | anon_func
                 | "(" expression ")"
-                | if_expr | while_expr | for_expr | match_expr
+                | if_expr | while_expr | for_expr
                 | go_expr | defer_expr
                 | return_expr | break_expr | continue_expr ;
 
@@ -175,9 +176,7 @@ anon_func       = "func" signature block ;
    Write a brace_lit in a header inside parentheses.                           *)
 if_expr         = "if" expression block [ "else" ( if_expr | block ) ] ;
 while_expr      = "while" expression block ;
-for_expr        = "for" ( ident | record_pattern ) "in" expression block ;
-match_expr      = "match" expression "{" [ arm { "," arm } [ "," ] ] "}" ;
-arm             = pattern [ "if" expression ] "=>" ( block | expression ) ;
+for_expr        = "for" ( ident | destructure ) "in" expression block ;
 
 go_expr         = "go" block ;
 defer_expr      = "defer" block ;
@@ -187,18 +186,7 @@ break_expr      = "break" ;
 continue_expr   = "continue" ;
 
 
-(* ===== Patterns (section 5) =============================================== *)
+(* ===== Destructuring (section 5) ========================================= *)
 
-pattern         = literal_pattern
-                | "_"
-                | ident_path record_pattern                     (* tagged record; chosen when "{" or "." follows the identifier *)
-                | ident [ ":" type ]                             (* binding, or typed union member *)
-                | record_pattern
-                | array_pattern ;
-literal_pattern = [ "-" ] int_lit | [ "-" ] float_lit | string_lit
-                | "true" | "false" | "null" ;
-record_pattern  = "{" [ field_pattern { "," field_pattern } [ "," ] ] "}" ;
-field_pattern   = ident [ ":" pattern ] ;
-array_pattern   = "[" [ array_items ] "]" ;
-array_items     = "..." ident
-                | pattern { "," pattern } [ "," [ "..." ident ] ] ;
+destructure     = "{" [ destructure_field { "," destructure_field } [ "," ] ] "}" ;
+destructure_field = ident [ ":" ident ] ;                        (* field, or field: localName *)
