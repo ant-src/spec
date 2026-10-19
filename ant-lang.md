@@ -176,7 +176,17 @@ var moved = Point{ ...p, x: 0.0 }
 var v = Vec{ ...p }                        // a Vec with the fields of p
 ```
 
-Records, arrays, and maps are reference values: assigning or passing one shares it, and `==` compares identity. Structural comparison is a library call (`Array.equals`, `Map.equals`, `Record.equals`). `Record.equals` requires the same tag and compares every run-time field recursively, including fields the static type does not mention, so it agrees with `String.from` and `Json.stringify`.
+Records, arrays, and maps are reference values: assigning or passing one shares it, and a change made through one name is visible through every other. `==` compares structure, never identity. Two records are equal when they carry the same tag and their fields are equal; arrays compare by length and elements, maps by key set and values, primitives by value, and functions and synchronization objects by identity. The comparison recurses with `==` over every run-time field, including fields the static type does not mention, so it agrees with `String.from` and `Json.stringify`. A pair of values already under comparison counts as equal, so cyclic structures compare in finite time. Identity is a library call: `Record.same`, `Array.same`, and `Map.same` report whether two names refer to one value.
+
+```ant
+var p = Point{ x: 1.0, y: 2.0 }
+var q = p
+q.x = 5.0
+p.x                               // 5.0: one record under two names
+p == Point{ x: 5.0, y: 2.0 }      // true
+Record.same(p, q)                 // true
+Record.same(p, Point{ ...p })     // false
+```
 
 ### Arrays and maps
 
@@ -187,7 +197,7 @@ var ages = Map{ "ada": 36, "linus": 54 }    // Map[string, int]
 var empty: Map[string, int] = Map{}
 ```
 
-Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. Map keys are expressions, so `Map{ name: 1 }` keys on the variable `name`; write `Map{ "name": 1 }` for the string. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does: primitives by value, everything else by identity. Section 11 covers the operations.
+Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. Map keys are expressions, so `Map{ name: 1 }` keys on the variable `name`; write `Map{ "name": 1 }` for the string. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A key is hashed when it is inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the entry may become unreachable. Section 11 covers the operations.
 
 ### Unions
 
@@ -293,7 +303,7 @@ From tightest to loosest binding:
 | multiplicative | `*` `/` `%` | integer `/` truncates toward zero |
 | additive | `+` `-` | `+` also concatenates strings |
 | comparison | `<` `<=` `>` `>=` | numbers and strings |
-| equality | `==` `!=` | both operands must have the same type |
+| equality | `==` `!=` | both operands must have the same type; structural (section 4) |
 | logical | `&&` then `\|\|` | short-circuit, `bool` only |
 | null | `??` | cannot mix with `&&` or `\|\|` without parentheses |
 | pipe | `\|` | left associative; in a type, `\|` is a union (section 4) |
@@ -649,7 +659,7 @@ Array.map(xs, f)              Array.filter(xs, f)          Array.reduce(xs, init
 Array.find(xs, f)             Array.some(xs, f)            Array.every(xs, f)
 Array.sort(xs)                Array.sortBy(xs, f)          Array.reverse(xs)
 Array.contains(xs, v)         Array.indexOf(xs, v)         Array.entries(xs)
-Array.range(from, to)         Array.filled(n, v)           Array.equals(xs, ys)
+Array.range(from, to)         Array.filled(n, v)           Array.same(xs, ys)
 Array.sum(xs)                 Array.flatten(xs)            Array.isEmpty(xs)
 ```
 
@@ -662,7 +672,7 @@ Only `Array.push` and `Array.pop` modify their input. Every other function retur
 ```ant
 Map.size(m)         Map.has(m, k)        Map.get(m, k)        Map.set(m, k, v)
 Map.remove(m, k)    Map.keys(m)          Map.values(m)        Map.entries(m)
-Map.map(m, f)       Map.filter(m, f)     Map.merge(m, n)      Map.equals(m, n)
+Map.map(m, f)       Map.filter(m, f)     Map.merge(m, n)      Map.same(m, n)
 ```
 
 Iterating a map with `for` yields `Entry[K, V]` records, `{ key: K, value: V }`, in unspecified order.
@@ -689,7 +699,7 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 | `Bits` | `and`, `or`, `xor`, `not`, `shiftLeft`, `shiftRight`, `popCount` |
 | `Result` | constructors and combinators (section 8) |
 | `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic` | synchronization (section 9) |
-| `Record` | `equals` for structural comparison of records |
+| `Record` | `same` for identity comparison of records |
 | `Json` | `parse`, `stringify` |
 | `File`, `Http`, `Time`, `Os` | I/O; every operation that can fail returns `Result` |
 | `print`, `panic` | the only global functions; `print` writes `String.from(value)` and a newline to standard output |
@@ -766,24 +776,23 @@ func main() {
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
 1. **Narrowing a union of records is `match` only.** Testing one member inside an expression needs a two-arm `match` or a helper such as `isActive` in section 12. A boolean pattern test, perhaps `x is Active{}`, would remove that cost; `is` is reserved for it.
-2. **Records, arrays, and maps are references, and `==` is identity on them.** This follows JavaScript but surprises anyone expecting `Point{ x: 1.0 } == Point{ x: 1.0 }`. Value semantics for records would change `==`, map keys, and the mutation model.
-3. **No explicit type arguments at call sites.** Keeps `f[T](x)` out of the grammar, so `a[b]` is always indexing. Needs confirmation that inference from arguments and expected type is always enough.
-4. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
-5. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-6. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
-7. **A record literal must match its named type exactly, while anonymous record types are checked structurally.** Whether optional fields (`age?: int`) are worth adding on top of `int | null` fields is open.
-8. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
-9. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
-10. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
-11. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-12. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
-13. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-14. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
-15. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-16. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-17. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
-18. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
-19. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
-20. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-21. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
-22. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
+2. **No explicit type arguments at call sites.** Keeps `f[T](x)` out of the grammar, so `a[b]` is always indexing. Needs confirmation that inference from arguments and expected type is always enough.
+3. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
+4. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
+5. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
+6. **A record literal must match its named type exactly, while anonymous record types are checked structurally.** Whether optional fields (`age?: int`) are worth adding on top of `int | null` fields is open.
+7. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
+8. **Named arguments on function values** require parameter names in the function type. Whether names are part of type identity, and what happens when a lambda is assigned to a named type, is unspecified.
+9. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
+10. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+11. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
+12. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+13. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
+14. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+15. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+16. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
+17. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
+18. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
+19. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+20. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
+21. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
