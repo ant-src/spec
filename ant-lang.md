@@ -68,13 +68,13 @@ The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`. A p
 A newline ends an expression, except when:
 
 - the line ends with a token that cannot end an expression, such as a binary operator, `,`, `(`, `[`, `{`, or `=`; or
-- the next non-blank line starts with `.`, `?.`, or `|`.
+- the next non-blank line starts with `.`, `?.`, `|`, or `else`.
 
-A semicolon also ends an expression. Nothing else is inferred. In particular, a line that starts with `(` or `[` begins a new statement, so `a` followed by `(b)` on the next line is two statements and not a call, and a `return` at the end of a line returns `void`, which the checker rejects in a function with another return type. `else` must follow the closing `}` on the same line. A trailing comment does not change any of this.
+A semicolon also ends an expression. Nothing else is inferred. In particular, a line that starts with `(` or `[` begins a new statement, so `a` followed by `(b)` on the next line is two statements and not a call, and a `return` at the end of a line returns `void`, which the checker rejects in a function with another return type. A trailing comment does not change any of this.
 
 Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. The items of a call, a literal, a record type, a parameter list, and an import list are separated by commas, with an optional trailing comma. Only blocks separate their items by newlines.
 
-The continuation rule for a leading `.`, `?.`, or `|` exists so that pipelines, and union types, read top to bottom:
+The continuation rule for a leading `.`, `?.`, `|`, or `else` exists so that pipelines, union types, and `else` chains read top to bottom; none of those tokens can start a statement, so the rule is unambiguous:
 
 ```ant
 var total = orders
