@@ -1,0 +1,4 @@
+// expect error: only allowed at the top level
+func f() {
+  export var x = 1
+}

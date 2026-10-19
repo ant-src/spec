@@ -1,0 +1,2 @@
+// expect error: unexpected '.'
+var x = .5

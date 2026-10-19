@@ -1,0 +1,4 @@
+// expect error: expected newline or ';'
+func f() {
+  a b
+}

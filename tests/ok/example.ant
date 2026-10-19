@@ -1,0 +1,57 @@
+type Active = {}
+type Suspended = { reason: string }
+type Status = Active | Suspended
+
+type Account = {
+  id: int,
+  owner: string,
+  balance: float64,
+  status: Status,
+}
+
+type NotFound = { id: int }
+type Insufficient = { needed: float64 }
+type AccountSuspended = { id: int, reason: string }
+type TransferError = NotFound | Insufficient | AccountSuspended
+
+func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64): Result[void, TransferError] {
+  var source = accounts[from] ?? return Result.err(NotFound{ id: from })
+  var target = accounts[to] ?? return Result.err(NotFound{ id: to })
+
+  var status = source.status
+  if status is Suspended {
+    return Result.err(AccountSuspended{ id: from, reason: status.reason })
+  }
+  if source.balance < amount {
+    return Result.err(Insufficient{ needed: amount - source.balance })
+  }
+
+  source.balance -= amount
+  target.balance += amount
+  Result.ok(void)
+}
+
+func report(accounts: Map[int, Account]): string {
+  Map.values(accounts)
+    | Array.filter({ x.status is Active })
+    | Array.sortBy({ x.balance })
+    | Array.map({ `${x.owner}: ${x.balance}` })
+    | String.join("\n")
+}
+
+func main() {
+  var accounts: Map[int, Account] = Map{}
+  accounts[1] = Account{ id: 1, owner: "ada", balance: 100.0, status: Active{} }
+  accounts[2] = Account{ id: 2, owner: "linus", balance: 20.0, status: Suspended{ reason: "audit" } }
+
+  var result = transfer(accounts, 1, 2, 50.0)
+  if result is Ok { print("ok") }
+  else {
+    var error = result.error
+    if error is NotFound { print(`unknown account ${error.id}`) }
+    else if error is Insufficient { print(`short by ${error.needed}`) }
+    else { print(`account ${error.id} is suspended: ${error.reason}`) }
+  }
+
+  print(report(accounts))
+}

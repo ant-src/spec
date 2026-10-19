@@ -1,0 +1,4 @@
+// expect error: named function is only allowed at the top level
+func f() {
+  func g() { 1 }
+}

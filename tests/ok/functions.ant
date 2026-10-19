@@ -1,0 +1,57 @@
+func connect(host: string, port: int = 443, tls: bool = true): Connection { Connection{} }
+
+func calls() {
+  connect("example.com")
+  connect("example.com", 8080)
+  connect("example.com", tls: false)
+  connect(port: 80, host: "example.com")
+  Geometry.distance(a: p, b: q)
+  f?.(x)
+  obj?.field
+  obj?.[key]
+  xs[1][2]
+  g(1)(2)
+}
+
+func clamp(value: int, low: int, high: int): int {
+  if value < low { return low }
+  if value > high { return high }
+  value
+}
+
+func counter(): func(): int {
+  var n = 0
+  func() { n += 1; n }
+}
+
+func anon() {
+  var add = func(a: int, b: int) { a + b }
+  var typed = func(a: int): int { a }
+  var noArgs = func() {}
+  var lam: func(int): int = { x * 2 }
+}
+
+func errors(path: string): Result[Config, Error] {
+  var text = try File.read(path)
+  var json = try Json.parse(text)
+  var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
+  var value = maybe ?? panic("unreachable")
+  var piped = try f(x) | g()
+  var neg = a - -b
+  var notted = !(x is Circle) || x is Rect
+  var mixed = (a ?? b) || c
+  defer { File.close(text) }
+  go { sendReport(report) }
+  Result.ok(Config.fromJson(json))
+}
+
+func control(xs: Array[int]) {
+  for x in xs {
+    if x < 0 { continue }
+    if x > 10 { break }
+    print(x)
+  }
+  var label = if n < 0 { "negative" } else if n == 0 { "zero" } else { "positive" }
+  var value = if c { 1 }
+  return
+}

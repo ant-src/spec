@@ -1,0 +1,4 @@
+// expect error: unexpected 'else'
+func f() {
+  else { 1 }
+}

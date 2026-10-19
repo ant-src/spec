@@ -11,12 +11,12 @@
 
 (* The lexer emits a NEWLINE token for a line break unless
      - the previous token cannot end an expression: a binary operator, "|", "??",
-       ",", ":", "(", "[", "{", "=", "...", or a prefix operator; or
-     - the next non-blank line starts with ".", "?.", or "|"; or
+       ",", ":", "(", "[", "{", "=", or a prefix operator; or
+     - the next non-blank line starts with ".", "?.", "|", or "else"; or
      - the break is inside "(", "[", or a non-block "{": a literal, a record type,
        an import list, or a parameter list.
    Comments are removed first. A NEWLINE or ";" terminates a statement.
-   "else" must follow "}" on the same line; a NEWLINE between them ends the if. *)
+   "else" may start a line, since nothing else can start with it.              *)
 
 term            = NEWLINE | ";" ;
 

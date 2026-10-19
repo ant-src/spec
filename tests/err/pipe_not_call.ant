@@ -1,0 +1,2 @@
+// expect error: pipe right side must be a call
+var x = xs | f

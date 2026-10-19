@@ -1,0 +1,2 @@
+// expect error: map entry needs ':'
+var m = Map{ x }

@@ -1,0 +1,2 @@
+// expect error: unexpected newline
+var x = 1 +

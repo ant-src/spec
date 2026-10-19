@@ -1,0 +1,4 @@
+// expect error: assignment cannot be chained
+func f() {
+  a = b = c
+}

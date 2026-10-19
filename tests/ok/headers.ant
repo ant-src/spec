@@ -1,0 +1,16 @@
+func headers(xs: Array[int], m: Map[string, int], s: Shape, u: User | null) {
+  if xs[0] > 1 { print("a") }
+  if Array.length(xs) == 0 { print("b") }
+  if (u) != null { print("c") }
+  if s is Circle && s.radius > 1.0 { print("d") }
+  if u is null { print("e") } else if u is User { print(u.name) }
+  while !done { done = step() }
+  while Array.length(xs) > 0 { Array.pop(xs) }
+  for x in xs { print(x) }
+  for { key, value } in m { print(`${key}: ${value}`) }
+  for { key: k, value } in m { print(k) }
+  for i in Array.range(0, 10) { print(i) }
+  for c in "abc" { print(c) }
+  for e in [1, 2, 3] { print(e) }
+  if count = 5 { print("assignment in header parses; the checker rejects it") }
+}

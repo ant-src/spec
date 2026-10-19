@@ -1,0 +1,2 @@
+// expect error: cannot mix
+var x = a && b ?? c

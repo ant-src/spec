@@ -1,0 +1,2 @@
+// expect error: reserved word 'class'
+var class = 1

@@ -1,0 +1,3 @@
+// expect error: unterminated string
+var s = "a
+b"

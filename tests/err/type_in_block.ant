@@ -1,0 +1,4 @@
+// expect error: type declarations are only allowed at the top level
+func f() {
+  type T = int
+}

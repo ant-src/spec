@@ -1,0 +1,26 @@
+type Id = int | string
+type Maybe = User | null
+type Pair[A, B] = { first: A, second: B }
+type Tree = { value: int, children: Array[Tree] }
+type Predicate[T] = func(T): bool
+type Handler = func(request: Request): Response
+type Greedy = func(int): A | B
+type Parenthesized = (func(int): A) | B
+type Nested = Map[string, Array[Result[int, Error]]]
+type Empty = {}
+type Trailing = { a: int, b: string, }
+type Status = Active | Suspended
+type Fn2 = func(a: int, b: int): int
+type Nullary = func(): void
+
+func max[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
+func names[T: { name: string }](xs: Array[T]): Array[string] { Array.map(xs, { x.name }) }
+func swap[A, B](p: Pair[A, B]): Pair[B, A] { Pair{ first: p.second, second: p.first } }
+func generic[T: Number, U](a: Array[T], b: U,): Map[T, U] { Map{} }
+
+var isAdult: func(User): bool = { x.age >= 18 }
+var ys: Array[string] = []
+var f: func(int): int | null = { null }
+var g: Geometry.Point = Geometry.Point{ x: 1.0, y: 2.0 }
+var v: void = void
+var n: null = null

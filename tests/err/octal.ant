@@ -1,0 +1,2 @@
+// expect error: malformed number
+var x = 0o17
