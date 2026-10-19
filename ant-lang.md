@@ -15,7 +15,7 @@ The name "Ant" is a placeholder.
 - **Types are advisory.** A separate checker reads annotations and the interpreter discards them. The only thing the interpreter keeps from a `type` declaration is its name, which becomes a tag (section 4). No runtime behavior depends on a type that was written down.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
 
-Section 13 lists the decisions this draft leaves open.
+Section 14 lists the decisions this draft leaves open.
 
 ## 2. Lexical structure
 
@@ -51,7 +51,7 @@ Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordina
 
 ### Literals
 
-```ant
+```
 42          1_000_000     0xFF        0b1010    // integers
 3.14        1e9           2.5e-3                // floats
 "hello"     "line\nbreak" "\u{1F600}"           // strings
@@ -109,7 +109,7 @@ An assignment target is a variable, a field such as `p.x`, or an element such as
 
 Ant is statically typed. Types are checked before the program runs, and most annotations are inferred. A named record type is nominal: each `type` declaration of a record is a distinct type, identified by its tag. Every other type is structural: two types with the same shape are the same type.
 
-Types are checked by a separate checker and erased before the program runs. The interpreter parses annotations and discards them. A `type` declaration is the one exception: its body is discarded, but its name is bound to a fresh tag value, and a record literal with that name stores the tag (see Records). Every `type` declaration binds a tag, even an alias, because the interpreter does not look at the body; only record literals and `is` tests use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `==` or `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record.
+Types are checked by a separate checker and erased before the program runs. The interpreter parses annotations and discards them. A `type` declaration is the one exception: its body is discarded, but its name is bound to a fresh tag value, and a record literal with that name stores the tag (see Records). Every `type` declaration binds a tag, even an alias, because the interpreter does not look at the body; only record literals and `is` tests use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record. Section 12 lists every such check.
 
 ### Primitives
 
@@ -397,6 +397,7 @@ The branches are checked against the expected type, or the `if` has the union of
 ```ant
 Array.filter(shapes, { x is Circle })
 if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
+```
 
 ### Loops
 
@@ -578,7 +579,7 @@ Besides the two constructors, the `Result` namespace provides `Result.map`, `Res
 
 `panic(message)` is a prelude function of type `never`. It stops the current goroutine immediately. It is for bugs and impossible states, never for expected failures. Panics cannot be caught. A panic in the main goroutine ends the program with a non-zero exit status; a panic in any other goroutine ends only that goroutine (section 9).
 
-Operations that panic are listed with the operation. The common ones: integer overflow, integer division by zero, array index out of range, lossy numeric conversion, and `unwrap` on the wrong case.
+Section 12 lists every operation that panics. The common ones: integer overflow, integer division by zero, array index out of range, lossy numeric conversion, and `unwrap` on the wrong case.
 
 ### `defer`
 
@@ -684,7 +685,7 @@ The standard library is a set of namespaces in the prelude. Each is a plain reco
 
 `Array[T]` is dense and growable. `xs[i]` reads and `xs[i] = v` writes; both panic when `i` is out of range. `Array.get(xs, i)` returns `T | null` instead.
 
-```ant
+```
 Array.length(xs)              Array.push(xs, v)            Array.pop(xs): T | null 
 Array.get(xs, i)              Array.slice(xs, from, to)    Array.concat(xs, ys)
 Array.map(xs, f)              Array.filter(xs, f)          Array.reduce(xs, init, f)
@@ -711,7 +712,7 @@ Only `Array.push` and `Array.pop` modify their input. Every other function retur
 
 `Map[K, V]` is an unordered hash map. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes `null`, `Map.has` is the only way to tell a missing key from a stored `null`.
 
-```ant
+```
 Map.size(m)         Map.has(m, k)        Map.get(m, k)        Map.set(m, k, v)
 Map.remove(m, k)    Map.keys(m)          Map.values(m)        Map.entries(m)
 Map.map(m, f)       Map.filter(m, f)     Map.merge(m, n)      Map.same(m, n)
@@ -723,7 +724,7 @@ Iterating a map with `for` yields `Entry[K, V]` records, `{ key: K, value: V }`,
 
 A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear, so a loop over indices would be quadratic, and indexing by byte would be a trap. `String.length`, `String.slice`, and `String.chars` count code points, `for` iterates them (section 5), and `String.toBytes` gives the bytes.
 
-```ant
+```
 String.length(s)         String.slice(s, from, to)    String.concat(parts)
 String.split(s, sep)     String.join(parts, sep)      String.trim(s)
 String.contains(s, t)    String.startsWith(s, t)      String.replace(s, old, new)
@@ -745,9 +746,103 @@ String.toInt(s): int | null                   String.toFloat(s): float64 | null
 | `Record` | `same` for identity comparison of records |
 | `Json` | `parse`, `stringify` |
 | `File`, `Http`, `Time`, `Os` | I/O; every operation that can fail returns `Result` |
-| `print`, `panic` | the only global functions; `print` writes `String.from(value)` and a newline to standard output |
+| `print`, `panic` | prelude functions; `print` writes `String.from(value)` and a newline to standard output |
+| `int8` … `uint64`, `float32`, `float64` | prelude conversion functions, one per numeric type (section 4) |
 
-## 12. Example
+## 12. Dynamic semantics
+
+This section is the interpreter's contract. It defines what every construct does to values, and it is the only part of the language the interpreter implements; every rule that mentions a type belongs to the checker. Where the checker would have rejected a program, the rules below say "panic", and the table at the end collects every such case. A program that passes the checker reaches only the value-dependent rows of that table, and a data race (section 9).
+
+### Values
+
+Every value has a kind, fixed when the value is created:
+
+| Kind | Values |
+|---|---|
+| the ten numeric kinds | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it |
+| `bool`, `string`, `null`, `void` | as in section 4 |
+| array | a growable sequence of values |
+| map | a hash table from values to values, keyed by `==` |
+| record | a tag plus a fixed set of named fields |
+| func | a declared function, an anonymous function, or a lambda, with the scopes it captured |
+| tag | the value a `type` declaration binds (section 4) |
+| sync | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic` |
+
+Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, and tags are immutable, so for them the distinction never shows.
+
+### Names and scopes
+
+A block opens a scope. `var` binds a name in the current scope from its declaration to the end of the block; a function body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the scopes it was created in, so it sees later assignments to the variables it captured. Each iteration of a `for` opens a fresh scope for the loop variable. Reading a top-level `var` whose initializer has not run yet panics (section 10). A module's scope is a record, and `export` is a checker rule: at run time every field of a module record is readable.
+
+### Expressions
+
+Operands evaluate left to right (section 5). Below, "must be" means the operation panics otherwise.
+
+- **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string evaluates each `${...}` in order and renders it with `String.from`.
+- **Record literal `Head{ ... }`.** The head must evaluate to a tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. The result is a new record with that tag and those fields.
+- **Map literal `Map{ ... }`.** Keys and values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
+- **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value that must be an array. The result is a new array.
+- **Variable.** The value bound to the name.
+- **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace is a record, so this rule also covers `Array.map` and `Geometry.Point`.
+- **Index read `a[i]`.** `a` must be an array or a map. For an array, `i` must be an `int` from `0` up to but excluding the length, and the value is that element. For a map, the value is the entry whose key is `==` to `i`, or `null` when there is none.
+- **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest of the postfix chain is skipped. Otherwise the plain rule applies.
+- **Call `f(args)`.** `f` evaluates first and must be a function. Arguments evaluate in order. Positional arguments fill parameters left to right; a named argument fills the parameter of that name, which must exist and must not be filled already; every parameter still unfilled must have a default, and the defaults evaluate in the callee's scope, in parameter order, after the arguments. A lambda has the single parameter `x` and accepts zero or one positional argument. The body then runs in a new scope, and the call's value is the body's value, or the operand of the `return` that ended it.
+- **Conversion `int8(x)` … `float64(x)`.** The ten numeric names are prelude functions. The argument must be a number. An integer target panics when the value, truncated toward zero if it is a float, lies outside the target's range, and on `NaN` or an infinity. A float target rounds to the nearest representable value.
+- **Arithmetic `+ - * / %`.** Both operands must be numbers of the same kind, except that `+` also takes two strings and concatenates them. An integer result that does not fit the kind panics, which includes unsigned subtraction below zero. Integer `/` truncates toward zero, `%` takes the sign of the dividend, and both panic on a zero divisor. Float arithmetic follows IEEE 754 and never panics. Unary `-` needs a number; `!` needs a `bool`.
+- **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, or two strings, which compare by code point.
+- **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`, `null`, and `void` values are equal by value; records have the same tag and `==` fields; arrays have the same length and `==` elements in order; maps have the same key set and `==` values per key; functions, tags, and sync objects are the same object. A pair of values already under comparison counts as equal (section 4). Values of different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
+- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`, and the ten numeric names test the kind of `a`. Any other path evaluates and must be a tag, and the test is whether `a` is a record with that tag. The result is a `bool`.
+- **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right operand must be a `bool` when it is evaluated.
+- **`a ?? b`.** Yields `a`, unless it is `null`, in which case `b` is evaluated and yielded.
+- **Pipe `a | f(b)`.** Is `f(a, b)`: `a` evaluates, then `f`, then `b`.
+- **Assignment.** The target's sub-expressions evaluate first, then the right side. A variable target rebinds the name in the scope that declared it. A field target must be a record that already has that field. An index target on an array must be an `int` in range; on a map it inserts or replaces. Compound assignment reads the target, applies the operator, and stores. The value is `void`.
+- **Block.** Opens a scope and evaluates its statements in order. Its value is that of the last expression, or `void` when the block is empty or ends in a declaration or an assignment. Deferred blocks registered in it run when it exits (below).
+- **`if`.** The condition must be a `bool`. The value is the chosen branch's value; with no `else` and a `false` condition it is `void`.
+- **`while`.** Evaluates the condition, which must be a `bool`, before each iteration. The value is `void`.
+- **`for x in e`.** `e` must be an array, a map, or a string. Over an array it iterates by index from zero while the index is below the current length, so elements appended during the loop are visited and removed ones are not. Over a map it visits each entry once as an `Entry` record in unspecified order; inserting or removing during the loop is a program error of the data-race kind, and entries may be skipped or seen twice. Over a string it yields each code point as a one-character string. A destructuring on the left reads the named fields of each element, which must be a record with those fields. The value is `void`.
+- **`break`, `continue`.** Leave or restart the innermost enclosing loop, running the deferred blocks of every block they exit.
+- **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body or lambda, running the deferred blocks of every block it exits.
+- **`try e`.** If the value is `null`, returns `null` from the enclosing function. If it is a record tagged `Err`, returns a new `Err` record with the same `error` field. If it is a record tagged `Ok`, yields its `value` field. Any other value is yielded unchanged.
+- **Lambda and anonymous `func`.** Create a function value that captures the current scopes.
+- **`defer { ... }`.** Registers the block with the innermost enclosing block. The value is `void`.
+- **`go { ... }`.** Starts a new goroutine that evaluates the block, and yields `void` at once.
+- **`panic(message)`.** Begins a panic in the current goroutine (below).
+
+### Deferred blocks and panics
+
+When a block exits, by reaching its end, by `return`, `break`, or `continue`, or by a panic, its deferred blocks run in reverse order of registration, each in the scope it was registered in. A `return` inside a deferred block returns from the deferred block only.
+
+A panic unwinds the current goroutine: every block being evaluated exits in turn, running its deferred blocks, until the goroutine's root block has exited. A panic inside a deferred block replaces the one in progress. When unwinding finishes, the runtime writes the message and a stack trace to standard error. In the main goroutine the program then exits with a non-zero status; in any other goroutine, that goroutine ends and nothing else happens. Panics cannot be caught.
+
+### Goroutines
+
+Goroutines are preemptive: a goroutine that never blocks cannot keep others from running. They share memory, and the sync objects of section 9 are the only synchronization. The runtime guarantees that a data race cannot corrupt memory or crash the interpreter; the values a racing program observes are otherwise unspecified. The program ends when `main` returns, whatever other goroutines are doing.
+
+### Runtime panics
+
+The complete list. The checker rules out every kind and arity row. The value-dependent rows, marked ◆, can occur in a checked program.
+
+| Operation | Panics when |
+|---|---|
+| `+ - * / %`, `< <= > >=`, unary `-` | an operand is not a number, or the operands differ in kind; `+` and the comparisons also take two strings |
+| `!`, `&&`, `\|\|`, `if`, `while` | an operand or condition is not a `bool` |
+| ◆ integer `+ - *`, compound assignment, `Array.sum` | the result does not fit the kind |
+| ◆ integer `/`, `%` | the divisor is zero |
+| ◆ `Bits.shiftLeft`, `Bits.shiftRight` | the count is negative or not below the operand's width |
+| ◆ numeric conversion | the value is outside the target's range, or is `NaN` or infinite with an integer target |
+| `a.b`, `a.b = v` | `a` is not a record, or has no field `b` |
+| `a[i]`, `a[i] = v` | `a` is neither an array nor a map; ◆ `a` is an array and `i` is not an `int` from `0` up to but excluding the length |
+| call | the callee is not a function; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
+| record literal | the head is not a tag; a spread operand is not a record |
+| array literal | a spread operand is not an array |
+| `is` | the right side is a path that does not evaluate to a tag |
+| `for` | the operand is not an array, a map, or a string; a destructuring meets an element without the field |
+| library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Array.pop` on an empty array |
+| ◆ top-level `var` | read before its initializer has run |
+| ◆ `panic` | always |
+| `??`, `?.`, `try`, `==`, `!=` | never |
+
+## 13. Example
 
 ```ant
 type Active = {}
@@ -809,7 +904,7 @@ func main() {
 }
 ```
 
-## 13. Open decisions
+## 14. Open decisions
 
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
@@ -822,5 +917,4 @@ Each item below is a choice this draft made for the sake of having examples, not
 7. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
 8. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
 9. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-10. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
-11. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.
+10. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.
