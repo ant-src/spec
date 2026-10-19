@@ -1,2 +1,2 @@
-// expect error: record field must be an identifier
+// expect error: shorthand entry must be an identifier
 var p = Point{ 1 }

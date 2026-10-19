@@ -917,13 +917,14 @@ class Parser:
                     value = self.expression()
                     if not is_map and key[0] != "Ident":
                         self.error("record field must be an identifier")
+                    if is_map and key[0] == "Ident":
+                        key = ("String", '"' + key[1] + '"')     # bare identifier key is its name
                     entries.append(("Entry", key, value))
                 else:
-                    if is_map:
-                        self.error("map entry needs ':'")
                     if key[0] != "Ident":
-                        self.error("record field must be an identifier")
-                    entries.append(("Entry", key, key))
+                        self.error("shorthand entry must be an identifier")
+                    name = ("String", '"' + key[1] + '"') if is_map else key
+                    entries.append(("Entry", name, key))
             if not self.at("}"):
                 self.expect(",")
         self.expect("}")

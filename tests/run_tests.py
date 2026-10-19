@@ -126,6 +126,11 @@ def run_inline():
     check("literal in block", f[2][0][4][1][0][2][1][0][0] == "RecordLit", repr(f))
     # Map literal
     check("map literal", expr('Map{ "a": 1 }') == ("MapLit", [("Entry", ("String", '"a"'), ("Int", "1"))]))
+    # a bare identifier key is its name; a parenthesized one is the variable; shorthand
+    e = expr("Map{ name: 1, (name): 2, age }")
+    check("map keys", e == ("MapLit", [("Entry", ("String", '"name"'), ("Int", "1")),
+                                        ("Entry", ("Paren", ("Ident", "name")), ("Int", "2")),
+                                        ("Entry", ("String", '"age"'), ("Ident", "age"))]), repr(e))
     # template with nested braces
     e = expr("`${ Point{ x: 1.0 }.x } and ${ y }`")
     check("template", e[0] == "Template" and len(e[2]) == 2 and e[2][0][0] == "Field", repr(e))

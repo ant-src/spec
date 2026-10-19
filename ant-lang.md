@@ -148,7 +148,7 @@ var p = Point{ x: 1.0, y: 2.0 }
 p.x = 3.0
 ```
 
-Every record value therefore has a name; there are no anonymous record literals. The head of a literal is an identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a shorthand entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses. Map literals have no shorthand, because there a bare identifier would be a key expression.
+Every record value therefore has a name; there are no anonymous record literals. The head of a literal is an identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a shorthand entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses. Map literals follow the same two rules (next section).
 
 The name is part of the value. A `type` declaration whose body is a record type binds its name to a fresh tag, and a literal stores the tag of its head in the record. The tag is all the interpreter keeps of a type declaration. It is compared only by identity, so the interpreter never interprets a type, and a tag reached through an import or an alias is the same tag. The checker identifies the type by the same tag: two declarations with the same fields are different types, and `type B = A` is a compile error when `A` is a record type, since it would mint a second tag for one type. Declare the fields again instead.
 
@@ -193,11 +193,12 @@ Record.same(p, Point{ ...p })     // false
 ```ant
 var xs: Array[int] = [1, 2, 3]
 var more = [...xs, 4]                       // spread copies elements
-var ages = Map{ "ada": 36, "linus": 54 }    // Map[string, int]
+var ages = Map{ ada: 36, linus: 54 }        // Map[string, int]
+var keyed = Map{ (name): 1, 7: "seven" }    // computed and non-string keys
 var empty: Map[string, int] = Map{}
 ```
 
-Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. Map keys are expressions, so `Map{ name: 1 }` keys on the variable `name`; write `Map{ "name": 1 }` for the string. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A key is hashed when it is inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the entry may become unreachable. Section 11 covers the operations.
+Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. A key that is a single identifier is the string of that identifier, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`; any other expression is evaluated as the key, and a parenthesized identifier `(name)` is the variable. A bare identifier alone is shorthand, so `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare identifier before `:` is a name: the field of a record, the string key of a map. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A key is hashed when it is inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the entry may become unreachable. Section 11 covers the operations.
 
 ### Unions
 
@@ -919,7 +920,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 
 - **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string evaluates each `${...}` in order and renders it with `String.from`.
 - **Record literal `Head{ ... }`.** The head must evaluate to a tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. The result is a new record with that tag and those fields.
-- **Map literal `Map{ ... }`.** Keys and values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
+- **Map literal `Map{ ... }`.** A key that is a single identifier is the string of its name, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value that must be an array. The result is a new array.
 - **Variable.** The value bound to the name.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace is a record, so this rule also covers `Array.map` and `Geometry.Point`.
@@ -1054,5 +1055,4 @@ Each item below is a choice this draft made for the sake of having examples, not
 5. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
 6. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
 7. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-8. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-9. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.
+8. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.

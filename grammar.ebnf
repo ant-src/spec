@@ -161,9 +161,9 @@ brace_lit       = ident_path "{" [ brace_entry { "," brace_entry } [ "," ] ] "}"
 ident_path      = ident { "." ident } ;
 brace_entry     = "..." expression                               (* records only *)
                 | expression [ ":" expression ] ;
-                  (* record: the key is an ident and names a field; without ":" it
-                             is shorthand for key: key
-                     map:    the key is any expression and ":" is required        *)
+                  (* a bare ident key is a name: the field of a record, the string
+                     key of a map; without ":" it is shorthand for key: key.
+                     Any other map key is an expression, so (name) is the variable *)
 
 array_lit       = "[" [ array_elem { "," array_elem } [ "," ] ] "]" ;
 array_elem      = [ "..." ] expression ;
