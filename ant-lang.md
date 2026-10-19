@@ -645,7 +645,7 @@ A panic ends the goroutine it occurs in, after running that goroutine's deferred
 
 ## 10. Modules
 
-Each file is a module: a sequence of `import` declarations followed by `var`, `func`, and `type` declarations. Nothing else appears at the top level. A declaration prefixed with `export` is visible to other modules; everything else is private. Top-level `var` initializers run in source order the first time the module is imported, after the modules it imports.
+Each file is a module: a sequence of `import` declarations followed by `var`, `func`, and `type` declarations. Nothing else appears at the top level. A declaration prefixed with `export` is visible to other modules; everything else is private.
 
 ```ant
 // geometry.ant
@@ -656,7 +656,7 @@ export func distance(a: Point, b: Point): float64 {
 }
 ```
 
-A module is a record of its exports, and `import` destructures it. A record destructuring brings chosen exports into scope, with the usual `name: alias` renaming. A bare name binds the whole module as a namespace, so user modules look like standard-library namespaces.
+A module is a record. Its top-level scope is a record whose fields are its declarations, and `export` marks the fields other modules may see. `import` destructures that record: a record destructuring brings chosen exports into scope, with the usual `name: alias` renaming, and a bare name binds the whole record as a namespace. The standard-library namespaces are prelude variables bound to records of the same kind, so `Geometry.distance` and `Array.map` are both a field read followed by a call, and `Geometry.Point{ x: 1.0 }` is a field read that yields a tag. The interpreter has no notion of a namespace beyond this; the checker keeps each module's export table so that `Geometry.Point` also resolves in a type.
 
 ```ant
 import "./geometry.ant" { distance, Point }
@@ -668,13 +668,15 @@ var d = Geometry.distance(p, q)
 
 The path is a file path relative to the importing file, extension included. It comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given.
 
-Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. There is no re-export. Import cycles are a compile error.
+Imports are live and read-only. `export var` is allowed; an imported name reads the exporting module's current value each time, and assigning to an imported name or to a field of a namespace from outside the module is a compile error. Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. The prelude names, `print`, `panic`, the type and conversion names such as `int` and `Result`, and the namespaces, count as imports in every module. There is no re-export. Import cycles are a compile error.
 
-Execution starts at `func main()` in the module given to the compiler.
+Imports are resolved depth first in source order, and each module is initialized once, after everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may refer to each other in any order. Top-level `var` initializers run in source order. An initializer that refers directly to a later `var` is a compile error; reaching one through a function call before it is initialized is a runtime panic, since the checker does not trace calls.
+
+Execution starts at `func main()` in the module given to the interpreter. `main` takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit status is zero when `main` returns and non-zero when it panics.
 
 ## 11. Standard library
 
-The standard library is a set of global namespaces. Each is a plain record of functions; none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section lists the shape of the library, not its full contents.
+The standard library is a set of namespaces in the prelude. Each is a plain record of functions, exactly like an imported module (section 10); none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section lists the shape of the library, not its full contents.
 
 ### Arrays
 
