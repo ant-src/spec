@@ -160,9 +160,10 @@ literal         = int_lit | float_lit | string_lit | template_lit
 brace_lit       = ident_path "{" [ brace_entry { "," brace_entry } [ "," ] ] "}" ;
 ident_path      = ident { "." ident } ;
 brace_entry     = "..." expression                               (* records only *)
-                | expression ":" expression ;
-                  (* record: the key is an ident and names a field;
-                     map:    the key is any expression                           *)
+                | expression [ ":" expression ] ;
+                  (* record: the key is an ident and names a field; without ":" it
+                             is shorthand for key: key
+                     map:    the key is any expression and ":" is required        *)
 
 array_lit       = "[" [ array_elem { "," array_elem } [ "," ] ] "]" ;
 array_elem      = [ "..." ] expression ;

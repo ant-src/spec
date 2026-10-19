@@ -119,16 +119,16 @@ Types are checked by a separate checker and erased before the program runs. The 
 | `int8` `int16` `int32` `int64` | signed integers |
 | `uint8` `uint16` `uint32` `uint64` | unsigned integers |
 | `float32` `float64` | IEEE 754 floats |
-| `string` | immutable sequence of Unicode code points |
+| `string` | immutable sequence of Unicode code points, stored as UTF-8 |
 | `null` | the single value `null` |
 | `void` | the single value `void`, which carries no information |
 | `never` | the type of expressions that do not return, such as `panic(...)` or `return` |
 
-`int` is an alias for `int64` and `byte` is an alias for `uint8`. The prelude also declares `Number`, the union of the ten numeric types, and `Ordered`, which is `Number | string`; they exist to bound type parameters (see Generics).
+`int` is an alias for `int64` and `byte` is an alias for `uint8`: `int` is the default, and the sized names are for when the size matters. The prelude also declares `Number`, the union of the ten numeric types, and `Ordered`, which is `Number | string`; they exist to bound type parameters (see Generics).
 
 `void` is both a type and its only value, like `null`. A block that ends in a declaration or assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly when a value is required, as in `Result.ok(void)`.
 
-Numeric types never mix. Convert explicitly by calling the target type as a function. Conversions that lose information panic rather than wrap or truncate silently; float-to-int conversion truncates toward zero and panics when out of range.
+Numeric types never mix. Convert explicitly by calling the target type as a function: each of the ten numeric names is a prelude function that takes any numeric value, and it is a value in its own right, so `Array.map([72, 105], byte)` builds an `Array[byte]`. Conversions that lose information panic rather than wrap or truncate silently; float-to-int conversion truncates toward zero and panics when out of range. `bool` and `string` are not callable: parsing is `String.toInt` and `String.toFloat`, rendering is `String.from`. There are no literal suffixes; an integer literal is always an `int` and a float literal a `float64`, so a `byte` is written `byte(255)`.
 
 ```ant
 var n = 7
@@ -148,7 +148,7 @@ var p = Point{ x: 1.0, y: 2.0 }
 p.x = 3.0
 ```
 
-Every record value therefore has a name; there are no anonymous record literals. The head of a literal is an identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A literal has no shorthand entries: write `Point{ x: x }`, not `Point{ x }`.
+Every record value therefore has a name; there are no anonymous record literals. The head of a literal is an identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a shorthand entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses. Map literals have no shorthand, because there a bare identifier would be a key expression.
 
 The name is part of the value. A `type` declaration whose body is a record type binds its name to a fresh tag, and a literal stores the tag of its head in the record. The tag is all the interpreter keeps of a type declaration. It is compared only by identity, so the interpreter never interprets a type, and a tag reached through an import or an alias is the same tag. The checker identifies the type by the same tag: two declarations with the same fields are different types, and `type B = A` is a compile error when `A` is a record type, since it would mint a second tag for one type. Declare the fields again instead.
 
@@ -285,7 +285,7 @@ There are no interfaces, no `where` clauses, and no bounds on type constructors.
 
 ### Type declarations
 
-`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records). Otherwise the name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. There are no classes, interfaces, or prototypes.
+`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records). Otherwise the name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. There are no classes, interfaces, or prototypes.
 
 ### Assignability
 
@@ -333,6 +333,8 @@ Literals get no help from context: an integer literal is always `int` and a floa
 
 Every construct is an expression with a type. Statements are just expressions whose value is `void`.
 
+Evaluation is strictly left to right: the callee before its arguments, arguments in written order, and record fields, array elements, and map entries in written order. An assignment evaluates the target's sub-expressions, such as the index in `xs[i()] = f()`, before the right-hand side. `&&`, `||`, and `??` short-circuit. `a | f(b)` evaluates `a`, then `f`, then `b`.
+
 ### Operators
 
 From tightest to loosest binding:
@@ -341,7 +343,7 @@ From tightest to loosest binding:
 |---|---|---|
 | postfix | `a.b` `a?.b` `a[i]` `f(x)` | |
 | prefix | `-a` `!a` `try a` | |
-| multiplicative | `*` `/` `%` | integer `/` truncates toward zero |
+| multiplicative | `*` `/` `%` | integer `/` truncates toward zero; `%` takes the sign of the dividend |
 | additive | `+` `-` | `+` also concatenates strings |
 | comparison | `<` `<=` `>` `>=` `is` | numbers and strings; `is` tests a union member |
 | equality | `==` `!=` | both operands must have the same type; structural (section 4) |
@@ -350,7 +352,7 @@ From tightest to loosest binding:
 | pipe | `\|` | left associative; in a type, `\|` is a union (section 4) |
 | assignment | `=` `+=` `-=` `*=` `/=` `%=` | type `void` |
 
-There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`. Integer overflow panics. Division by zero panics for integers and follows IEEE 754 for floats.
+There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`. Integer overflow panics, including unsigned subtraction below zero. Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is `Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width panics.
 
 Bitwise operations are functions in the `Bits` namespace:
 
@@ -398,7 +400,7 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 ### Loops
 
-`for` iterates over an array, a map, or a string. Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have type `void`. `break` and `continue` work as in JavaScript, without labels.
+`for` iterates over an array, a map, or a string; over a string it yields each code point as a one-character string. Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have type `void`. `break` and `continue` work as in JavaScript, without labels.
 
 ```ant
 for user in users {
@@ -719,7 +721,7 @@ Iterating a map with `for` yields `Entry[K, V]` records, `{ key: K, value: V }`,
 
 ### Strings
 
-A `string` is immutable. Index and length are in Unicode code points. Byte access goes through `String.toBytes`.
+A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear, so a loop over indices would be quadratic, and indexing by byte would be a trap. `String.length`, `String.slice`, and `String.chars` count code points, `for` iterates them (section 5), and `String.toBytes` gives the bytes.
 
 ```ant
 String.length(s)         String.slice(s, from, to)    String.concat(parts)
@@ -727,6 +729,7 @@ String.split(s, sep)     String.join(parts, sep)      String.trim(s)
 String.contains(s, t)    String.startsWith(s, t)      String.replace(s, old, new)
 String.toUpper(s)        String.toLower(s)            String.chars(s): Array[string]
 String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
+String.toInt(s): int | null                   String.toFloat(s): float64 | null
 ```
 
 `String.from` renders any value. Primitives, arrays, and maps render in literal syntax; records render as `Point{ x: 1.0, y: 2.0 }` with the name of their tag; functions render as `func`. It is the only implicit use of this function, and only inside template strings.
@@ -736,7 +739,7 @@ String.toBytes(s)        String.fromBytes(bytes)      String.from(value)
 | Namespace | Purpose |
 |---|---|
 | `Math` | `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, constants; `min` and `max` are `[T: Ordered]`, the rest take `float64` |
-| `Bits` | `and`, `or`, `xor`, `not`, `shiftLeft`, `shiftRight`, `popCount` |
+| `Bits` | `and`, `or`, `xor`, `not`, `shiftLeft`, `shiftRight`, `popCount`, `wrapAdd`, `wrapSub`, `wrapMul` |
 | `Result` | constructors and combinators (section 8) |
 | `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic` | synchronization (section 9) |
 | `Record` | `same` for identity comparison of records |
@@ -812,17 +815,12 @@ Each item below is a choice this draft made for the sake of having examples, not
 
 1. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
 2. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-3. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
-4. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
-5. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
-6. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-7. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-8. **Record literals have no shorthand entries, but destructuring does.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
-9. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-10. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-11. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
-12. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
-13. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
-14. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-15. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
-16. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.
+3. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
+4. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both. A protocol-free extension would be `for x in next` with `next` a function returning `T | null`.
+5. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+6. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+7. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+8. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+9. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+10. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
+11. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.
