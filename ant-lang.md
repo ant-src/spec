@@ -271,7 +271,7 @@ func swap[A, B](p: Pair[A, B]): Pair[B, A] {
 }
 ```
 
-Type arguments are never written at a call site. They are inferred from the arguments or from the expected type. When inference has nothing to work with, annotate the result.
+Type arguments are never written at a call site. They are solved from the expected type and the arguments (see Inference). When nothing fixes a type parameter, annotate the result.
 
 ```ant
 var xs = Array.map([1, 2, 3], { x * 2 })   // Array[int]
@@ -310,7 +310,21 @@ For a `Result`, `try` is the widening step (section 8).
 
 ### Inference
 
-Every `var` without an annotation takes the type of its initializer. Every function parameter is annotated, except lambda parameters, which take their type from context. A function's return type is inferred from its body unless the function is recursive, in which case it must be written.
+Inference is local and bidirectional. Every expression either synthesizes a type or is checked against an expected type. Expected types come from annotations, parameter types, declared return types, the field types of a record literal, the element types of an expected array or map, and the branches of an `if` or `match` whose whole has an expected type. Nothing is inferred across statements: an unannotated `var` takes exactly the type of its initializer, so `var s = Active{}` has type `Active`, and a later `s = Suspended{ reason: "x" }` is a compile error unless the declaration says `var s: Status`.
+
+A generic call solves its type parameters in a fixed order: from the expected type first, then from the non-lambda arguments left to right, then from the lambdas. The expected type goes first because type arguments are invariant: `Result.err(NotFound{ id: from })` under an expected `Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it. Lambdas go last so that the other arguments have fixed the type their `x` depends on, which is also what lets an editor complete `x.` inside a lambda. A type parameter that nothing fixes is a compile error: annotate the result, or use `func` with annotated parameters.
+
+```ant
+Array.map([1, 2, 3], { x * 2 })           // T = int from the array, U = int from the body
+var ys: Array[string] = []                // the expected type fixes the element type
+var zs = []                               // compile error: annotate
+```
+
+Every function parameter is annotated, except lambda parameters. A lambda needs an expected function type with zero or one parameter; its result type is synthesized from the body, and when the expected result is an unsolved type parameter, the body solves it. A function's return type is inferred from its body unless the function is exported or recursive. Exported functions state it so that a module's interface reads without its bodies. Recursion is found on demand: the checker infers a callee's type when it meets a call, and meeting a function whose inference is already in progress is a compile error asking for an annotation.
+
+The branches of an `if` and the arms of a `match` are each checked against the expected type when there is one. Otherwise the expression has the union of the branch types, with `never` dropped, so `if n > 0 { "positive" } else { null }` has type `string | null`.
+
+Literals get no help from context: an integer literal is always `int` and a float literal always `float64`, because the interpreter never sees the expected type (see Primitives).
 
 ## 5. Expressions
 
@@ -369,7 +383,7 @@ A header has no parentheses, as in Go. It ends at the first `{` that is not an o
 var label = if n < 0 { "negative" } else if n == 0 { "zero" } else { "positive" }
 ```
 
-Both branches must have the same type. An `if` without `else` has type `void`.
+The branches are checked against the expected type, or the `if` has the union of their types (section 4, Inference). An `if` without `else` has type `void`.
 
 ### Loops
 
@@ -392,7 +406,7 @@ while !done { done = step() }
 
 ### `match`
 
-`match` compares a value against patterns in order and evaluates the first arm that fits. Arms are separated by commas. Every arm has the same type, and the patterns must cover every possible value, so a `match` can never fall through. For a union of records that means every member; for a primitive it usually means a final `_`.
+`match` compares a value against patterns in order and evaluates the first arm that fits. Arms are separated by commas. The arms type like the branches of an `if`, and the patterns must cover every possible value, so a `match` can never fall through. For a union of records that means every member; for a primitive it usually means a final `_`.
 
 ```ant
 func describe(n: int): string {
@@ -433,7 +447,7 @@ var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user
 
 ## 6. Functions
 
-`func` declares a named function at the top level of a module; inside a block, bind a function with `var`. Parameters are annotated; the return type may be inferred. The body is a block, so the last expression is the result and `return` is only needed to leave early.
+`func` declares a named function at the top level of a module; inside a block, bind a function with `var`. Parameters are annotated; the return type is inferred unless the function is exported or recursive (section 4, Inference). The body is a block, so the last expression is the result and `return` is only needed to leave early.
 
 ```ant
 func clamp(value: int, low: int, high: int): int {
@@ -516,7 +530,13 @@ if user != null {
 }
 ```
 
-`?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The type checker narrows after a `null` test, as shown in the last two examples.
+`?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The checker narrows after a `null` test, as in the last two examples, but only for a local variable or a parameter. A `match` arm narrows by its pattern; a condition narrows after `x == null` or `x != null`, through `&&`, `||`, and `!`; and `x ?? return ...` or `x ?? panic(...)` narrows what follows. A field path such as `user.address` never narrows, because any call between the test and the use may reassign it: bind it to a local first, or use `?.`, `??`, or `match`. A local that a nested function assigns does not narrow either, for the same reason.
+
+```ant
+if user.address != null { print(user.address.city) }   // compile error: a path does not narrow
+var address = user.address
+if address != null { print(address.city) }             // ok
+```
 
 ## 8. Errors
 
@@ -800,21 +820,20 @@ func main() {
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
 1. **Narrowing a union of records is `match` only.** Testing one member inside an expression needs a two-arm `match` or a helper such as `isActive` in section 12. A boolean pattern test, perhaps `x is Active{}`, would remove that cost; `is` is reserved for it.
-2. **No explicit type arguments at call sites.** Keeps `f[T](x)` out of the grammar, so `a[b]` is always indexing. Needs confirmation that inference from arguments and expected type is always enough.
-3. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
-4. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-5. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
-6. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
-7. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
-8. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-9. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
-10. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-11. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
-12. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-13. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-14. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
-15. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
-16. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
-17. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
-18. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
-19. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
+2. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
+3. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
+4. **Integer overflow panics.** Wrapping arithmetic would be library functions. The performance cost and the behavior of `uint` subtraction need review.
+5. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
+6. **Iteration is built in for arrays, maps, and strings only.** There is no iterator protocol, so user types cannot be used in `for`, and `Array.range` allocates. Lazy ranges or an `Iter` namespace would fix both.
+7. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+8. **No generic constraints.** Fine while `==` and hashing are universal. Sorting, numeric generics, and `String.from` for user types will eventually need some bound mechanism.
+9. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+10. **Record literals have no shorthand entries, but patterns do.** `Point{ x, y }` is unambiguous now that bare braces are always a lambda, so allowing it in literals is a question of taste rather than parsing.
+11. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+12. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+13. **Strings index by code point.** Grapheme-aware operations and a dedicated character type are deferred.
+14. **Numeric aliases.** `int` for `int64` and `byte` for `uint8` give two names for one type, against the one-way principle. The alternative is to have only `int` and `uint` at 64 bits plus the sized names.
+15. **Erasure makes sized integers explicit.** `var b: byte = 255` no longer type-checks; `byte(255)` is required, and a byte array literal needs a conversion per element or a helper such as `Bytes.of`. Literal suffixes such as `255u8` are the alternative.
+16. **Map keys are expressions.** `Map{ name: 1 }` keys on the variable `name`, not the string. This is consistent but will trip JavaScript users. Bare-identifier string keys are the alternative, and they bring JavaScript's computed-key syntax with them.
+17. **Unchecked programs panic on type errors.** The runtime checks the interpreter performs are the real dynamic semantics of the language and need to be listed in full, not by example.
+18. **Deferred syntax.** Raw strings, character literals, string literal types, or-patterns, labeled loops, destructuring assignment, and a pattern test expression are left out until a need appears.
