@@ -342,7 +342,7 @@ A value of type `S` can be used where `T` is expected when one of these holds:
 - `S` and `T` are the same generic type with identical type arguments. Type arguments are invariant, because contents are mutable: if `Array[Circle]` were an `Array[Shape]`, a widened alias could store a `Rect` among the circles for a later read to panic on, and the checker's guarantee would be gone.
 - `S` and `T` are function types with the same number of parameters, each parameter of `T` assignable to the corresponding parameter of `S`, and the result of `S` assignable to the result of `T`. A function with default parameters is also assignable to a type that lists its required parameters plus any prefix of the optional ones. There is no exception for a `void` result: a value of static type `void` is always the value `void`, because the interpreter would return a lambda's value whatever the type said. A callback that must return `void` discards its last value with `_ = ...`, which is an assignment and therefore `void`.
 
-There is no top type: no `any` or `unknown` that every value is assignable to, and no union that could serve as one, since arrays, maps, and records have one discriminator each. A function that accepts every type is generic, `func show[T](v: T)`, and data whose type is not known statically is a union written out, such as `Json` in the library, narrowed with `is`. `never` is the bottom type and is assignable to everything.
+There is no top type: no `any` or `unknown` that every value is assignable to, and no union that could serve as one, since arrays, maps, and records have one discriminator each. A function that accepts every type is generic, `func show[T](v: T)`, and data whose type is not known statically is a union written out, such as `Json.Value` in the library, narrowed with `is`. `never` is the bottom type and is assignable to everything.
 
 Widening a container is therefore always by construction, which also makes the copy visible:
 
@@ -701,8 +701,8 @@ The program exits when the main goroutine returns, regardless of other goroutine
 There are no channels. Goroutines coordinate through shared memory guarded by the sync objects in the standard library: `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, and `Atomic[T]`. Each is a reference value created by its `new` function; section 11 lists their operations.
 
 ```ant
-func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
-  var results: Array[Result[Response, Error]] = Array.filled(Array.length(urls), Result.err(Error{ message: "pending" }))
+func fetchAll(urls: Array[string]): Array[Result[Http.Response, Error]] {
+  var results: Array[Result[Http.Response, Error]] = Array.filled(Array.length(urls), Result.err(Error{ message: "pending" }))
   var lock = Mutex.new()
   var wg = WaitGroup.new()
 
@@ -739,13 +739,13 @@ Within one goroutine, effects happen in program order. Across goroutines, a writ
 A local assigned inside a `go` block never narrows (section 7), so a goroutine does not hand back a result by reassigning a local of its parent, even when a `WaitGroup` makes that safe; the checker cannot see happens-before and does not try. Share through containers instead: write into an array slot, a map entry, a record field, or an `Atomic`, and after the wait read the value into a fresh local and narrow that. A fresh local is a snapshot, so the same idiom reads shared state under a mutex.
 
 ```ant
-var results: Array[Result[Response, Error] | null] = Array.filled(n, null)
+var results: Array[Result[Http.Response, Error] | null] = Array.filled(n, null)
 go { results[i] = Http.get(url) }            // an index write, not a reassignment
 WaitGroup.wait(wg)
 var r = results[i]                           // a snapshot
 if r != null && r is Ok { print(r.value.status) }
 
-var latest: Atomic[Result[Response, Error] | null] = Atomic.new(null)
+var latest: Atomic[Result[Http.Response, Error] | null] = Atomic.new(null)
 go { Atomic.store(latest, Http.get(url)) }
 WaitGroup.wait(wg)
 var v = Atomic.load(latest)
@@ -792,7 +792,7 @@ Execution starts at `func main()` in the module given to `ant run`, which must d
 
 ## 11. Standard library
 
-The standard library is a set of namespaces in the prelude. Each is a plain record of functions, exactly like an imported module (section 10); none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`, `Time`, `Os`, and `Json` are policy rather than language and live in `stdlib.md`.
+The standard library is a set of namespaces in the prelude. Each is a plain record of functions and types, exactly like an imported module (section 10), so a type a namespace declares is written through it, as in `Http.Response`; none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`, `Time`, `Os`, and `Json` are policy rather than language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics). A callback whose result the library ignores is typed with a type parameter, never with `void`, so any lambda fits; the library discards the value itself. A function marked `mutates` changes its first argument and returns `void` or the removed element; every other function leaves its arguments untouched and returns a new value. A function marked ◆ has a value-dependent panic, named in its comment; every function also panics when an argument has a kind it does not take (section 12).
 

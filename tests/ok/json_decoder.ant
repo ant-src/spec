@@ -1,6 +1,5 @@
 // JSON with no Reflect: Json.parse gives the tree, is narrows it, and a decoder is a function per type.
 
-type Json = null | bool | float64 | string | Array[Json] | Map[string, Json]
 type Server = { host: string, port: int }
 type Config = { name: string, servers: Array[Server], retries: int | null }
 
@@ -8,23 +7,23 @@ func fail[T](path: string, what: string): Result[T, Error] {
   Result.err(Error{ message: `${path}: expected ${what}` })
 }
 
-func str(obj: Map[string, Json], key: string, path: string): Result[string, Error] {
+func str(obj: Map[string, Json.Value], key: string, path: string): Result[string, Error] {
   var v = obj[key]
   if v is string { Result.ok(v) } else { fail(`${path}.${key}`, "a string") }
 }
 
-func integer(obj: Map[string, Json], key: string, path: string): Result[int, Error] {
+func integer(obj: Map[string, Json.Value], key: string, path: string): Result[int, Error] {
   var v = obj[key]
   var n = if v is float64 { Math.toInt(v) } else { null }     // null on a fraction or out of range, so 1e30 is an error, not a panic
   if n == null { fail(`${path}.${key}`, "an integer") } else { Result.ok(n) }
 }
 
-func server(json: Json, path: string): Result[Server, Error] {
+func server(json: Json.Value, path: string): Result[Server, Error] {
   if !(json is Map) { return fail(path, "an object") }
   Result.ok(Server{ host: try str(json, "host", path), port: try integer(json, "port", path) })
 }
 
-func config(json: Json): Result[Config, Error] {
+func config(json: Json.Value): Result[Config, Error] {
   if !(json is Map) { return fail("$", "an object") }
   var raw = json["servers"]
   if !(raw is Array) { return fail("$.servers", "an array") }
