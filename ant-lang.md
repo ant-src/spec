@@ -59,9 +59,9 @@ Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordina
 true        false         null
 ```
 
-An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowed between digits. A float literal has digits on both sides of the point, an exponent, or both; `.5` and `1.` are errors. An integer literal is always an `int` and a float literal is always a `float64`. Other numeric types are reached through a conversion, as in `byte(255)` or `float32(1.5)`. `1` is never a float; write `1.0`.
+An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowed between digits. A float literal has digits on both sides of the point, an exponent, or both; `.5` and `1.` are errors. An integer literal is always an `int` and a float literal is always a `float64`. An integer literal that does not fit an `int` is a compile error, so the most negative `int` is written `Math.minInt`. Other numeric types are reached through a conversion, as in `byte(255)` or `float32(1.5)`. `1` is never a float; write `1.0`.
 
-The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`. A plain string stays on one line; a template string may span lines. Template strings interpolate any expression. Each `${...}` is converted with `String.from`, which is defined for every type (section 11), and braces nest inside it, so a lambda or a record literal can appear there. There are no raw strings and no character literals.
+The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, whose hexadecimal value must be a Unicode scalar value: at most `10FFFF` and not a surrogate. A plain string stays on one line; a template string may span lines. Template strings interpolate any expression. Each `${...}` is converted with `String.from`, which is defined for every type (section 11), and braces nest inside it, so a lambda or a record literal can appear there. There are no raw strings and no character literals.
 
 ### Line endings
 
@@ -167,7 +167,7 @@ var n: Named = user                         // compile error: a Person is not a 
 greet(Named{ name: "ada", age: 36 })        // compile error: Named has no field age
 ```
 
-The spread `...` copies all fields of a record into a new literal. Later fields win. The tag comes from the head, so a spread also converts between record types with the same fields.
+The spread `...` copies all fields of a record into a new literal. Later fields win. The tag comes from the head, so a spread also converts between record types with the same fields. The operand must have a named record type: a value of anonymous record type may carry fields its type does not list, and the spread would copy them too.
 
 ```ant
 type Vec = { x: float64, y: float64 }
@@ -344,10 +344,10 @@ From tightest to loosest binding:
 |---|---|---|
 | postfix | `a.b` `a?.b` `a[i]` `f(x)` | |
 | prefix | `-a` `!a` `try a` | |
-| multiplicative | `*` `/` `%` | integer `/` truncates toward zero; `%` takes the sign of the dividend |
+| multiplicative | `*` `/` `%` | integer `/` truncates toward zero; `%` is the truncated remainder with the dividend's sign, for floats too |
 | additive | `+` `-` | `+` also concatenates strings |
 | comparison | `<` `<=` `>` `>=` `is` | numbers and strings; `is` tests a union member |
-| equality | `==` `!=` | both operands must have the same type; structural (section 4) |
+| equality | `==` `!=` | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4) |
 | logical | `&&` then `\|\|` | short-circuit, `bool` only |
 | null | `??` | cannot mix with `&&` or `\|\|` without parentheses |
 | pipe | `\|` | left associative; in a type, `\|` is a union (section 4) |
@@ -393,7 +393,7 @@ The branches are checked against the expected type, or the `if` has the union of
 
 ### `is`
 
-`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record type, a primitive, `null`, `Array`, `Map`, or `func`, written without type arguments, because the runtime has only tags and kinds to look at. The static type of `x` must be a union with `T` as a member; otherwise the test is always true or always false, which is a compile error. `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
+`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record type, a primitive, `null`, `Array`, `Map`, or `func`, written without type arguments, because the runtime has only tags and kinds to look at. The static type of `x` must be a union with `T` as a member, or an anonymous record type to which the named record type `T` is assignable; otherwise the test is always true or always false, which is a compile error. `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
 
 ```ant
 Array.filter(shapes, { x is Circle })
@@ -542,7 +542,9 @@ if user != null {
 }
 ```
 
-`?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. The checker narrows after a `null` test, as in the last example, but only for a local variable or a parameter. A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`, and the `else` branch gets the complement: the union minus the tested member. `x ?? return ...` and `x ?? panic(...)` narrow what follows. A field path such as `user.address` never narrows, because any call between the test and the use may reassign it: bind it to a local first, or use `?.` or `??`. A local that a nested function assigns does not narrow either, for the same reason.
+`?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. Both operators require a left side whose type includes `null`; on any other type they are dead code, and a compile error.
+
+The checker narrows after a `null` test, as in the last example, but only for a local variable or a parameter. A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`, and the `else` branch gets the complement: the union minus the tested member. When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`, `continue`, or `panic`, the complement applies to the rest of the block, so `if user == null { return }` leaves `user` a `User` below it. `x ?? return ...` and `x ?? panic(...)` narrow the same way. A narrowing lasts until the next assignment to the variable; inside a loop, an assignment anywhere in the body cancels it from the loop head on. A field path such as `user.address` never narrows, because any call between the test and the use may reassign it: bind it to a local first, or use `?.` or `??`. A local that a nested function assigns does not narrow either, for the same reason.
 
 ```ant
 if user.address != null { print(user.address.city) }   // compile error: a path does not narrow
@@ -687,13 +689,13 @@ import "./geometry.ant" Geometry
 var d = Geometry.distance(p, q)
 ```
 
-The path is a file path relative to the importing file, extension included. It comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given.
+The path is a file path relative to the importing file, extension included. A module is identified by its canonical path, so two spellings of one file are one module. The path comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given.
 
 Imports are live and read-only. `export var` is allowed; an imported name reads the exporting module's current value each time, and assigning to an imported name or to a field of a namespace from outside the module is a compile error. Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. The prelude names, `print`, `panic`, the type and conversion names such as `int` and `Result`, and the namespaces, count as imports in every module. There is no re-export. Import cycles are a compile error.
 
 Imports are resolved depth first in source order, and each module is initialized once, after everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may refer to each other in any order. Top-level `var` initializers run in source order. An initializer that refers directly to a later `var` is a compile error; reaching one through a function call before it is initialized is a runtime panic, since the checker does not trace calls.
 
-Execution starts at `func main()` in the module given to `ant run`. `main` takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit status is zero when `main` returns and non-zero when it panics.
+Execution starts at `func main()` in the module given to `ant run`, which must declare it. `main` takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit status is `0` when `main` returns, `1` when the main goroutine panics, and `2` when the program could not be loaded because of a syntax error or a missing module or `main`.
 
 ## 11. Standard library
 
@@ -805,7 +807,7 @@ String.toFloat(s: string): float64 | null
 String.from[T](value: T): string
 ```
 
-`String.from` renders any value. Primitives, arrays, and maps render in literal syntax; records render as `Point{ x: 1.0, y: 2.0 }` with the name of their tag; functions render as `func`, tags as their name, and sync objects as their namespace name. It is the only function the language calls implicitly, and only inside template strings.
+`String.from` renders any value, and `print` and template strings use it, so this is the format a program's output has. Integers render in decimal. Floats render as the shortest decimal that reads back to the same value, with `.0` added when integral, and as `NaN`, `Infinity`, or `-Infinity`. A string renders as itself at the top level and quoted with escapes inside a container. `bool`, `null`, and `void` render as their literals. Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with keys always quoted when they are strings, and records as `Point{ x: 1.0, y: 2.0 }` with the name of their tag, each with entries in iteration order and separated by `, `. Functions render as `func`, tags as their name, and sync objects as their namespace name. A value already being rendered renders as `...`, so cyclic structures terminate. It is the only function the language calls implicitly, and only inside template strings.
 
 ### Iter
 
@@ -833,6 +835,8 @@ Math.ceil(x: float64): float64
 Math.round(x: float64): float64                                // half away from zero
 Math.PI: float64
 Math.E: float64
+Math.minInt: int                                               // -2^63; not writable as a literal
+Math.maxInt: int
 
 Bits.and[T: Integer](a: T, b: T): T
 Bits.or[T: Integer](a: T, b: T): T
@@ -911,7 +915,7 @@ Every value has a kind, fixed when the value is created:
 | the ten numeric kinds | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it |
 | `bool`, `string`, `null`, `void` | as in section 4 |
 | array | a growable sequence of values |
-| map | a hash table from values to values, keyed by `==` |
+| map | a hash table from values to values, keyed by `==`; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==` |
 | record | a tag plus a fixed set of named fields |
 | func | a declared function, an anonymous function, or a lambda, with the scopes it captured |
 | tag | the value a `type` declaration binds (section 4) |
@@ -992,6 +996,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Array.pop` on an empty array |
 | ◆ top-level `var` | read before its initializer has run |
 | ◆ `panic` | always |
+| ◆ any call | the goroutine's call depth exceeds the runtime's limit |
 | `??`, `?.`, `try`, `==`, `!=` | never |
 
 ## 13. Example
@@ -1062,9 +1067,8 @@ Each item below is a choice this draft made for the sake of having examples, not
 
 1. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
 2. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-3. **Newline rule.** The rules in section 2 and the grammar's layout notes should be tested against real code, especially the leading-`|` continuation in both expression and type context.
-4. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-5. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-6. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-7. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-8. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
+3. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+4. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
+5. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+6. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+7. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
