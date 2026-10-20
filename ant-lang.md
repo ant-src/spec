@@ -282,7 +282,17 @@ var xs = Array.map([1, 2, 3], { x * 2 })   // Array[int]
 var ys: Array[string] = []                  // annotation needed
 ```
 
-A type parameter may carry a bound, written `[T: Bound]`, where the bound is any type. A solution for `T` must be assignable to the bound. Inside the body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and assigned, and an operator applies to `T` when it applies to every member of the bound. Without a bound, `T` is opaque; `==` and `Map` keys still work, because they work on every type. A bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`, `x is string` narrows `x` to `string`. Bounds are the way to accept any array whose elements have a given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing changes at run time; the interpreter never sees a bound.
+A type parameter may carry a bound, written `[T: Bound]`, where the bound is any type. A solution for `T` must be assignable to the bound, and when the bound is a union, the solution must be a single member of it, never a union: `[T: Ordered]` admits `int` or `string`, not `int | string` and not `Ordered` itself. Inside the body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and assigned, and an operator applies to `T` when it applies to every member of the bound, which is sound only because `T` stands for one member. The restriction is what keeps this body honest:
+
+```ant
+func bigger[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
+
+func choose(a: Number, b: Number): Number {
+  bigger(a, b)                      // compile error: T would be Number, a union; narrow a and b first
+}
+```
+
+Without a bound, `T` is opaque; `==` and `Map` keys still work, because they work on every type. A bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`, `x is string` narrows `x` to `string`. Bounds are the way to accept any array whose elements have a given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing changes at run time; the interpreter never sees a bound.
 
 ```ant
 func max[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
@@ -364,7 +374,7 @@ From tightest to loosest binding:
 | pipe | `\|` | left associative; in a type, `\|` is a union (section 4) |
 | assignment | `=` `+=` `-=` `*=` `/=` `%=` | type `void` |
 
-There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`. Integer overflow panics, including unsigned subtraction below zero. Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is `Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width panics.
+There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`. An arithmetic or comparison operator needs both operands of the same type, and that type must be a single numeric kind, or `string` where strings are allowed; a union such as `Number` is not a kind, so `a > b` on two `Number` values is a compile error until they are narrowed. Integer overflow panics, including unsigned subtraction below zero. Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is `Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width panics.
 
 Bitwise operations are functions in the `Bits` namespace:
 
