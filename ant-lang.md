@@ -128,7 +128,7 @@ Types are checked by a separate command and erased before the program runs. `ant
 
 `void` is both a type and its only value, like `null`. A block that ends in a declaration or assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly when a value is required, as in `Result.ok(void)`.
 
-Numeric types never mix. Convert explicitly by calling the target type as a function: each of the ten numeric names is a prelude function that takes any numeric value, and it is a value in its own right, so `Array.map([72, 105], byte)` builds an `Array[byte]`. Conversions that lose information panic rather than wrap or truncate silently; float-to-int conversion truncates toward zero and panics when out of range. `string` and `bool` are callable too, but only to unwrap a named primitive type (see Named primitive types) or as the identity on their own kind: parsing is `String.toInt` and `String.toFloat`, rendering is `String.from`. There are no literal suffixes; an integer literal is always an `int` and a float literal a `float64`, so a `byte` is written `byte(255)`.
+Numeric types never mix. Convert explicitly by calling the target type as a function: each of the ten numeric names is a prelude function that takes any numeric value, and it is a value in its own right, so `Array.map([72, 105], byte)` builds an `Array[byte]`. A conversion into an integer kind must be exact: a fraction, a value out of range, `NaN`, or an infinity panics, and truncation is spelled `int(Math.trunc(x))`. A conversion into a float kind rounds to the nearest representable value and never panics. Section 12 has the table. `string` and `bool` are callable too, but only to unwrap a named primitive type (see Named primitive types) or as the identity on their own kind: parsing is `String.toInt` and `String.toFloat`, rendering is `String.from`. There are no literal suffixes; an integer literal is always an `int` and a float literal a `float64`, so a `byte` is written `byte(255)`.
 
 ```ant
 var n = 7
@@ -962,6 +962,7 @@ Math.sqrt(x: float64): float64
 Math.floor(x: float64): float64
 Math.ceil(x: float64): float64
 Math.round(x: float64): float64                                // half away from zero
+Math.trunc(x: float64): float64                                // toward zero; int(Math.trunc(x)) is the explicit truncating conversion
 Math.PI: float64
 Math.E: float64
 Math.minInt: int                                               // -2^63; not writable as a literal
@@ -1074,7 +1075,14 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Index read `a[i]`.** `a` must be an array or a map. For an array, `i` must be an `int` from `0` up to but excluding the length, and the value is that element. For a map, the value is the entry whose key is `==` to `i`, or `null` when there is none.
 - **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest of the postfix chain is skipped. Otherwise the plain rule applies.
 - **Call `f(args)`.** `f` evaluates first and must be a function or a primitive tag. A primitive tag takes exactly one positional argument, which must have the tag's base kind, and yields that value carrying the tag. For a function, arguments evaluate in order. Positional arguments fill parameters left to right; a named argument fills the parameter of that name, which must exist and must not be filled already; every parameter still unfilled must have a default, and the defaults evaluate in the callee's scope, in parameter order, after the arguments. A lambda has the single parameter `x` and accepts zero or one positional argument. The body then runs in a new scope, and the call's value is the body's value, or the operand of the `return` that ended it.
-- **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their own kind and yield the value. For the numeric names the argument must be a number. An integer target panics when the value, truncated toward zero if it is a float, lies outside the target's range, and on `NaN` or an infinity. A float target rounds to the nearest representable value.
+- **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their own kind and yield the value. For the numeric names the argument must be a number, and the result follows this table, which `Reflect.convert` shares, returning `null` where it says panic:
+
+  | From | To | Rule |
+  |---|---|---|
+  | integer | integer | exact; panics when out of the target's range, including a negative value to an unsigned kind |
+  | integer | float | rounds to the nearest representable value, ties to even; never panics |
+  | float | integer | must be integral and in range; panics on a fraction, out of range, `NaN`, or an infinity |
+  | float | float | rounds to the nearest representable value; `NaN` and infinities are preserved |
 - **Arithmetic `+ - * / %`.** Both operands must be numbers of the same kind, except that `+` also takes two strings and concatenates them. Two tagged values with the same tag are unwrapped, operated on as their base kind, and the result carries the tag; a tagged value with a plain one, or two different tags, panics. An integer result that does not fit the kind panics, which includes unsigned subtraction below zero. Integer `/` truncates toward zero, `%` takes the sign of the dividend, and both panic on a zero divisor. Float arithmetic follows IEEE 754 and never panics. Unary `-` needs a number; `!` needs a `bool`.
 - **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, or two strings, which compare by code point, or two tagged values with the same tag, which compare as their base kind.
 - **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`, `null`, and `void` values are equal by value; records have the same tag and `==` fields; tagged primitives have the same tag and equal payloads; arrays have the same length and `==` elements in order; maps have the same key set and `==` values per key; functions, tags, and sync objects are the same object. A pair of values already under comparison counts as equal (section 4). Values of different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
@@ -1117,7 +1125,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | ◆ integer `+ - *`, compound assignment, `Array.sum` | the result does not fit the kind |
 | ◆ integer `/`, `%` | the divisor is zero |
 | ◆ `Bits.shiftLeft`, `Bits.shiftRight` | the count is negative or not below the operand's width |
-| ◆ numeric conversion | the value is outside the target's range, or is `NaN` or infinite with an integer target |
+| ◆ numeric conversion | an integer target is given a fraction, a value out of range, `NaN`, or an infinity |
 | `string`, `bool` | the argument, after unwrapping, is not of that kind |
 | `a.b`, `a.b = v` | `a` is not a record, or has no field `b` |
 | `a[i]`, `a[i] = v` | `a` is neither an array nor a map; ◆ `a` is an array and `i` is not an `int` from `0` up to but excluding the length |
