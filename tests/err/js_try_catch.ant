@@ -1,0 +1,4 @@
+// expect error: reserved word 'catch'
+func f() {
+  try { g() } catch (e) { print(e) }
+}

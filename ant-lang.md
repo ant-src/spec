@@ -44,7 +44,8 @@ in is null return true try type var void while
 These words are reserved so that they stay available and so that JavaScript habits produce an error rather than an identifier:
 
 ```
-as async await class const enum interface match switch undefined
+as async await catch class const enum finally function interface
+let match switch this throw undefined
 ```
 
 Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordinary identifiers bound by the standard library. They are not keywords.
@@ -613,7 +614,7 @@ func loadConfig(path: string): Result[Config, Error] {
 }
 ```
 
-`try` binds like a prefix operator: `try f(x) | g()` means `(try f(x)) | g()`.
+`try` binds like a prefix operator: `try f(x) | g()` means `(try f(x)) | g()`, which unwraps the first stage and pipes the value onward. To propagate the error of a whole pipeline, parenthesize it: `try (xs | Array.map(parse) | Result.all())`.
 
 Besides the two constructors, the `Result` namespace provides `Result.map`, `Result.mapErr`, `Result.unwrap` (panics on an error), `Result.unwrapOr`, and `Result.isOk`.
 
@@ -1103,7 +1104,6 @@ Each item below is a choice this draft made for the sake of having examples, not
 1. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
 2. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
 3. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-4. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
-5. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-6. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-7. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
+4. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+5. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+6. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.

@@ -33,8 +33,9 @@ keyword         = "break" | "continue" | "defer" | "else" | "export" | "false"
                 | "for" | "func" | "go" | "if" | "import" | "in" | "is"
                 | "null" | "return" | "true" | "try" | "type" | "var" | "void"
                 | "while" ;
-reserved        = "as" | "async" | "await" | "class" | "const" | "enum"
-                | "interface" | "match" | "switch" | "undefined" ;
+reserved        = "as" | "async" | "await" | "catch" | "class" | "const" | "enum"
+                | "finally" | "function" | "interface" | "let" | "match"
+                | "switch" | "this" | "throw" | "undefined" ;
 
 dec_digits      = digit { digit | "_" } ;
 int_lit         = dec_digits
