@@ -931,6 +931,7 @@ Math.floor(x: float64): float64
 Math.ceil(x: float64): float64
 Math.round(x: float64): float64                                // half away from zero
 Math.trunc(x: float64): float64                                // toward zero; int(Math.trunc(x)) is the explicit truncating conversion
+Math.toInt(x: float64): int | null                             // int(x) without the panic: null on a fraction, out of range, NaN, or an infinity
 Math.PI: float64
 Math.E: float64
 Math.minInt: int                                               // -2^63; not writable as a literal

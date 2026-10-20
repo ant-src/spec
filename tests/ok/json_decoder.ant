@@ -15,7 +15,8 @@ func str(obj: Map[string, Json], key: string, path: string): Result[string, Erro
 
 func integer(obj: Map[string, Json], key: string, path: string): Result[int, Error] {
   var v = obj[key]
-  if v is float64 && Math.trunc(v) == v { Result.ok(int(v)) } else { fail(`${path}.${key}`, "an integer") }
+  var n = if v is float64 { Math.toInt(v) } else { null }     // null on a fraction or out of range, so 1e30 is an error, not a panic
+  if n == null { fail(`${path}.${key}`, "an integer") } else { Result.ok(n) }
 }
 
 func server(json: Json, path: string): Result[Server, Error] {
