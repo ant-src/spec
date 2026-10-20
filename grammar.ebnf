@@ -125,7 +125,7 @@ logical_and     = equality { "&&" equality } ;
 
 equality        = comparison { ( "==" | "!=" ) comparison } ;
 comparison      = additive { ( "<" | "<=" | ">" | ">=" ) additive | "is" is_target } ;
-is_target       = ident_path | "null" | "func" ;                (* a type name without arguments *)
+is_target       = ident_path | "null" | "void" | "func" ;       (* a type name without arguments *)
 additive        = multiplicative { ( "+" | "-" ) multiplicative } ;
 multiplicative  = unary { ( "*" | "/" | "%" ) unary } ;
 

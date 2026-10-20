@@ -698,7 +698,7 @@ class Parser:
 
     def is_target(self):
         t = self.peek()
-        if t.kind == "KW" and t.value in ("null", "func"):
+        if t.kind == "KW" and t.value in ("null", "void", "func"):
             self.next()
             return [t.value]
         if t.kind != "IDENT":

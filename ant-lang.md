@@ -297,7 +297,7 @@ A value of type `S` can be used where `T` is expected when one of these holds:
 - `S` is `never`. `void` is assignable only to `void`, and `null` only to a type that includes it.
 - `T` is an anonymous record type and `S` is a record type with at least the fields of `T`, each with exactly the type `T` gives it. A named record type accepts only its own tag.
 - `S` and `T` are the same generic type with identical type arguments. Type arguments are invariant, because contents are mutable: if `Array[Circle]` were an `Array[Shape]`, a widened alias could store a `Rect` among the circles for a later read to panic on, and the checker's guarantee would be gone.
-- `S` and `T` are function types with the same number of parameters, each parameter of `T` assignable to the corresponding parameter of `S`, and the result of `S` assignable to the result of `T`. A function with default parameters is also assignable to a type that lists its required parameters plus any prefix of the optional ones.
+- `S` and `T` are function types with the same number of parameters, each parameter of `T` assignable to the corresponding parameter of `S`, and the result of `S` assignable to the result of `T`. A function with default parameters is also assignable to a type that lists its required parameters plus any prefix of the optional ones. There is no exception for a `void` result: a value of static type `void` is always the value `void`, because the interpreter would return a lambda's value whatever the type said. A callback that must return `void` discards its last value with `_ = ...`, which is an assignment and therefore `void`.
 
 Widening a container is therefore always by construction, which also makes the copy visible:
 
@@ -735,7 +735,7 @@ Execution starts at `func main()` in the module given to `ant run`, which must d
 
 The standard library is a set of namespaces in the prelude. Each is a plain record of functions, exactly like an imported module (section 10); none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`, `Time`, `Os`, and `Json` are policy rather than language and live in `stdlib.md`.
 
-Signatures are written in Ant's own notation with bounds (section 4, Generics). A function marked `mutates` changes its first argument and returns `void` or the removed element; every other function leaves its arguments untouched and returns a new value. A function marked ◆ has a value-dependent panic, named in its comment; every function also panics when an argument has a kind it does not take (section 12).
+Signatures are written in Ant's own notation with bounds (section 4, Generics). A callback whose result the library ignores is typed with a type parameter, never with `void`, so any lambda fits; the library discards the value itself. A function marked `mutates` changes its first argument and returns `void` or the removed element; every other function leaves its arguments untouched and returns a new value. A function marked ◆ has a value-dependent panic, named in its comment; every function also panics when an argument has a kind it does not take (section 12).
 
 ### Prelude
 
@@ -923,7 +923,7 @@ WaitGroup.done(wg: WaitGroup): void                            // ◆ counter al
 WaitGroup.wait(wg: WaitGroup): void                            // blocks until the counter is zero
 
 Once.new(): Once
-Once.do(once: Once, f: func(): void): void                     // runs f the first time only; later calls wait for it
+Once.do[T](once: Once, f: func(): T): void                     // runs f the first time only and discards its value; later calls wait for it
 Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value
 
 Cond.new(m: Mutex): Cond
