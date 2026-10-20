@@ -12,7 +12,7 @@ The name "Ant" is a placeholder.
 - **No implicit coercion.** A value never changes type without a visible conversion.
 - **Everything is an expression.** Blocks, `if`, and loops produce values.
 - **Errors are values.** `Result` carries expected failures and `null` carries absence. `panic` is for bugs.
-- **Types are advisory.** A separate checker reads annotations and the interpreter discards them. The only thing the interpreter keeps from a `type` declaration is its name, which becomes a tag (section 4). No runtime behavior depends on a type that was written down.
+- **Types are advisory.** `ant check` reads annotations and `ant run` discards them. The only thing the interpreter keeps from a `type` declaration is its name, which becomes a tag (section 4). No runtime behavior depends on a type that was written down.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
 
 Section 14 lists the decisions this draft leaves open.
@@ -109,7 +109,7 @@ An assignment target is a variable, a field such as `p.x`, or an element such as
 
 Ant is statically typed. Types are checked before the program runs, and most annotations are inferred. A named record type is nominal: each `type` declaration of a record is a distinct type, identified by its tag. Every other type is structural: two types with the same shape are the same type.
 
-Types are checked by a separate checker and erased before the program runs. The interpreter parses annotations and discards them. A `type` declaration is the one exception: its body is discarded, but its name is bound to a fresh tag value, and a record literal with that name stores the tag (see Records). Every `type` declaration binds a tag, even an alias, because the interpreter does not look at the body; only record literals and `is` tests use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record. Section 12 lists every such check.
+Types are checked by a separate command and erased before the program runs. `ant check file.ant` runs the checker over the file and every module it imports, including code nothing calls, and exits non-zero with the errors; this is where inference, bounds, and narrowing live, and where their cost goes. `ant run file.ant` performs no static work beyond parsing: it loads the import graph, so a syntax error anywhere stops the program before `main`, and then it runs, with annotations parsed and discarded and no name resolution ahead of time. Editors and continuous integration run `check`; the terminal runs `run`. There is no flag that makes `run` check first. A `type` declaration is the one exception: its body is discarded, but its name is bound to a fresh tag value, and a record literal with that name stores the tag (see Records). Every `type` declaration binds a tag, even an alias, because the interpreter does not look at the body; only record literals and `is` tests use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record. Section 12 lists every such check.
 
 ### Primitives
 
@@ -684,7 +684,7 @@ Imports are live and read-only. `export var` is allowed; an imported name reads 
 
 Imports are resolved depth first in source order, and each module is initialized once, after everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may refer to each other in any order. Top-level `var` initializers run in source order. An initializer that refers directly to a later `var` is a compile error; reaching one through a function call before it is initialized is a runtime panic, since the checker does not trace calls.
 
-Execution starts at `func main()` in the module given to the interpreter. `main` takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit status is zero when `main` returns and non-zero when it panics.
+Execution starts at `func main()` in the module given to `ant run`. `main` takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit status is zero when `main` returns and non-zero when it panics.
 
 ## 11. Standard library
 
@@ -891,7 +891,7 @@ Atomic.compareAndSwap[T](a: Atomic[T], expected: T, v: T): bool   // compares wi
 
 ## 12. Dynamic semantics
 
-This section is the interpreter's contract. It defines what every construct does to values, and it is the only part of the language the interpreter implements; every rule that mentions a type belongs to the checker. Where the checker would have rejected a program, the rules below say "panic", and the table at the end collects every such case. A program that passes the checker reaches only the value-dependent rows of that table, and a data race (section 9).
+This section is the contract of `ant run`. It defines what every construct does to values, and it is the only part of the language the interpreter implements; every rule that mentions a type belongs to the checker. Where the checker would have rejected a program, the rules below say "panic", and the table at the end collects every such case. A program that passes the checker reaches only the value-dependent rows of that table, and a data race (section 9).
 
 ### Values
 
