@@ -1,0 +1,56 @@
+// JSON with no Reflect: Json.parse gives the tree, is narrows it, and a decoder is a function per type.
+
+type Json = null | bool | float64 | string | Array[Json] | Map[string, Json]
+type Server = { host: string, port: int }
+type Config = { name: string, servers: Array[Server], retries: int | null }
+
+func fail[T](path: string, what: string): Result[T, Error] {
+  Result.err(Error{ message: `${path}: expected ${what}` })
+}
+
+func str(obj: Map[string, Json], key: string, path: string): Result[string, Error] {
+  var v = obj[key]
+  if v is string { Result.ok(v) } else { fail(`${path}.${key}`, "a string") }
+}
+
+func integer(obj: Map[string, Json], key: string, path: string): Result[int, Error] {
+  var v = obj[key]
+  if v is float64 && Math.trunc(v) == v { Result.ok(int(v)) } else { fail(`${path}.${key}`, "an integer") }
+}
+
+func server(json: Json, path: string): Result[Server, Error] {
+  if !(json is Map) { return fail(path, "an object") }
+  Result.ok(Server{ host: try str(json, "host", path), port: try integer(json, "port", path) })
+}
+
+func config(json: Json): Result[Config, Error] {
+  if !(json is Map) { return fail("$", "an object") }
+  var raw = json["servers"]
+  if !(raw is Array) { return fail("$.servers", "an array") }
+  var servers: Array[Server] = []
+  for { index, value } in Array.entries(raw) {
+    Array.push(servers, try server(value, `$.servers[${index}]`))
+  }
+  var retries = json["retries"]
+  Result.ok(Config{
+    name: try str(json, "name", "$"),
+    servers: servers,
+    retries: if retries == null { null } else { try integer(json, "retries", "$") },
+  })
+}
+
+func encodeConfig(c: Config): string {
+  Json.stringify(Map{
+    name: c.name,
+    servers: Array.map(c.servers, { Map{ host: x.host, port: float64(x.port) } }),
+    retries: c.retries,
+  })
+}
+
+func main(): void {
+  var parsed = Json.parse(`{"name":"prod","servers":[{"host":"a","port":80}]}`)
+  if parsed is Ok {
+    var result = config(parsed.value)
+    if result is Ok { print(encodeConfig(result.value)) } else { print(result.error.message) }
+  }
+}
