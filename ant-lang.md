@@ -895,6 +895,7 @@ Result.map[T, U, E](r: Result[T, E], f: func(T): U): Result[U, E]
 Result.mapErr[T, E, F](r: Result[T, E], f: func(E): F): Result[T, F]
 Result.unwrap[T, E](r: Result[T, E]): T                        // ◆ r is an Err
 Result.unwrapOr[T, E](r: Result[T, E], fallback: T): T
+Result.all[T, E](rs: Array[Result[T, E]]): Result[Array[T], E]   // the first Err, or Ok of every value
 
 Record.same[T: {}](a: T, b: T): bool                           // identity; {} bounds T to any record
 ```
