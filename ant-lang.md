@@ -15,7 +15,6 @@ The name "Ant" is a placeholder.
 - **Types are advisory.** `ant check` reads annotations and `ant run` discards them. The only thing the interpreter keeps from a `type` declaration is its name, which becomes a tag (section 4). No runtime behavior depends on a type that was written down.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
 
-Section 14 lists the decisions this draft leaves open.
 
 ## 2. Lexical structure
 
@@ -140,7 +139,7 @@ var bad = int8(300)               // panic: out of range
 
 ### Records
 
-A record type lists named fields. A record literal names the type and lists the fields, as in Go. Fields are mutable.
+A record type lists named fields. A record literal names the type and lists the fields, as in Go. Fields are mutable, and there is no `readonly` or frozen form: strings are the only immutable values, and goroutines share records under the sync objects of section 9.
 
 ```ant
 type Point = { x: float64, y: float64 }
@@ -724,7 +723,7 @@ import "./geometry.ant" Geometry
 var d = Geometry.distance(p, q)
 ```
 
-The path is a file path relative to the importing file, extension included. A module is identified by its canonical path, so two spellings of one file are one module. The path comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given.
+The path is a file path relative to the importing file, extension included; there are no packages, and a program is the files it imports. A module is identified by its canonical path, so two spellings of one file are one module. The path comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given.
 
 Imports are live and read-only. `export var` is allowed; an imported name reads the exporting module's current value each time, and assigning to an imported name or to a field of a namespace from outside the module is a compile error. Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. The prelude names, `print`, `panic`, the type and conversion names such as `int` and `Result`, and the namespaces, count as imports in every module. There is no re-export. Import cycles are a compile error.
 
@@ -1097,11 +1096,3 @@ func main() {
   print(report(accounts))
 }
 ```
-
-## 14. Open decisions
-
-Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
-
-1. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-2. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-3. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
