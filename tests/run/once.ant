@@ -1,0 +1,22 @@
+// Once.value caches one computation; Once.do runs its function once (sections 9, 11).
+var calls = 0
+
+func load(): string { calls += 1; "config" }
+
+func main(): void {
+  var config = Once.value(load)
+  print(config())
+  print(config())
+  print(calls)
+  var once = Once.new()
+  Once.do(once, { print("first") })
+  Once.do(once, { print("second") })
+  print("done")
+}
+
+// ---- expected
+// out: config
+// out: config
+// out: 1
+// out: first
+// out: done

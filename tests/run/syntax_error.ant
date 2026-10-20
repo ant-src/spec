@@ -1,0 +1,9 @@
+// A syntax error anywhere stops the program before main: exit status 2 (section 4).
+func main(): void {
+  print("never")
+  var x = = 1
+}
+
+// ---- expected
+// noparse
+// exit: 2

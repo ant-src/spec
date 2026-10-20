@@ -1,0 +1,9 @@
+// A shift count at or beyond the operand width panics (section 11).
+func main(): void {
+  print(Bits.shiftLeft(int8(1), 6))
+  print(Bits.shiftLeft(int8(1), 8))
+}
+
+// ---- expected
+// out: 64
+// exit: 1

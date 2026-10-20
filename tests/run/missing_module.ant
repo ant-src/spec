@@ -1,0 +1,7 @@
+// An import of a file that does not exist cannot start: exit status 2 (section 10).
+import "./lib/nonexistent.ant" { thing }
+
+func main(): void { print("never") }
+
+// ---- expected
+// exit: 2

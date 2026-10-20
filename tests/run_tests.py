@@ -2,7 +2,7 @@
 
     python3 -I tests/run_tests.py
 
-1. tests/ok/*.ant must parse as programs.
+1. tests/ok/*.ant and the conformance programs under tests/run/ must parse as programs.
 2. tests/err/*.ant must fail; the first line is `// expect error: <substring>`.
 3. Every ```ant block in ../ant-lang.md must parse in spec mode, which allows
    top-level statements and `...` placeholders.
@@ -28,16 +28,20 @@ def check(name, ok, detail=""):
 
 
 def run_ok():
-    d = os.path.join(HERE, "ok")
-    for fn in sorted(os.listdir(d)):
-        if not fn.endswith(".ant"):
-            continue
-        src = open(os.path.join(d, fn), encoding="utf-8").read()
-        try:
-            parse(src)
-            check(f"ok/{fn}", True)
-        except ParseError as e:
-            check(f"ok/{fn}", False, str(e))
+    # tests/ok are grammar programs; tests/run and tests/run/lib are the conformance programs,
+    # which must keep parsing too (those marked "// noparse" must not).
+    for sub in ("ok", "run", os.path.join("run", "lib")):
+        d = os.path.join(HERE, sub)
+        for fn in sorted(os.listdir(d)):
+            if not fn.endswith(".ant"):
+                continue
+            src = open(os.path.join(d, fn), encoding="utf-8").read()
+            noparse = "\n// noparse\n" in src
+            try:
+                parse(src)
+                check(f"{sub}/{fn}", not noparse, "marked noparse but parses")
+            except ParseError as e:
+                check(f"{sub}/{fn}", noparse, str(e))
 
 
 def run_err():

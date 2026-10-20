@@ -1,0 +1,58 @@
+// Result and try: propagation, narrowing on Ok and Err, the Result namespace (section 8).
+type EmptyInput = {}
+type BadDigit = { at: int }
+type ParseError = EmptyInput | BadDigit
+
+func parseDigits(s: string): Result[int, ParseError] {
+  if String.isEmpty(s) { return Result.err(EmptyInput{}) }
+  var n = 0
+  for { index, value } in Array.entries(String.chars(s)) {
+    var d = String.toInt(value) ?? return Result.err(BadDigit{ at: index })
+    n = n * 10 + d
+  }
+  Result.ok(n)
+}
+
+func sum(a: string, b: string): Result[int, ParseError] {
+  Result.ok(try parseDigits(a) + try parseDigits(b))
+}
+
+func outer(): Result[int, Error] {
+  var inner: Result[Result[int, Error], Error] = Result.ok(Result.ok(1))
+  var r = try inner
+  print(r)
+  r
+}
+
+func main(): void {
+  print(sum("12", "30"))
+  var bad = sum("1x", "3")
+  if bad is Err {
+    var e = bad.error
+    if e is BadDigit { print(`bad digit at ${e.at}`) } else { print("empty") }
+  }
+  print(Result.isOk(sum("", "1")))
+  print(Result.unwrapOr(sum("a", "1"), -1))
+  print(Result.map(sum("1", "1"), { x * 100 }))
+  print(Result.all([parseDigits("1"), parseDigits("2")]))
+  print(Result.all([parseDigits("1"), parseDigits("x")]))
+  print(Result.mapErr(sum("", ""), { "widened" }))
+  print(outer())
+  var one: Result[int, Error] = Result.ok(1)
+  print(Ok{ value: 1 } == one)
+  print(Result.unwrap(parseDigits("77")))
+}
+
+// ---- expected
+// out: Ok{ value: 42 }
+// out: bad digit at 1
+// out: false
+// out: -1
+// out: Ok{ value: 200 }
+// out: Ok{ value: [1, 2] }
+// out: Err{ error: BadDigit{ at: 0 } }
+// out: Err{ error: "widened" }
+// out: Ok{ value: 1 }
+// out: Ok{ value: 1 }
+// out: true
+// out: 77

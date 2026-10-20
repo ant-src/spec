@@ -1,0 +1,43 @@
+// Sequences: a user-defined Seq, early break, Iter functions, re-running a sequence (section 5).
+func evens(limit: int): Seq[int] {
+  func(yield: func(int): bool): void {
+    var i = 0
+    while i < limit {
+      if !yield(i) {
+        print("stopped")
+        return
+      }
+      i += 2
+    }
+    print("exhausted")
+  }
+}
+
+func main(): void {
+  for n in evens(6) { print(n) }
+  for n in evens(100) {
+    if n == 4 { break }
+    print(n)
+  }
+  print(Iter.toArray(Iter.map(evens(5), { x * x })))
+  var s = Iter.fromArray([1, 2, 3])
+  print(Iter.toArray(s))
+  print(Iter.toArray(s))
+  print(Iter.toArray(Iter.take(Iter.range(0, 100), 0)))
+  print(Iter.toArray(Iter.filter(Iter.range(0, 10), { x % 4 == 0 })))
+}
+
+// ---- expected
+// out: 0
+// out: 2
+// out: 4
+// out: exhausted
+// out: 0
+// out: 2
+// out: stopped
+// out: exhausted
+// out: [0, 4, 16]
+// out: [1, 2, 3]
+// out: [1, 2, 3]
+// out: []
+// out: [0, 4, 8]

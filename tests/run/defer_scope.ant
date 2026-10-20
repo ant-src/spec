@@ -1,0 +1,46 @@
+// defer runs when its block exits: by falling off the end, return, continue, and in the registering scope (section 8).
+func f(): int {
+  var x = 1
+  defer { print(`deferred sees ${x}`) }
+  x = 2
+  return x
+}
+
+func main(): void {
+  print(f())
+  for i in [1, 2] {
+    defer { print(`end of iteration ${i}`) }
+    if i == 1 { continue }
+    print(`body ${i}`)
+  }
+  if true {
+    defer { print("block done") }
+    print("in block")
+  }
+  print("after block")
+  var g = func(): int {
+    defer { return }
+    5
+  }
+  print(g())
+  var h = func(): int {
+    defer { print("h first registered") }
+    defer { print("h last registered") }
+    1
+  }
+  print(h())
+}
+
+// ---- expected
+// out: deferred sees 2
+// out: 2
+// out: end of iteration 1
+// out: body 2
+// out: end of iteration 2
+// out: in block
+// out: block done
+// out: after block
+// out: 5
+// out: h last registered
+// out: h first registered
+// out: 1

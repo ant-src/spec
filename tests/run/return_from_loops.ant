@@ -1,0 +1,33 @@
+// return leaves the function from inside loops and from a ?? operand (sections 5, 7).
+func firstNegative(xs: Array[int]): int | null {
+  for x in xs {
+    if x < 0 { return x }
+  }
+  null
+}
+
+func label(s: string | null): string { `value: ${s ?? return "missing"}` }
+
+func count(limit: int): int {
+  var n = 0
+  while n < 100 {
+    n += 1
+    if n == limit { return n }
+  }
+  n
+}
+
+func main(): void {
+  print(firstNegative([3, -2, -5]))
+  print(firstNegative([1]))
+  print(label("a"))
+  print(label(null))
+  print(count(3))
+}
+
+// ---- expected
+// out: -2
+// out: null
+// out: value: a
+// out: missing
+// out: 3

@@ -1,0 +1,10 @@
+// An array index out of range panics; Array.get returns null instead (section 11).
+func main(): void {
+  var xs = [1, 2]
+  print(Array.get(xs, 5))
+  print(xs[5])
+}
+
+// ---- expected
+// out: null
+// exit: 1

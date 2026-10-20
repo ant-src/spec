@@ -1,0 +1,18 @@
+// Anonymous record types: width subtyping at the type level, whole values at run time (section 4).
+type User = { name: string, age: int }
+
+func greet(p: { name: string }): string { `hi ${p.name}` }
+
+func main(): void {
+  print(greet(User{ name: "ada", age: 36 }))
+  var p: { name: string } = User{ name: "b", age: 1 }
+  print(p)
+  print(p == User{ name: "b", age: 1 })
+  print(p is User)
+}
+
+// ---- expected
+// out: hi ada
+// out: User{ name: "b", age: 1 }
+// out: true
+// out: true

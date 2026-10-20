@@ -1,0 +1,20 @@
+// Strings are code points: iteration, length, and slicing agree (sections 5, 11).
+func main(): void {
+  var s = "añb"
+  var n = 0
+  for ch in s { n += 1 }
+  print(n)
+  print(String.length(s))
+  print(Array.length(String.toBytes(s)))
+  print(String.chars(s) == ["a", "ñ", "b"])
+  var out: Array[string] = []
+  for ch in "ab" { Array.push(out, ch + ch) }
+  print(out)
+}
+
+// ---- expected
+// out: 3
+// out: 3
+// out: 4
+// out: true
+// out: ["aa", "bb"]

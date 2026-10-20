@@ -1,0 +1,38 @@
+// Records: references, structural ==, identity through Record.same, spread (section 4).
+type Point = { x: int, y: int }
+type Named = { name: string, pos: Point }
+
+func main(): void {
+  var a = Point{ x: 1, y: 2 }
+  var b = Point{ x: 1, y: 2 }
+  print(a == b)
+  print(Record.same(a, b))
+  print(Record.same(a, a))
+  var c = a
+  c.x = 10
+  print(a.x)
+  var d = Point{ ...a, y: 5 }
+  print(d)
+  print(a == d)
+  print(Named{ name: "n", pos: a } == Named{ name: "n", pos: Point{ x: 10, y: 2 } })
+  print([a] == [Point{ x: 10, y: 2 }])
+  print(Map{ k: a } == Map{ k: b })
+  var n: int | float64 = 1
+  print(n == 1.0)
+  print("a" != "b")
+  print(null == null)
+}
+
+// ---- expected
+// out: true
+// out: false
+// out: true
+// out: 10
+// out: Point{ x: 10, y: 5 }
+// out: false
+// out: true
+// out: true
+// out: false
+// out: false
+// out: true
+// out: true

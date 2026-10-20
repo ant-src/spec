@@ -1,0 +1,48 @@
+// is: tags and kinds, complete chains without else, kind tests on unions (sections 4, 5).
+type Circle = { radius: float64 }
+type Rect = { width: float64, height: float64 }
+type Empty = {}
+type Shape = Circle | Rect | Empty
+
+func area(s: Shape): float64 {
+  if s is Circle { 3.0 * s.radius * s.radius }
+  else if s is Rect { s.width * s.height }
+  else if s is Empty { 0.0 }
+}
+
+func describe(v: int | string | null | Array[int] | Map[string, int] | func(): int): string {
+  if v is int { `int ${v}` }
+  else if v is string { `string ${v}` }
+  else if v is null { "null" }
+  else if v is Array { `array of ${Array.length(v)}` }
+  else if v is Map { `map of ${Map.size(v)}` }
+  else { `func giving ${v()}` }
+}
+
+func main(): void {
+  print(area(Circle{ radius: 2.0 }))
+  print(area(Rect{ width: 2.0, height: 3.5 }))
+  print(area(Empty{}))
+  print(describe(5))
+  print(describe("s"))
+  print(describe(null))
+  print(describe([1, 2]))
+  print(describe(Map{ a: 1 }))
+  print(describe(func(): int { 9 }))
+  var shapes: Array[Shape] = [Circle{ radius: 1.0 }, Empty{}, Rect{ width: 1.0, height: 1.0 }]
+  print(Array.length(Array.filter(shapes, { x is Circle })))
+  print(Array.length(Array.filter(shapes, { !(x is Circle) })))
+}
+
+// ---- expected
+// out: 12.0
+// out: 7.0
+// out: 0.0
+// out: int 5
+// out: string s
+// out: null
+// out: array of 2
+// out: map of 1
+// out: func giving 9
+// out: 1
+// out: 2

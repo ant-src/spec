@@ -1,0 +1,14 @@
+// Helper module for the import tests. Not a test itself.
+export type Point = { x: float64, y: float64 }
+
+export func distance(a: Point, b: Point): float64 {
+  Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
+}
+
+export var counter = 0
+
+export func bump(): void { counter += 1 }
+
+var hidden = announce()
+
+func announce(): int { print("geometry init"); 1 }

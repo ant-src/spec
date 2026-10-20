@@ -1,0 +1,18 @@
+// The pipe operator: a | f(b) is f(a, b), left associative (section 5).
+func add(a: int, b: int): int { a + b }
+
+func main(): void {
+  print(1 | add(2))
+  print(1 | add(2) | add(3))
+  print([3, 1, 2] | Array.sort() | Array.map({ x * 10 }) | String.from())
+  var r = Iter.range(0, 10) | Iter.filter({ x % 3 == 0 }) | Iter.take(3) | Iter.toArray()
+  print(r)
+  print("a,b" | String.split(",") | Array.length())
+}
+
+// ---- expected
+// out: 3
+// out: 6
+// out: [10, 20, 30]
+// out: [0, 3, 6]
+// out: 2

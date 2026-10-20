@@ -1,0 +1,35 @@
+// Evaluation order: operands, call arguments, assignment targets, literal entries, short circuits (section 12).
+var log: Array[string] = []
+
+func t[T](label: string, v: T): T { Array.push(log, label); v }
+
+type P = { a: int, b: int }
+
+func main(): void {
+  var r = t("l", 1) + t("r", 2)
+  var xs = [t("x", 0), 0]
+  xs[t("idx", 0)] = t("val", 5)
+  var p = P{ a: t("pa", 1), b: t("pb", 2) }
+  var f = t("callee", func(a: int): int { a })
+  _ = f(t("arg", 1))
+  print(log)
+  print(xs[0])
+  print(r + p.a + p.b)
+  var q = P{ a: 1, b: 2, ...P{ a: 9, b: 9 }, a: 3 }
+  print(q)
+  var m = Map{ k: 1, k: 2 }
+  print(m["k"])
+  print(t("and-left", false) && t("and-right", true))
+  print(t("or-left", true) || t("or-right", false))
+  print(Array.length(log))
+}
+
+// ---- expected
+// out: ["l", "r", "x", "idx", "val", "pa", "pb", "callee", "arg"]
+// out: 5
+// out: 6
+// out: P{ a: 3, b: 9 }
+// out: 2
+// out: false
+// out: true
+// out: 11

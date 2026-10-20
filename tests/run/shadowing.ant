@@ -1,0 +1,23 @@
+// Scopes: inner scopes shadow, a closure reads the variable it captured (section 3).
+var x = 1
+
+func main(): void {
+  print(x)
+  var x = 2
+  print(x)
+  if true {
+    var x = 3
+    print(x)
+  }
+  print(x)
+  var f = func(): int { x }
+  x = 4
+  print(f())
+}
+
+// ---- expected
+// out: 1
+// out: 2
+// out: 3
+// out: 2
+// out: 4

@@ -1,0 +1,29 @@
+// Bits: bitwise operations, shifts, and wrapping arithmetic (section 11).
+func main(): void {
+  print(Bits.and(12, 10))
+  print(Bits.or(12, 10))
+  print(Bits.xor(12, 10))
+  print(Bits.not(0))
+  print(Bits.shiftLeft(1, 10))
+  print(Bits.shiftRight(-8, 1))
+  print(Bits.shiftRight(uint8(128), 7))
+  print(Bits.popCount(255))
+  print(Bits.wrapAdd(Math.maxInt, 1))
+  print(Bits.wrapAdd(int8(127), int8(1)))
+  print(Bits.wrapSub(uint8(0), uint8(1)))
+  print(Bits.wrapMul(int32(65536), int32(65536)))
+}
+
+// ---- expected
+// out: 8
+// out: 14
+// out: 6
+// out: -1
+// out: 1024
+// out: -4
+// out: 1
+// out: 8
+// out: -9223372036854775808
+// out: -128
+// out: 255
+// out: 0

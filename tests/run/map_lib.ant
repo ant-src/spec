@@ -1,0 +1,71 @@
+// The Map namespace and map literals: structural keys, computed keys, shorthand (sections 4, 11).
+type Point = { x: int, y: int }
+
+func main(): void {
+  var m: Map[string, int] = Map{ a: 1, b: 2 }
+  print(Map.size(m))
+  print(Map.has(m, "a"))
+  print(Map.has(m, "z"))
+  print(Map.get(m, "b"))
+  Map.set(m, "c", 3)
+  m["a"] = 10
+  print(Array.sort(Map.keys(m)))
+  print(Array.sort(Map.values(m)))
+  print(Map.remove(m, "b"))
+  print(Map.remove(m, "zz"))
+  print(Map.size(m))
+  var doubled = Map.map(m, { x.value * 2 })
+  print(doubled["a"])
+  print(Map.size(Map.filter(m, { x.value > 5 })))
+  var merged = Map.merge(Map{ k: 1 }, Map{ k: 2, j: 3 })
+  print(merged["k"])
+  print(Map.size(merged))
+  print(Map.fromEntries([Entry{ key: "x", value: 1 }, Entry{ key: "x", value: 2 }])["x"])
+  var byPoint: Map[Point, string] = Map{}
+  byPoint[Point{ x: 1, y: 2 }] = "found"
+  print(byPoint[Point{ x: 1, y: 2 }])
+  var byArr: Map[Array[int], int] = Map{}
+  byArr[[1, 2]] = 5
+  print(byArr[[1, 2]])
+  var name = "dyn"
+  var mm = Map{ (name): 1, name: 2 }
+  print(mm["dyn"])
+  print(mm["name"])
+  var sh = Map{ name }
+  print(sh["name"])
+  print(Map{ 7: "seven" }[7])
+  var withNull: Map[string, int | null] = Map{ k: null }
+  print(Map.has(withNull, "k"))
+  print(withNull["k"] == null)
+  print(Map.same(m, m))
+  print(Map.isEmpty(byArr))
+  var typed = Map{ type: "login" }
+  print(typed["type"])
+}
+
+// ---- expected
+// out: 2
+// out: true
+// out: false
+// out: 2
+// out: ["a", "b", "c"]
+// out: [2, 3, 10]
+// out: 2
+// out: null
+// out: 2
+// out: 20
+// out: 1
+// out: 2
+// out: 2
+// out: 2
+// out: found
+// out: 5
+// out: 1
+// out: 2
+// out: dyn
+// out: seven
+// out: true
+// out: true
+// out: true
+// out: false
+// out: login

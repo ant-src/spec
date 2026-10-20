@@ -1,0 +1,11 @@
+// A panic inside a deferred block replaces the one in progress (section 12).
+func main(): void {
+  defer { panic("second") }
+  print("start")
+  panic("first")
+}
+
+// ---- expected
+// out: start
+// exit: 1
+// err: second

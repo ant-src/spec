@@ -1,0 +1,35 @@
+// The Math namespace (section 11).
+func main(): void {
+  print(Math.abs(-3))
+  print(Math.abs(-2.5))
+  print(Math.min(2, 1))
+  print(Math.max("a", "b"))
+  print(Math.pow(2.0, 10.0))
+  print(Math.sqrt(16.0))
+  print(Math.floor(-1.5))
+  print(Math.ceil(-1.5))
+  print(Math.round(2.5))
+  print(Math.round(-2.5))
+  print(Math.trunc(-2.7))
+  print(Math.maxInt)
+  print(Math.minInt)
+  print(Math.PI > 3.14 && Math.PI < 3.15)
+  print(Math.E > 2.71 && Math.E < 2.72)
+}
+
+// ---- expected
+// out: 3
+// out: 2.5
+// out: 1
+// out: b
+// out: 1024.0
+// out: 4.0
+// out: -2.0
+// out: -1.0
+// out: 3.0
+// out: -3.0
+// out: -2.0
+// out: 9223372036854775807
+// out: -9223372036854775808
+// out: true
+// out: true

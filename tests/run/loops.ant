@@ -1,0 +1,49 @@
+// for over arrays, maps, strings, and sequences; while; break and continue; fresh bindings (section 5).
+func main(): void {
+  var total = 0
+  for n in [1, 2, 3, 4] {
+    if n % 2 == 0 { continue }
+    total += n
+  }
+  print(total)
+  var fs: Array[func(): int] = []
+  for i in [1, 2, 3] { Array.push(fs, func(): int { i }) }
+  print(Array.map(fs, { x() }))
+  var s = ""
+  for ch in "héllo" { s = ch + s }
+  print(s)
+  var m = Map{ only: 7 }
+  for { key, value } in m { print(`${key}=${value}`) }
+  var w = 0
+  while true {
+    w += 1
+    if w == 5 { break }
+  }
+  print(w)
+  var xs = [1, 2]
+  for x in xs {
+    if x == 1 { Array.push(xs, 3) }
+    print(x)
+  }
+  for j in Iter.range(0, 3) { print(j) }
+  for { index, value } in Array.entries(["a", "b"]) { print(`${index}:${value}`) }
+  var k = 0
+  while k < 3 { k += 1 }
+  print(k)
+}
+
+// ---- expected
+// out: 4
+// out: [1, 2, 3]
+// out: olléh
+// out: only=7
+// out: 5
+// out: 1
+// out: 2
+// out: 3
+// out: 0
+// out: 1
+// out: 2
+// out: 0:a
+// out: 1:b
+// out: 3

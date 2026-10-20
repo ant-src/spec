@@ -1,0 +1,25 @@
+// Cond: a goroutine waits for a condition under a mutex (section 11).
+func main(): void {
+  var lock = Mutex.new()
+  var cond = Cond.new(lock)
+  var ready = false
+  var wg = WaitGroup.new()
+  WaitGroup.add(wg, 1)
+  go {
+    defer { WaitGroup.done(wg) }
+    Mutex.lock(lock)
+    while !ready { Cond.wait(cond) }
+    print("consumer saw ready")
+    Mutex.unlock(lock)
+  }
+  Mutex.lock(lock)
+  ready = true
+  Cond.signal(cond)
+  Mutex.unlock(lock)
+  WaitGroup.wait(wg)
+  print("done")
+}
+
+// ---- expected
+// out: consumer saw ready
+// out: done

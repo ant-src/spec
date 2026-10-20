@@ -1,0 +1,24 @@
+// Cyclic structures: == terminates and holds, String.from renders ... (sections 4, 11).
+type Node = { value: int, next: Node | null }
+type Cell = { items: Array[Cell] }
+
+func main(): void {
+  var a = Node{ value: 1, next: null }
+  a.next = a
+  var b = Node{ value: 1, next: null }
+  b.next = b
+  print(a == b)
+  print(a)
+  var c = Cell{ items: [] }
+  Array.push(c.items, c)
+  print(c)
+  var m: Map[Node, string] = Map{}
+  m[a] = "cycle"
+  print(m[b])
+}
+
+// ---- expected
+// out: true
+// out: Node{ value: 1, next: ... }
+// out: Cell{ items: [...] }
+// out: cycle

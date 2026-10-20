@@ -1,0 +1,29 @@
+// Atomic compare-and-swap, RwMutex with forms, sync objects by identity (section 11).
+func main(): void {
+  var a = Atomic.new(5)
+  print(Atomic.compareAndSwap(a, 5, 6))
+  print(Atomic.compareAndSwap(a, 5, 7))
+  print(Atomic.load(a))
+  Atomic.store(a, 10)
+  print(Atomic.add(a, 5))
+  var rw = RwMutex.new()
+  print(RwMutex.withRead(rw, { 1 }) + RwMutex.withWrite(rw, { 2 }))
+  var m1 = Mutex.new()
+  var m2 = Mutex.new()
+  print(m1 == m1)
+  print(m1 == m2)
+  var box = Atomic.new([1, 2])
+  print(Atomic.compareAndSwap(box, [1, 2], [3]))
+  print(Atomic.load(box))
+}
+
+// ---- expected
+// out: true
+// out: false
+// out: 6
+// out: 15
+// out: 3
+// out: true
+// out: false
+// out: true
+// out: [3]

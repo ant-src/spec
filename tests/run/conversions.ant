@@ -1,0 +1,35 @@
+// Numeric conversions: exact into integers, rounding into floats, the soft Math.toInt (sections 4, 12).
+func main(): void {
+  print(int8(127))
+  print(uint8(200))
+  print(byte(65))
+  print(float32(1.5))
+  print(float64(7) / 2.0)
+  print(float64(int64(5)))
+  print(int(3.0))
+  print(int(Math.trunc(-2.7)))
+  print(Math.toInt(2.5))
+  print(Math.toInt(1e30))
+  print(Math.toInt(-4.0))
+  print(Math.toInt(0.0 / 0.0))
+  print(uint8(250) + uint8(5))
+  print(int8(-128) + int8(127))
+  print(Array.map([72, 105], byte))
+}
+
+// ---- expected
+// out: 127
+// out: 200
+// out: 65
+// out: 1.5
+// out: 3.5
+// out: 5.0
+// out: 3
+// out: -2
+// out: null
+// out: null
+// out: -4
+// out: null
+// out: 255
+// out: -1
+// out: [72, 105]

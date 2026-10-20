@@ -1,0 +1,11 @@
+// Result.unwrap on an Err panics (section 11).
+func main(): void {
+  var r: Result[int, Error] = Result.err(Error{ message: "boom" })
+  print("before")
+  print(Result.unwrap(r))
+}
+
+// ---- expected
+// out: before
+// exit: 1
+// err: boom

@@ -1,0 +1,21 @@
+// Closures capture variables by reference and see later assignments (section 6).
+func main(): void {
+  var n = 1
+  var get = func(): int { n }
+  n = 2
+  print(get())
+  var fs = Array.map([1, 2], { func(): int { x * 10 } })
+  print(fs[1]())
+  var acc: Array[int] = []
+  var pushTwice = func(v: int): void { Array.push(acc, v); Array.push(acc, v) }
+  pushTwice(4)
+  print(acc)
+  var make = func(step: int): func(int): int { { x + step } }
+  print(make(3)(4))
+}
+
+// ---- expected
+// out: 2
+// out: 20
+// out: [4, 4]
+// out: 7
