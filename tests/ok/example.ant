@@ -1,20 +1,21 @@
 type Active = {}
 type Suspended = { reason: string }
 type Status = Active | Suspended
+type AccountId = int
 
 type Account = {
-  id: int,
+  id: AccountId,
   owner: string,
   balance: float64,
   status: Status,
 }
 
-type NotFound = { id: int }
+type NotFound = { id: AccountId }
 type Insufficient = { needed: float64 }
-type AccountSuspended = { id: int, reason: string }
+type AccountSuspended = { id: AccountId, reason: string }
 type TransferError = NotFound | Insufficient | AccountSuspended
 
-func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64): Result[void, TransferError] {
+func transfer(accounts: Map[AccountId, Account], from: AccountId, to: AccountId, amount: float64): Result[void, TransferError] {
   var source = accounts[from] ?? return Result.err(NotFound{ id: from })
   var target = accounts[to] ?? return Result.err(NotFound{ id: to })
 
@@ -31,7 +32,7 @@ func transfer(accounts: Map[int, Account], from: int, to: int, amount: float64):
   Result.ok(void)
 }
 
-func report(accounts: Map[int, Account]): string {
+func report(accounts: Map[AccountId, Account]): string {
   Map.values(accounts)
     | Array.filter({ x.status is Active })
     | Array.sortBy({ x.balance })
@@ -40,17 +41,19 @@ func report(accounts: Map[int, Account]): string {
 }
 
 func main() {
-  var accounts: Map[int, Account] = Map{}
-  accounts[1] = Account{ id: 1, owner: "ada", balance: 100.0, status: Active{} }
-  accounts[2] = Account{ id: 2, owner: "linus", balance: 20.0, status: Suspended{ reason: "audit" } }
+  var accounts: Map[AccountId, Account] = Map{}
+  var ada = AccountId(1)
+  var linus = AccountId(2)
+  accounts[ada] = Account{ id: ada, owner: "ada", balance: 100.0, status: Active{} }
+  accounts[linus] = Account{ id: linus, owner: "linus", balance: 20.0, status: Suspended{ reason: "audit" } }
 
-  var result = transfer(accounts, 1, 2, 50.0)
+  var result = transfer(accounts, ada, linus, 50.0)
   if result is Ok { print("ok") }
   else {
     var error = result.error
-    if error is NotFound { print(`unknown account ${error.id}`) }
+    if error is NotFound { print(`unknown account ${int(error.id)}`) }
     else if error is Insufficient { print(`short by ${error.needed}`) }
-    else { print(`account ${error.id} is suspended: ${error.reason}`) }
+    else { print(`account ${int(error.id)} is suspended: ${error.reason}`) }
   }
 
   print(report(accounts))
