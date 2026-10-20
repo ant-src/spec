@@ -37,10 +37,10 @@ reserved        = "as" | "async" | "await" | "catch" | "class" | "const" | "enum
                 | "finally" | "function" | "interface" | "let" | "match"
                 | "switch" | "this" | "throw" | "undefined" ;
 
-dec_digits      = digit { digit | "_" } ;
+dec_digits      = digit { [ "_" ] digit } ;                     (* "_" only between digits *)
 int_lit         = dec_digits
-                | "0x" hex_digit { hex_digit | "_" }
-                | "0b" ( "0" | "1" ) { "0" | "1" | "_" } ;
+                | "0x" hex_digit { [ "_" ] hex_digit }
+                | "0b" ( "0" | "1" ) { [ "_" ] ( "0" | "1" ) } ;
 float_lit       = dec_digits "." dec_digits [ exponent ]
                 | dec_digits exponent ;
 exponent        = ( "e" | "E" ) [ "+" | "-" ] dec_digits ;

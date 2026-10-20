@@ -735,17 +735,17 @@ Within one goroutine, effects happen in program order. Across goroutines, a writ
 A local assigned inside a `go` block never narrows (section 7), so a goroutine does not hand back a result by reassigning a local of its parent, even when a `WaitGroup` makes that safe; the checker cannot see happens-before and does not try. Share through containers instead: write into an array slot, a map entry, a record field, or an `Atomic`, and after the wait read the value into a fresh local and narrow that. A fresh local is a snapshot, so the same idiom reads shared state under a mutex.
 
 ```ant
-var results: Array[Response | null] = Array.filled(n, null)
+var results: Array[Result[Response, Error] | null] = Array.filled(n, null)
 go { results[i] = Http.get(url) }            // an index write, not a reassignment
 WaitGroup.wait(wg)
 var r = results[i]                           // a snapshot
-if r != null { print(r.status) }
+if r != null && r is Ok { print(r.value.status) }
 
-var latest: Atomic[Response | null] = Atomic.new(null)
+var latest: Atomic[Result[Response, Error] | null] = Atomic.new(null)
 go { Atomic.store(latest, Http.get(url)) }
 WaitGroup.wait(wg)
 var v = Atomic.load(latest)
-if v != null { print(v.status) }
+if v != null && v is Ok { print(v.value.status) }
 
 var config = Once.value({ load() })          // lazy initialization without a nullable variable
 print(config().name)
@@ -1136,7 +1136,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | `for` | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned |
 | destructuring | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions |
 | `_` | ◆ read |
-| library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Array.pop` on an empty array |
+| library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked |
 | ◆ top-level `var` | read before its initializer has run |
 | ◆ `panic` | always |
 | ◆ `RecordOf.make` | the field names are not exactly the declared ones |

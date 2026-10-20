@@ -1,0 +1,2 @@
+// expect error: unexpected character
+var café = 1

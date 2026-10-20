@@ -24,6 +24,17 @@ OPS3 = {"..."}
 OPS2 = {"?.", "??", "==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=", "/=", "%="}
 OPS1 = set("+-*/%<>=!|.,:;()[]{}")
 ASSIGN_OPS = {"=", "+=", "-=", "*=", "/=", "%="}
+ASCII_LETTERS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+ASCII_DIGITS = set("0123456789")
+HEX_DIGITS = set("0123456789abcdefABCDEF")
+
+
+def is_letter(c):
+    return c in ASCII_LETTERS
+
+
+def is_digit(c):
+    return c in ASCII_DIGITS
 
 
 class ParseError(Exception):
@@ -134,9 +145,9 @@ class Lexer:
                 if end < 0:
                     self.error("unterminated block comment")
                 self.advance(end + 2 - self.pos)
-            elif c.isdigit():
+            elif is_digit(c):
                 self.number()
-            elif c.isalpha() or c == "_":
+            elif is_letter(c) or c == "_":
                 self.identifier()
             elif c == '"':
                 self.string()
@@ -161,38 +172,43 @@ class Lexer:
         src, start, line, col = self.src, self.pos, self.line, self.col
         kind = "INT"
         if src.startswith(("0x", "0b"), self.pos):
-            digits = "0123456789abcdefABCDEF_" if src[self.pos + 1] == "x" else "01_"
+            digits = HEX_DIGITS if src[self.pos + 1] == "x" else set("01")
             self.advance(2)
-            if self.peekc() not in digits or self.peekc() == "_":
-                self.error("malformed number")
-            while self.peekc() and self.peekc() in digits:
-                self.advance()
+            self.digits(digits)
         else:
-            self.dec_digits()
-            if self.peekc() == "." and self.peekc(1).isdigit():
+            self.digits(ASCII_DIGITS)
+            if self.peekc() == "." and is_digit(self.peekc(1)):
                 kind = "FLOAT"
                 self.advance()
-                self.dec_digits()
+                self.digits(ASCII_DIGITS)
             if self.peekc() in ("e", "E"):
                 kind = "FLOAT"
                 self.advance()
                 if self.peekc() in ("+", "-"):
                     self.advance()
-                if not self.peekc().isdigit():
-                    self.error("malformed number")
-                self.dec_digits()
+                self.digits(ASCII_DIGITS)
         nxt = self.peekc()
-        if nxt and (nxt.isalnum() or nxt == "_"):
+        if nxt and (is_letter(nxt) or is_digit(nxt) or nxt == "_"):
             self.error("malformed number")
         self.emit(kind, src[start:self.pos], line, col)
 
-    def dec_digits(self):
-        while self.peekc() and (self.peekc().isdigit() or self.peekc() == "_"):
-            self.advance()
+    def digits(self, allowed):
+        """digit { [ "_" ] digit }: at least one digit, underscores only between digits."""
+        if self.peekc() not in allowed or self.peekc() == "":
+            self.error("malformed number")
+        self.advance()
+        while True:
+            c = self.peekc()
+            if c != "" and c in allowed:
+                self.advance()
+            elif c == "_" and self.peekc(1) != "" and self.peekc(1) in allowed:
+                self.advance(2)
+            else:
+                return
 
     def identifier(self):
         src, start, line, col = self.src, self.pos, self.line, self.col
-        while self.peekc() and (self.peekc().isalnum() or self.peekc() == "_"):
+        while self.peekc() and (is_letter(self.peekc()) or is_digit(self.peekc()) or self.peekc() == "_"):
             self.advance()
         word = src[start:self.pos]
         if word in RESERVED:
@@ -207,11 +223,14 @@ class Lexer:
             self.advance()
         elif c == "u" and self.peekc(1) == "{":
             self.advance(2)
-            n = 0
-            while self.peekc() and self.peekc() in "0123456789abcdefABCDEF":
-                self.advance(); n += 1
-            if n == 0 or self.peekc() != "}":
+            hexstart = self.pos
+            while self.peekc() and self.peekc() in HEX_DIGITS:
+                self.advance()
+            if self.pos == hexstart or self.peekc() != "}":
                 self.error("bad \\u escape")
+            value = int(self.src[hexstart:self.pos], 16)
+            if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF:
+                self.error("bad \\u escape: not a Unicode scalar value")
             self.advance()
         else:
             self.error(f"bad escape '\\{c}'")
