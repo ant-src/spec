@@ -215,7 +215,7 @@ func describe(id: Id): string {
 
 A nullable type is written `T | null`. See section 7.
 
-The members of a union must be distinguishable at run time. A union may contain at most one array type, one map type, and one function type. It may contain any number of named record types, since each carries its tag, but an anonymous record type cannot share a union with another record type.
+The members of a union must be distinguishable at run time, because `is` has only kinds and tags to look at. Each member has a discriminator: the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds; the word array, map, or func, type arguments not counting; or the tag, for a named record type. A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile error and `Array[int | string]` is the type to write, while `int | float64` is fine. An anonymous record type has no discriminator and cannot be tested by `is`, so a union may contain at most one, and it serves as the remainder of an `is` chain: in `Named | { name: string }`, the `else` branch of `x is Named` holds the anonymous member. A type parameter has no discriminator either; it may share a union only with `null`, `void`, named record types, and other type parameters, since `T | Array[int]` would become ambiguous once `T` is an array. The checker's work for `is` and for exhaustive chains is therefore one lookup per member.
 
 ### Tagged unions
 
@@ -272,7 +272,7 @@ var xs = Array.map([1, 2, 3], { x * 2 })   // Array[int]
 var ys: Array[string] = []                  // annotation needed
 ```
 
-A type parameter may carry a bound, written `[T: Bound]`, where the bound is any type. A solution for `T` must be assignable to the bound. Inside the body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and assigned, and an operator applies to `T` when it applies to every member of the bound. Without a bound, `T` is opaque; `==` and `Map` keys still work, because they work on every type. Bounds are the way to accept any array whose elements have a given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing changes at run time; the interpreter never sees a bound.
+A type parameter may carry a bound, written `[T: Bound]`, where the bound is any type. A solution for `T` must be assignable to the bound. Inside the body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and assigned, and an operator applies to `T` when it applies to every member of the bound. Without a bound, `T` is opaque; `==` and `Map` keys still work, because they work on every type. A bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`, `x is string` narrows `x` to `string`. Bounds are the way to accept any array whose elements have a given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing changes at run time; the interpreter never sees a bound.
 
 ```ant
 func max[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
@@ -1103,6 +1103,5 @@ func main() {
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
 1. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-2. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-3. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-4. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
+2. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+3. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
