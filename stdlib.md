@@ -53,7 +53,11 @@ Os.exit(status: int): never
 type Json = null | bool | float64 | string | Array[Json] | Map[string, Json]
 
 Json.parse(text: string): Result[Json, Error]
-Json.stringify[T](value: T): string          // records as objects without their tag, as String.from would
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would
+Json.decode[T](t: Type[T], text: string): Result[T, Error]     // type-directed, through Reflect; the root is a named type
+Json.encode[T](t: Type[T], value: T): string            // the inverse, type-directed
 ```
 
 `Json` is a recursive alias through an array and a map, which section 4 allows. Numbers parse as `float64`; a program that needs integers converts with `int(...)`, which panics on a fraction, so check first.
+
+`Json.decode` and `Json.encode` are ordinary library code written against `Reflect` (section 11), and other formats can follow the same shape. Their conventions: an object's keys are a record's fields, and a missing key decodes as `null` when the field's type includes `null`; extra keys are ignored; numbers convert with `Reflect.convert`, so `8080` decodes into an `int` field and `8.5` does not; a record inside a union of several records is told apart by a `"type"` key holding the type name, which `encode` writes and `decode` requires only when present or needed; maps decode only with `string` keys; anonymous record types and functions do not decode. The error names the path, such as `$.servers[2].port`.

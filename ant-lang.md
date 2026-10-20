@@ -12,7 +12,7 @@ The name "Ant" is a placeholder.
 - **No implicit coercion.** A value never changes type without a visible conversion.
 - **Everything is an expression.** Blocks, `if`, and loops produce values.
 - **Errors are values.** `Result` carries expected failures and `null` carries absence. `panic` is for bugs.
-- **Types are advisory.** `ant check` reads annotations and `ant run` discards them. The only thing the interpreter keeps from a `type` declaration is its name, which becomes a tag (section 4). No runtime behavior depends on a type that was written down.
+- **Types are advisory.** `ant check` reads annotations and `ant run` discards them. From a `type` declaration the interpreter keeps the name, which becomes a tag, and the body as data behind the tag for `Reflect` (sections 4 and 11). No evaluation rule consults a type that was written down.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
 
 
@@ -109,7 +109,7 @@ An assignment target is a variable, a field such as `p.x`, an element such as `x
 
 Ant is statically typed. Types are checked before the program runs, and most annotations are inferred. A named record type is nominal: each `type` declaration of a record is a distinct type, identified by its tag. Every other type is structural: two types with the same shape are the same type.
 
-Types are checked by a separate command and erased before the program runs. `ant check file.ant` runs the checker over the file and every module it imports, including code nothing calls, and exits non-zero with the errors; this is where inference, bounds, and narrowing live, and where their cost goes. `ant run file.ant` performs no static work beyond parsing: it loads the import graph, so a syntax error anywhere stops the program before `main`, and then it runs, with annotations parsed and discarded and no name resolution ahead of time. Editors and continuous integration run `check`; the terminal runs `run`. There is no flag that makes `run` check first. A `type` declaration is the one exception: its body is discarded, but its name is bound to a fresh tag value, and a record literal with that name stores the tag (see Records). Every `type` declaration binds a tag, even an alias, because the interpreter does not look at the body; only record literals and `is` tests use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record. Section 12 lists every such check.
+Types are checked by a separate command and erased before the program runs. `ant check file.ant` runs the checker over the file and every module it imports, including code nothing calls, and exits non-zero with the errors; this is where inference, bounds, and narrowing live, and where their cost goes. `ant run file.ant` performs no static work beyond parsing: it loads the import graph, so a syntax error anywhere stops the program before `main`, and then it runs, with annotations parsed and discarded and no name resolution ahead of time. Editors and continuous integration run `check`; the terminal runs `run`. There is no flag that makes `run` check first. A `type` declaration is the one exception: its name is bound to a fresh tag value, a record literal with that name stores the tag (see Records), and the body is kept behind the tag as a descriptor that only the `Reflect` namespace reads (section 11). Every `type` declaration binds a tag, even an alias; no evaluation rule looks at the descriptor, only record literals and `is` tests use tags, and the checker allows a literal head only on a record type. Every rule in this document that mentions a type is enforced by the checker, and every runtime rule is defined on values, which carry their concrete type. A program can run without being checked; where the checker would have rejected it, the runtime panics at the point of the error, such as `+` on operands of different types, a call on a value that is not a function, or a field read on a value that is not a record. Section 12 lists every such check.
 
 ### Primitives
 
@@ -150,7 +150,7 @@ p.x = 3.0
 
 Every record value therefore has a name; there are no anonymous record literals. The head of a literal is an identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a shorthand entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses. Map literals follow the same two rules (next section).
 
-The name is part of the value. A `type` declaration whose body is a record type binds its name to a fresh tag, and a literal stores the tag of its head in the record. The tag is all the interpreter keeps of a type declaration. It is compared only by identity, so the interpreter never interprets a type, and a tag reached through an import or an alias is the same tag. The checker identifies the type by the same tag: two declarations with the same fields are different types, and `type B = A` is a compile error when `A` is a record type, since it would mint a second tag for one type. Declare the fields again instead.
+The name is part of the value. A `type` declaration whose body is a record type binds its name to a fresh tag, and a literal stores the tag of its head in the record. The tag, with the declaration behind it as data for `Reflect`, is all the interpreter keeps of a type declaration. The tag is compared only by identity and no evaluation rule reads the declaration, so the interpreter never interprets a type, and a tag reached through an import or an alias is the same tag. The checker identifies the type by the same tag: two declarations with the same fields are different types, and `type B = A` is a compile error when `A` is a record type, since it would mint a second tag for one type. Declare the fields again instead.
 
 A record has no dynamic access: `p["x"]` is a compile error, and `for` does not iterate a record. When the keys are data rather than part of the type, use a `Map` (next section).
 
@@ -286,7 +286,7 @@ There are no interfaces, no `where` clauses, and no bounds on type constructors.
 
 ### Type declarations
 
-`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records). Otherwise the name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. There are no classes, interfaces, or prototypes.
+`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records). Otherwise the name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. A type name in expression position is a value of type `Type[T]`, the handle that `Reflect` and decoders such as `Json.decode` take (section 11); a generic type needs its arguments and so has no expression form. There are no classes, interfaces, or prototypes.
 
 ### Assignability
 
@@ -748,6 +748,7 @@ type Result[T, E] = Ok[T] | Err[E]
 type Error = { message: string }                 // the library's error type
 type Entry[K, V] = { key: K, value: V }          // yielded by maps
 type Indexed[T] = { index: int, value: T }       // yielded by Array.entries
+type Type[T]                                     // opaque: the value of a type name in expression position (Reflect)
 type Seq[T] = func(func(T): bool): void          // a sequence: pushes elements to yield until it returns false
 type Integer = int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 type Number = Integer | float32 | float64
@@ -856,6 +857,42 @@ Iter.take[T](s: Seq[T], n: int): Seq[T]                        // ◆ n < 0
 Iter.toArray[T](s: Seq[T]): Array[T]
 ```
 
+### Reflect
+
+`Reflect` lets a library read a type declaration and build or inspect values of any type, which is what a generic decoder or encoder needs. It is the only part of the language that reads a `type` body at run time: `ant run` keeps each declaration as a descriptor behind its tag, and no evaluation rule consults it (section 4). A type name in expression position, such as `Config` or `Geometry.Point`, is a value of type `Type[Config]`, the handle that names a type to a function. A generic type has no expression form, since `Pair[int, string]` is not an expression; put it inside a named record.
+
+```
+type Field = { name: string, type: TypeInfo }
+type TypeInfo = Prim | ArrayOf | MapOf | RecordOf | UnionOf | AnonOf | FuncOf
+type Prim = { name: string }                     // "int" … "float64", "bool", "string", "null", "void"
+type ArrayOf = { element: TypeInfo }
+type MapOf = { key: TypeInfo, value: TypeInfo }
+type RecordOf = { name: string, fields: func(): Array[Field], make: func(Map[string, Reflect.Value]): Reflect.Value }
+type UnionOf = { members: Array[TypeInfo] }
+type AnonOf = { fields: Array[Field] }
+type FuncOf = {}
+
+Reflect.info[T](t: Type[T]): TypeInfo                          // the declaration, aliases expanded, type arguments substituted
+Reflect.box[T](v: T): Reflect.Value
+Reflect.unbox[T](t: Type[T], v: Reflect.Value): T | null       // null unless v conforms to t through every field and element
+Reflect.convert(v: Reflect.Value, kind: string): Reflect.Value | null   // numeric to the named kind; null when lossy or not a number
+Reflect.kindOf(v: Reflect.Value): string                       // "int" … "float64", "bool", "string", "null", "void", "array", "map", "record", "func"
+Reflect.tagOf(v: Reflect.Value): string | null                 // a record's type name
+Reflect.fieldsOf(v: Reflect.Value): Map[string, Reflect.Value] | null
+Reflect.elementsOf(v: Reflect.Value): Array[Reflect.Value] | null
+Reflect.entriesOf(v: Reflect.Value): Array[Entry[Reflect.Value, Reflect.Value]] | null
+Reflect.asInt(v: Reflect.Value): int | null                    // likewise asFloat, exact from any numeric kind, asString, asBool
+Reflect.makeArray(items: Array[Reflect.Value]): Reflect.Value
+Reflect.makeMap(entries: Array[Entry[Reflect.Value, Reflect.Value]]): Reflect.Value
+```
+
+`Reflect.Value` is an opaque box, like a `Mutex`, that holds one value of any kind. It is the only way a value of unknown type travels, and it does not leave this namespace. `RecordOf.fields` is a function so that recursive types terminate, and `RecordOf.make` captures the tag, so no untyped tag handle exists; it requires exactly the declared field names (◆) and does not check the values. `Reflect.unbox` is the boundary that keeps the checker's guarantee: a value it returns conforms to `t` through every field and element, so a decoded `Config` is a real `Config`. A field of function type never conforms, and an anonymous record type cannot be built, because it has no tag. `Reflect.convert` exists because a decoder knows the target kind only as a string from the descriptor and must fail softly where the language's conversions panic.
+
+```ant
+var config = try Json.decode(Config, text)       // Result[Config, Error]; the root is a named type
+var info = Reflect.info(Status)                  // a UnionOf whose members are the RecordOf of Active and Suspended
+```
+
 ### Math and Bits
 
 ```
@@ -954,7 +991,8 @@ Every value has a kind, fixed when the value is created:
 | map | a hash table from values to values, keyed by `==`; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==` |
 | record | a tag plus a fixed set of named fields |
 | func | a declared function, an anonymous function, or a lambda, with the scopes it captured |
-| tag | the value a `type` declaration binds (section 4) |
+| tag | the value a `type` declaration binds (section 4), carrying the declaration as a descriptor for `Reflect` |
+| reflect box | a `Reflect.Value`: an opaque holder of one value of any kind (section 11) |
 | sync | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic` |
 
 Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, and tags are immutable, so for them the distinction never shows.
@@ -1032,6 +1070,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Array.pop` on an empty array |
 | ◆ top-level `var` | read before its initializer has run |
 | ◆ `panic` | always |
+| ◆ `RecordOf.make` | the field names are not exactly the declared ones |
 | ◆ any call | the goroutine's call depth exceeds the runtime's limit |
 | `??`, `?.`, `try`, `==`, `!=` | never |
 
