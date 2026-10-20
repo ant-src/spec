@@ -922,7 +922,7 @@ Iter.toArray[T](s: Seq[T]): Array[T]
 
 ```
 type Data = null | bool | Number | string | Array[Data] | Map[string, Data] | Tagged
-type Tagged = { tag: string, fields: Map[string, Data] }
+type Tagged = { tag: string, value: Data }       // a named record or primitive, where its name matters
 
 type Field = { name: string, info: TypeInfo }
 type TypeInfo = Prim | TaggedOf | ArrayOf | MapOf | RecordOf | UnionOf | AnonOf | FuncOf
@@ -940,23 +940,23 @@ Reflect.fromData[T](t: Type[T], data: Data): Result[T, Error]  // builds a value
 Reflect.toData[T](t: Type[T], value: T): Data                  // the inverse; ◆ a function, a map key that is not a string, a cycle
 ```
 
-`Data` is the one representation of data whose type is not known statically: a plain union that any code can build with literals, inspect with `is`, and compare with `==`. A record appears as a `Map` of its fields, or as a `Tagged` node where its name matters. `Reflect.fromData` builds a value of `t` by the declared type at each position, and `Reflect.toData` takes one apart the same way; both construct fresh arrays, maps, and records, so no object is ever shared between a `Data` tree and a typed value, which is what keeps invariance (section 4) intact. `RecordOf.fields` is a function so that recursive types terminate.
+`Data` is the one representation of data whose type is not known statically: a plain union that any code can build with literals, inspect with `is`, and compare with `==`. A record appears as a `Map` of its fields and a named primitive as its base value, each inside a `Tagged` node where the name matters (below). `Reflect.fromData` builds a value of `t` by the declared type at each position, and `Reflect.toData` takes one apart the same way; both construct fresh arrays, maps, and records, so no object is shared between a `Data` tree and a typed value, which is what keeps invariance (section 4) intact. The one exception is a position declared as `Reflect.Data`: there `fromData` stores the node itself and `toData` returns the value itself, which is safe because both sides see it as `Data`. `RecordOf.fields` is a function so that recursive types terminate.
 
-What `fromData` accepts at a position, by the declared type there:
+Every node has a shape: `null`, `bool`, `string`, one of the ten numeric kinds, array, or map. A declared type has the shapes of the nodes it accepts: a named primitive type has the shape of its base, and a named record type and a `Map` are both map-shaped. What `fromData` accepts at a position, by the declared type there:
 
 | Declared type | Accepts |
 |---|---|
 | a numeric kind | a number, through the conversion table of section 12; an error where the table says panic |
 | `bool`, `string`, `null` | a value of that kind |
-| a named primitive type | a value of its base kind, which is then tagged |
+| a named primitive type | a value of its base kind, or a `Tagged` with that name around one; the value is then tagged |
 | `Array[T]` | an array, each element as `T` |
-| `Map[K, V]`, with `K` `string` or a named type over it | a `Map`, each value as `V`; a `Tagged` is an error |
-| a named record type | a `Map`, or a `Tagged` with that name: entries by field name, a key with no field ignored, a field with no key `null` when its type allows it and an error otherwise |
-| a union | the member the node picks: `null`, `bool`, `string`, and an array pick by kind; a number picks the first numeric member in declaration order that the table accepts; a `Tagged` picks the record it names; a `Map` picks the single record member, or else the map member; none or several is an error |
+| `Map[K, V]`, with `K` `string` or a named type over it | a `Map`, each value as `V` |
+| a named record type | a `Map`, or a `Tagged` with that name around one: entries by field name, a key with no field ignored, a field with no key `null` when its type allows it and an error otherwise |
+| a union | a `Tagged` picks the member it names; any other node picks the member of its shape, where a number picks the member of its own kind if there is one and otherwise the first numeric member in declaration order that the table accepts, and a `Map` picks the map member if there is one and otherwise the single record member; none or several is an error |
 | `Reflect.Data` | the node itself |
 | `void`, a function type, an anonymous record type, any other map key type | an error: the type cannot be built |
 
-The error is an `Err` whose message starts with the path, such as `$.servers[2].port: expected a number`. `toData` is the exact inverse: a number keeps its kind, a named primitive becomes its base value, a map becomes a `Map`, and a record becomes a `Tagged` where the declared type is a union with more than one record member and a `Map` elsewhere, so that `fromData` reads the result back under the same handle. It panics (◆) on a function value, a map key that is not a string or a named type over `string`, a value already on its own path, and, in an unchecked program, a value that does not match the declared type.
+The error is an `Err` whose message starts with the path, such as `$.servers[2].port: expected a number`. A tag is matched by its declared name among the members at that position, never across the program, so two modules may each declare a `Login`; a position whose members share a name is an error there. `toData` is the exact inverse: a number keeps its kind, a map becomes a `Map`, a record a `Map` of its fields, and a named primitive its base value, and the last two are wrapped in a `Tagged` with the type's name exactly where the declared type is a union with another member of the same shape. So a `Circle` in `Circle | Rect` and a `UserId` in `UserId | AccountId` or `UserId | string` are tagged, while a `Server` in `Server | null` and an `int16` in `int8 | int16` are not. For every acyclic value `x` of a type `T` that can be built, `fromData(T, toData(T, x))` is `Ok` of a value `==` to `x`; this is the contract an implementation is tested against. `toData` panics (◆) on a function value, a map key that is not a string or a named type over `string`, a value already on its own path, and, in an unchecked program, a value that does not match the declared type.
 
 ```ant
 var config = try Json.decode(Config, text)       // Result[Config, Error]: Reflect.fromData over the parsed tree

@@ -2,13 +2,15 @@
 
 type Json = null | bool | float64 | string | Array[Json] | Map[string, Json]
 
-// Json tree to Data tree. A "type" key becomes the tag of a Tagged node.
+// Json tree to Data tree. An object with a string "$type" becomes a Tagged node.
 func toData(json: Json): Reflect.Data {
   if json is Array { Array.map(json, toData) }
   else if json is Map {
-    var tag = json["type"]
-    var fields = Map.map(Map.filter(json, { x.key != "type" }), { toData(x.value) })
-    if tag is string { Reflect.Tagged{ tag: tag, fields: fields } } else { fields }
+    var tag = json["$type"]
+    var rest = Map.map(Map.filter(json, { x.key != "$type" && x.key != "$value" }), { toData(x.value) })
+    if tag is string {
+      Reflect.Tagged{ tag: tag, value: if Map.has(json, "$value") { toData(json["$value"]) } else { rest } }
+    } else { rest }
   }
   else { json }                                                 // null, bool, float64, string
 }
@@ -24,7 +26,12 @@ func render(data: Reflect.Data): string {
   else if data is string { quote(data) }
   else if data is Array { `[${String.join(Array.map(data, render), ",")}]` }
   else if data is Map { `{${String.join(members(data), ",")}}` }
-  else if data is Reflect.Tagged { `{${String.join([`"type":${quote(data.tag)}`, ...members(data.fields)], ",")}}` }
+  else if data is Reflect.Tagged {
+    var inner = data.value
+    var head = `"$type":${quote(data.tag)}`
+    if inner is Map { `{${String.join([head, ...members(inner)], ",")}}` }
+    else { `{${head},"$value":${render(inner)}}` }
+  }
   else { String.from(data) }                                    // bool and every numeric kind
 }
 
