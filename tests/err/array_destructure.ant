@@ -1,2 +1,0 @@
-// expect error: expected identifier or '{'
-var [a, b] = xs

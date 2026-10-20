@@ -27,7 +27,7 @@ letter          = "a" | ... | "z" | "A" | ... | "Z" ;
 digit           = "0" | ... | "9" ;
 hex_digit       = digit | "a" | ... | "f" | "A" | ... | "F" ;
 ident           = ( letter | "_" ) { letter | digit | "_" } ;
-                  (* not a keyword, not a reserved word, and not "_" alone *)
+                  (* not a keyword or a reserved word; "_" alone is write-only *)
 
 keyword         = "break" | "continue" | "defer" | "else" | "export" | "false"
                 | "for" | "func" | "go" | "if" | "import" | "in" | "is"
@@ -107,6 +107,9 @@ statement       = var_decl | expression ;
 expression      = assignment ;
 
 assignment      = pipe [ assign_op pipe ] ;                      (* type void, not chainable *)
+                  (* an array_lit on the left of "=" is an array destructuring target:
+                     its elements must be assignable places or array_lits, with an
+                     optional final "..." place                                   *)
 assign_op       = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
 
 pipe            = pipe_operand { "|" postfix } ;
@@ -189,5 +192,10 @@ continue_expr   = "continue" ;
 
 (* ===== Destructuring (section 5) ========================================= *)
 
-destructure     = "{" [ destructure_field { "," destructure_field } [ "," ] ] "}" ;
-destructure_field = ident [ ":" ident ] ;                        (* field, or field: localName *)
+destructure     = record_destructure | array_destructure ;
+record_destructure = "{" [ destructure_field { "," destructure_field } [ "," ] ] "}" ;
+destructure_field = ident [ ":" target ] ;                       (* field, or field: target *)
+array_destructure = "[" [ array_targets ] "]" ;
+array_targets   = "..." ident
+                | target { "," target } [ "," [ "..." ident ] ] ;   (* no comma after the rest *)
+target          = ident | destructure ;                          (* ident may be "_" *)

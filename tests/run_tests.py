@@ -134,6 +134,11 @@ def run_inline():
     # template with nested braces
     e = expr("`${ Point{ x: 1.0 }.x } and ${ y }`")
     check("template", e[0] == "Template" and len(e[2]) == 2 and e[2][0][0] == "Field", repr(e))
+    # array destructuring assignment reinterprets the literal
+    f = file("func f() {\n  [a, xs[0], ...rest] = ys\n}")
+    check("destructuring assignment", f[2][0][4][1][0] == ("Assign", "=", ("ArrayTarget", [("Place", ("Ident", "a")), ("Place", ("Index", ("Ident", "xs"), ("Int", "0"))), ("Rest", "rest")]), ("Ident", "ys")), repr(f))
+    f = file("var [a, { b: [c, _] }] = v\n")
+    check("nested destructuring", f[2][0][1] == ("ArrayDestructure", [("Name", "a"), ("Destructure", [("b", ("ArrayDestructure", [("Name", "c"), ("Name", "_")]))])]), repr(f))
     # named arguments
     e = expr('connect(port: 80, host: "x")')
     check("named args", e[2] == [("Named", "port", ("Int", "80")), ("Named", "host", ("String", '"x"'))], repr(e))

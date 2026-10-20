@@ -1,2 +1,0 @@
-// expect error: '_' is not an identifier
-var _ = 1

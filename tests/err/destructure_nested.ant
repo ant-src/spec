@@ -1,2 +1,0 @@
-// expect error: expected local name
-var { a: { b } } = x

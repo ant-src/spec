@@ -196,8 +196,6 @@ class Lexer:
         word = src[start:self.pos]
         if word in RESERVED:
             self.error(f"reserved word '{word}'")
-        if word == "_":
-            self.error("'_' is not an identifier")
         self.emit("KW" if word in KEYWORDS else "IDENT", word, line, col)
 
     def escape(self, closing):
@@ -424,7 +422,7 @@ class Parser:
 
     def var_decl(self):
         self.expect("var")
-        if self.at("{"):
+        if self.at("{") or self.at("["):
             target = self.destructure()
             typ = None
         elif self.at_kind("IDENT"):
@@ -434,7 +432,7 @@ class Parser:
                 self.next()
                 typ = self.type()
         else:
-            self.error(f"expected identifier or '{{' after var, got {self.peek()}")
+            self.error(f"expected identifier, '{{', or '[' after var, got {self.peek()}")
         self.expect("=")
         return ("Var", target, typ, self.expression())
 
@@ -611,11 +609,37 @@ class Parser:
         t = self.peek()
         if t.kind == "OP" and t.value in ASSIGN_OPS:
             self.next()
+            if left[0] == "ArrayLit":
+                if t.value != "=":
+                    self.error("a destructuring target allows only '='", t)
+                left = self.as_target(left, t)
             right = self.pipe()
             if self.peek().kind == "OP" and self.peek().value in ASSIGN_OPS:
                 self.error("assignment cannot be chained")
             return ("Assign", t.value, left, right)
         return left
+
+    def as_target(self, lit, tok):
+        """Reinterpret an array literal on the left of '=' as a destructuring target."""
+        items = []
+        for i, el in enumerate(lit[1]):
+            kind, e = el[0], el[1] if len(el) > 1 else None
+            if kind == "Spread":
+                if i != len(lit[1]) - 1:
+                    self.error("rest must be the last position of a destructuring", tok)
+                if e[0] != "Ident":
+                    self.error("rest position must be a name", tok)
+                items.append(("Rest", e[1]))
+            elif kind == "Elem":
+                if e[0] in ("Ident", "Field", "Index"):
+                    items.append(("Place", e))
+                elif e[0] == "ArrayLit":
+                    items.append(("Nested", self.as_target(e, tok)))
+                else:
+                    self.error("destructuring target positions must be assignable places", tok)
+            else:
+                self.error("destructuring target positions must be assignable places", tok)
+        return ("ArrayTarget", items)
 
     def pipe(self):
         left = self.pipe_operand()
@@ -866,7 +890,7 @@ class Parser:
 
     def for_expr(self):
         self.expect("for")
-        if self.at("{"):
+        if self.at("{") or self.at("["):
             target = self.destructure()
         else:
             target = ("Name", self.expect_ident("loop variable"))
@@ -875,21 +899,46 @@ class Parser:
         return ("For", target, it, self.block())
 
     def destructure(self):
+        if self.at("["):
+            return self.array_destructure()
         self.expect("{")
         saved = self.enter_list()
         fields = []
         while not self.at("}"):
             name = self.expect_ident("field name")
-            alias = None
+            target = None
             if self.at(":"):
                 self.next()
-                alias = self.expect_ident("local name")
-            fields.append((name, alias))
+                target = self.target()
+            fields.append((name, target))
             if not self.at("}"):
                 self.expect(",")
         self.expect("}")
         self.leave(saved)
         return ("Destructure", fields)
+
+    def array_destructure(self):
+        self.expect("[")
+        saved = self.enter_list()
+        items = []
+        while not self.at("]"):
+            if self.at("..."):
+                self.next()
+                items.append(("Rest", self.expect_ident("rest name")))
+                if not self.at("]"):
+                    self.error("rest must be the last position of a destructuring")
+                break
+            items.append(self.target())
+            if not self.at("]"):
+                self.expect(",")
+        self.expect("]")
+        self.leave(saved)
+        return ("ArrayDestructure", items)
+
+    def target(self):
+        if self.at("{") or self.at("["):
+            return self.destructure()
+        return ("Name", self.expect_ident("name or destructuring"))
 
     def placeholder_next(self):
         """After a '...' token: is this a lone placeholder rather than a spread?"""

@@ -1,0 +1,2 @@
+// expect error: rest must be the last position
+var [a, ...rest, b] = xs

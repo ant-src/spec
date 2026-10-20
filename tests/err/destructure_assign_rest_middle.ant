@@ -1,0 +1,4 @@
+// expect error: rest must be the last position
+func f() {
+  [...a, b] = xs
+}

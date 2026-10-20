@@ -32,7 +32,7 @@ Block comments do not nest.
 
 ### Identifiers and keywords
 
-An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`. Case carries no meaning. `_` on its own is not an identifier.
+An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`. Case carries no meaning. `_` on its own is a write-only identifier: it can be bound or assigned wherever a name can, which discards the value, and reading it is a compile error in `ant check` and a panic in `ant run`.
 
 Keywords:
 
@@ -103,7 +103,7 @@ count += 1                // also -= *= /= %=
 if count = 5 { ... }    // compile error: void is not bool
 ```
 
-An assignment target is a variable, a field such as `p.x`, or an element such as `xs[i]`. A destructuring such as `{ x, y }` is not an assignment target. There is no `++`, `--`, or `const`.
+An assignment target is a variable, a field such as `p.x`, an element such as `xs[i]`, or an array destructuring of targets such as `[a, b]` (section 5). There is no `++`, `--`, or `const`.
 
 ## 4. Types
 
@@ -438,12 +438,21 @@ Iter.range(0, 1000) | Iter.filter({ x % 7 == 0 }) | Iter.take(5) | Iter.toArray(
 
 ### Destructuring
 
-`var` and `for` accept a record destructuring on the left side. `{ x, y }` binds the fields `x` and `y`; `{ x: px }` binds the field `x` as `px`. Fields not mentioned are ignored. Destructuring never fails, so there is nothing to match against, and it does not nest. There is no array destructuring; index instead.
+`var` and `for` accept a destructuring on the left side instead of a name. A record destructuring `{ x, y }` binds the fields `x` and `y`, and `{ x: px }` binds the field `x` as `px`; fields not mentioned are ignored. An array destructuring `[a, b]` binds elements by position, extra elements are ignored, and `[head, ...tail]` binds the rest as a new array. Each position holds a name, `_` to discard, or another destructuring, so they nest.
+
+Destructuring is binding plus indexing, and it fails the way indexing does: an array with fewer elements than the fixed positions panics, as `xs[1]` would on a one-element array, and a nested record destructuring that meets a non-record such as `null` panics as a field read would. The checker types each binding from the source, `T` for an element of `Array[T]` and `Array[T]` for the rest, and cannot know lengths.
 
 ```ant
 var { x, y } = origin
+var { address: { city } } = user
+var [first, second] = xs             // panics when xs has fewer than two elements
+var [head, ...tail] = xs             // tail is a new array; panics only when xs is empty
+var [_, y] = pair
 for { key, value } in ages { print(`${key}: ${value}`) }
+for [a, b] in pairs { print(a + b) }
 ```
+
+An array destructuring is also an assignment target. Its positions are assignable places or nested array destructurings, and `=` is the only operator allowed, so `[a, b] = [b, a]` swaps and `[xs[0], p.x] = f()` stores into any places. Evaluation follows the assignment rule: the targets' sub-expressions left to right, then the right side, then the stores left to right. There is no record destructuring assignment, because a `{` at the start of a statement is a lambda; use `var`.
 
 ### `return`, `break`, `continue`
 
@@ -935,7 +944,8 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right operand must be a `bool` when it is evaluated.
 - **`a ?? b`.** Yields `a`, unless it is `null`, in which case `b` is evaluated and yielded.
 - **Pipe `a | f(b)`.** Is `f(a, b)`: `a` evaluates, then `f`, then `b`.
-- **Assignment.** The target's sub-expressions evaluate first, then the right side. A variable target rebinds the name in the scope that declared it. A field target must be a record that already has that field. An index target on an array must be an `int` in range; on a map it inserts or replaces. Compound assignment reads the target, applies the operator, and stores. The value is `void`.
+- **Assignment.** The target's sub-expressions evaluate first, then the right side. A variable target rebinds the name in the scope that declared it. A field target must be a record that already has that field. An index target on an array must be an `int` in range; on a map it inserts or replaces. An array destructuring target requires an array with at least as many elements as its positions, and stores element by element left to right, with a rest position receiving a new array of the remainder. Compound assignment reads the target, applies the operator, and stores. The value is `void`.
+- **Destructuring in `var` and `for`.** A record destructuring requires a record with every named field. An array destructuring requires an array with at least as many elements as its fixed positions; extra elements are ignored, and a rest binder receives a new array of the remainder. Nested destructurings apply the same rules to the element they receive. `_` binds nothing, and reading `_` panics.
 - **Block.** Opens a scope and evaluates its statements in order. Its value is that of the last expression, or `void` when the block is empty or ends in a declaration or an assignment. Deferred blocks registered in it run when it exits (below).
 - **`if`.** The condition must be a `bool`. The value is the chosen branch's value; with no `else` and a `false` condition it is `void`.
 - **`while`.** Evaluates the condition, which must be a `bool`, before each iteration. The value is `void`.
@@ -976,7 +986,9 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | record literal | the head is not a tag; a spread operand is not a record |
 | array literal | a spread operand is not an array |
 | `is` | the right side is a path that does not evaluate to a tag |
-| `for` | the operand is not an array, a map, a string, or a function; a destructuring meets an element without the field; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned |
+| `for` | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned |
+| destructuring | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions |
+| `_` | ◆ read |
 | library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Array.pop` on an empty array |
 | ◆ top-level `var` | read before its initializer has run |
 | ◆ `panic` | always |
@@ -1055,4 +1067,4 @@ Each item below is a choice this draft made for the sake of having examples, not
 5. **`try` as the propagation keyword.** Postfix `?` collides with `?.`. `try` reads well but means something else in JavaScript.
 6. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
 7. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-8. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, destructuring assignment, and array destructuring are left out until a need appears.
+8. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.

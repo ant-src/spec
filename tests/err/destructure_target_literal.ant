@@ -1,0 +1,4 @@
+// expect error: must be assignable places
+func f() {
+  [a, 1] = xs
+}
