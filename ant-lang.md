@@ -674,7 +674,7 @@ func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
 }
 ```
 
-Reading and writing the same memory from two goroutines without synchronization is a data race. A data race is a program error. The runtime guarantees memory safety in its presence, but not any particular result.
+Reading and writing the same memory from two goroutines without synchronization is a data race. A data race is a program error, and the runtime guarantees memory safety in its presence, but not any particular result. Concretely: a racy read of a variable, field, or element observes some value that was stored there, never a mix of two or a value from nowhere; a racy array or map operation observes the state before or after the concurrent mutation, or panics with the ordinary index or key error, never a corrupted structure; and the interpreter itself never crashes. An implementation may also detect a race and end the program with a report and exit status 1, since the state of a racy program is not worth continuing. The guarantee costs nothing for numbers, references, strings, and records, one atomic header load per array operation, and one lock per map mutation.
 
 ### Sharing results
 
@@ -1007,7 +1007,7 @@ A panic unwinds the current goroutine: every block being evaluated exits in turn
 
 ### Goroutines
 
-Goroutines are preemptive: a goroutine that never blocks cannot keep others from running. They share memory, and the sync objects of section 9 are the only synchronization. The runtime guarantees that a data race cannot corrupt memory or crash the interpreter; the values a racing program observes are otherwise unspecified. The program ends when `main` returns, whatever other goroutines are doing.
+Goroutines are preemptive: a goroutine that never blocks cannot keep others from running. They share memory, and the sync objects of section 9 are the only synchronization. The runtime guarantees that a data race cannot corrupt memory or crash the interpreter, as section 9 spells out; the values a racing program observes are otherwise unspecified, and an implementation may end a racing program with a report. The program ends when `main` returns, whatever other goroutines are doing.
 
 ### Runtime panics
 
@@ -1102,8 +1102,7 @@ func main() {
 
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
-1. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-2. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-3. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-4. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-5. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
+1. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+2. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+3. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+4. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
