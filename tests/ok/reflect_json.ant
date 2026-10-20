@@ -1,0 +1,50 @@
+// A JSON codec written against Reflect: Json.toData, then Reflect.fromData; Reflect.toData, then render.
+
+type Json = null | bool | float64 | string | Array[Json] | Map[string, Json]
+
+// Json tree to Data tree. A "type" key becomes the tag of a Tagged node.
+func toData(json: Json): Reflect.Data {
+  if json is Array { Array.map(json, toData) }
+  else if json is Map {
+    var tag = json["type"]
+    var fields = Map.map(Map.filter(json, { x.key != "type" }), { toData(x.value) })
+    if tag is string { Reflect.Tagged{ tag: tag, fields: fields } } else { fields }
+  }
+  else { json }                                                 // null, bool, float64, string
+}
+
+export func decode[T](t: Type[T], text: string): Result[T, Error] {
+  Reflect.fromData(t, toData(try Json.parse(text)))
+}
+
+export func encode[T](t: Type[T], value: T): string { render(Reflect.toData(t, value)) }
+
+func render(data: Reflect.Data): string {
+  if data is null { "null" }
+  else if data is string { quote(data) }
+  else if data is Array { `[${String.join(Array.map(data, render), ",")}]` }
+  else if data is Map { `{${String.join(members(data), ",")}}` }
+  else if data is Reflect.Tagged { `{${String.join([`"type":${quote(data.tag)}`, ...members(data.fields)], ",")}}` }
+  else { String.from(data) }                                    // bool and every numeric kind
+}
+
+func members(fields: Map[string, Reflect.Data]): Array[string] {
+  Array.map(Map.entries(fields), { `${quote(x.key)}:${render(x.value)}` })
+}
+
+func quote(s: string): string { `"${String.replace(s, "\"", "\\\"")}"` }
+
+// Two-stage decoding: keep part of the input raw and decode it later.
+type Envelope = { kind: string, payload: Reflect.Data }
+type Login = { user: string }
+
+func handle(text: string): Result[void, Error] {
+  var env = try decode(Envelope, text)
+  if env.kind == "login" {
+    var login = try Reflect.fromData(Login, env.payload)
+    print(login.user)
+  }
+  Result.ok(void)
+}
+
+func main(): void { void }

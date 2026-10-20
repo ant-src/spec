@@ -327,7 +327,7 @@ There are no interfaces, no `where` clauses, and no bounds on type constructors.
 
 ### Type declarations
 
-`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records), and the tag is marked as a record tag. When the body is a primitive type, it creates a new type as well (see Named primitive types), and the tag is marked with its base kind. Otherwise the name is an alias, and its tag is marked as an alias tag, which neither a record literal, a constructor call, nor `is` accepts, since an alias has no runtime identity. An alias is interchangeable with its body: `type Id = int | string` is the union written out, and `type Shape = Circle | Rect` likewise. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. A type name in expression position is a value of type `Type[T]`, the handle that `Reflect` and decoders such as `Json.decode` take (section 11); a generic type needs its arguments and so has no expression form. There are no classes, interfaces, or prototypes.
+`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records), and the tag is marked as a record tag. When the body is a primitive type, it creates a new type as well (see Named primitive types), and the tag is marked with its base kind. Otherwise the name is an alias, and its tag is marked as an alias tag, which neither a record literal, a constructor call, nor `is` accepts, since an alias has no runtime identity. An alias is interchangeable with its body: `type Id = int | string` is the union written out, and `type Shape = Circle | Rect` likewise. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. A type name in expression position is a value of type `Type[T]`, the handle that `Reflect` and decoders such as `Json.decode` take (section 11); a generic type needs its arguments and so has no expression form, and neither has a type parameter, since nothing stands for it at run time, so a generic function that needs a handle takes a `Type[T]` parameter. There are no classes, interfaces, or prototypes.
 
 ### Assignability
 
@@ -916,39 +916,54 @@ Iter.toArray[T](s: Seq[T]): Array[T]
 
 ### Reflect
 
-`Reflect` lets a library read a type declaration and build or inspect values of any type, which is what a generic decoder or encoder needs. It is the only part of the language that reads a `type` body at run time: `ant run` keeps each declaration as a descriptor behind its tag, and no evaluation rule consults it (section 4). A type name in expression position, such as `Config` or `Geometry.Point`, is a value of type `Type[Config]`, the handle that names a type to a function. A generic type has no expression form, since `Pair[int, string]` is not an expression; put it inside a named record.
+`Reflect` lets a library read a type declaration and build or take apart values of any type, which is what a generic decoder or encoder needs. It is the only part of the language that reads a `type` body at run time: `ant run` keeps each declaration as a descriptor behind its tag, and no evaluation rule consults it (section 4). A type name in expression position, such as `Config` or `Geometry.Point`, is a value of type `Type[Config]`, the handle that names a type to a function. A generic type has no expression form, since `Pair[int, string]` is not an expression, and neither has a type parameter, since nothing stands for it at run time; put the type inside a named record, or take a `Type[T]` parameter.
 
 ```
-type Field = { name: string, type: TypeInfo }
+type Data = null | bool | Number | string | Array[Data] | Map[string, Data] | Tagged
+type Tagged = { tag: string, fields: Map[string, Data] }
+
+type Field = { name: string, info: TypeInfo }
 type TypeInfo = Prim | TaggedOf | ArrayOf | MapOf | RecordOf | UnionOf | AnonOf | FuncOf
-type Prim = { name: string }                     // "int" … "float64", "bool", "string", "null", "void"
-type TaggedOf = { name: string, base: Prim, make: func(Reflect.Value): Reflect.Value }   // a named primitive type
+type Prim = { name: string }                     // "int8" … "float64", "bool", "string", "null", "void"
+type TaggedOf = { name: string, base: Prim }     // a named primitive type
 type ArrayOf = { element: TypeInfo }
 type MapOf = { key: TypeInfo, value: TypeInfo }
-type RecordOf = { name: string, fields: func(): Array[Field], make: func(Map[string, Reflect.Value]): Reflect.Value }
+type RecordOf = { name: string, fields: func(): Array[Field] }
 type UnionOf = { members: Array[TypeInfo] }
 type AnonOf = { fields: Array[Field] }
 type FuncOf = {}
 
 Reflect.info[T](t: Type[T]): TypeInfo                          // the declaration, aliases expanded, type arguments substituted
-Reflect.box[T](v: T): Reflect.Value
-Reflect.unbox[T](t: Type[T], v: Reflect.Value): T | null       // null unless v conforms to t through every field and element
-Reflect.convert(v: Reflect.Value, kind: string): Reflect.Value | null   // numeric to the named kind; null when lossy or not a number
-Reflect.kindOf(v: Reflect.Value): string                       // "int" … "float64", "bool", "string", "null", "void", "array", "map", "record", "func"; a tagged primitive reports its base kind
-Reflect.tagOf(v: Reflect.Value): string | null                 // the type name of a record or a tagged primitive
-Reflect.fieldsOf(v: Reflect.Value): Map[string, Reflect.Value] | null
-Reflect.elementsOf(v: Reflect.Value): Array[Reflect.Value] | null
-Reflect.entriesOf(v: Reflect.Value): Array[Entry[Reflect.Value, Reflect.Value]] | null
-Reflect.asInt(v: Reflect.Value): int | null                    // likewise asFloat, exact from any numeric kind, asString, asBool; a tagged primitive unwraps
-Reflect.makeArray(items: Array[Reflect.Value]): Reflect.Value
-Reflect.makeMap(entries: Array[Entry[Reflect.Value, Reflect.Value]]): Reflect.Value
+Reflect.fromData[T](t: Type[T], data: Data): Result[T, Error]  // builds a value of t from a tree; the error names the path
+Reflect.toData[T](t: Type[T], value: T): Data                  // the inverse; ◆ a function, a map key that is not a string, a cycle
 ```
 
-`Reflect.Value` is an opaque box, like a `Mutex`, that holds one value of any kind. It is the only way a value of unknown type travels, and it does not leave this namespace. `RecordOf.fields` is a function so that recursive types terminate, and `RecordOf.make` captures the tag, so no untyped tag handle exists; it requires exactly the declared field names (◆) and does not check the values. `Reflect.unbox` is the boundary that keeps the checker's guarantee: a value it returns conforms to `t` through every field and element, so a decoded `Config` is a real `Config`. A field of function type never conforms, and an anonymous record type cannot be built, because it has no tag. `TaggedOf.make` tags a boxed value of the base kind (◆ otherwise), which is how a decoder fills a `UserId` field from a bare string. `Reflect.convert` exists because a decoder knows the target kind only as a string from the descriptor and must fail softly where the language's conversions panic.
+`Data` is the one representation of data whose type is not known statically: a plain union that any code can build with literals, inspect with `is`, and compare with `==`. A record appears as a `Map` of its fields, or as a `Tagged` node where its name matters. `Reflect.fromData` builds a value of `t` by the declared type at each position, and `Reflect.toData` takes one apart the same way; both construct fresh arrays, maps, and records, so no object is ever shared between a `Data` tree and a typed value, which is what keeps invariance (section 4) intact. `RecordOf.fields` is a function so that recursive types terminate.
+
+What `fromData` accepts at a position, by the declared type there:
+
+| Declared type | Accepts |
+|---|---|
+| a numeric kind | a number, through the conversion table of section 12; an error where the table says panic |
+| `bool`, `string`, `null` | a value of that kind |
+| a named primitive type | a value of its base kind, which is then tagged |
+| `Array[T]` | an array, each element as `T` |
+| `Map[K, V]`, with `K` `string` or a named type over it | a `Map`, each value as `V`; a `Tagged` is an error |
+| a named record type | a `Map`, or a `Tagged` with that name: entries by field name, a key with no field ignored, a field with no key `null` when its type allows it and an error otherwise |
+| a union | the member the node picks: `null`, `bool`, `string`, and an array pick by kind; a number picks the first numeric member in declaration order that the table accepts; a `Tagged` picks the record it names; a `Map` picks the single record member, or else the map member; none or several is an error |
+| `Reflect.Data` | the node itself |
+| `void`, a function type, an anonymous record type, any other map key type | an error: the type cannot be built |
+
+The error is an `Err` whose message starts with the path, such as `$.servers[2].port: expected a number`. `toData` is the exact inverse: a number keeps its kind, a named primitive becomes its base value, a map becomes a `Map`, and a record becomes a `Tagged` where the declared type is a union with more than one record member and a `Map` elsewhere, so that `fromData` reads the result back under the same handle. It panics (◆) on a function value, a map key that is not a string or a named type over `string`, a value already on its own path, and, in an unchecked program, a value that does not match the declared type.
 
 ```ant
-var config = try Json.decode(Config, text)       // Result[Config, Error]; the root is a named type
+var config = try Json.decode(Config, text)       // Result[Config, Error]: Reflect.fromData over the parsed tree
 var info = Reflect.info(Status)                  // a UnionOf whose members are the RecordOf of Active and Suspended
+
+type Envelope = { kind: string, payload: Reflect.Data }
+type Login = { user: string }
+var env = try Json.decode(Envelope, text)        // payload stays a tree
+var login = try Reflect.fromData(Login, env.payload)
 ```
 
 ### Math and Bits
@@ -1053,7 +1068,6 @@ Every value has a kind, fixed when the value is created:
 | tagged primitive | a value of one of the twelve primitive kinds plus a tag, made by calling the tag (section 4) |
 | func | a declared function, an anonymous function, or a lambda, with the scopes it captured |
 | tag | the value a `type` declaration binds (section 4), marked record, primitive with its base kind, or alias, and carrying the declaration as a descriptor for `Reflect` |
-| reflect box | a `Reflect.Value`: an opaque holder of one value of any kind (section 11) |
 | sync | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic` |
 
 Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, and tags are immutable, so for them the distinction never shows.
@@ -1075,7 +1089,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Index read `a[i]`.** `a` must be an array or a map. For an array, `i` must be an `int` from `0` up to but excluding the length, and the value is that element. For a map, the value is the entry whose key is `==` to `i`, or `null` when there is none.
 - **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest of the postfix chain is skipped. Otherwise the plain rule applies.
 - **Call `f(args)`.** `f` evaluates first and must be a function or a primitive tag. A primitive tag takes exactly one positional argument, which must have the tag's base kind, and yields that value carrying the tag. For a function, arguments evaluate in order. Positional arguments fill parameters left to right; a named argument fills the parameter of that name, which must exist and must not be filled already; every parameter still unfilled must have a default, and the defaults evaluate in the callee's scope, in parameter order, after the arguments. A lambda has the single parameter `x` and accepts zero or one positional argument. The body then runs in a new scope, and the call's value is the body's value, or the operand of the `return` that ended it.
-- **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their own kind and yield the value. For the numeric names the argument must be a number, and the result follows this table, which `Reflect.convert` shares, returning `null` where it says panic:
+- **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their own kind and yield the value. For the numeric names the argument must be a number, and the result follows this table, which `Reflect.fromData` applies as well, reporting an error where it says panic:
 
   | From | To | Rule |
   |---|---|---|
@@ -1139,7 +1153,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked |
 | ◆ top-level `var` | read before its initializer has run |
 | ◆ `panic` | always |
-| ◆ `RecordOf.make` | the field names are not exactly the declared ones |
+| `Reflect.toData` | the value does not match the declared type; ◆ it contains a function, a map key that is neither a string nor a named type over `string`, or a cycle |
 | ◆ any call | the goroutine's call depth exceeds the runtime's limit |
 | `try` | the operand is not a record tagged `Ok` or `Err` |
 | `??`, `?.`, `==`, `!=` | never |
