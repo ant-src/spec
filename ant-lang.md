@@ -544,7 +544,20 @@ if user != null {
 
 `?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each yields `null` when the left side is null. `??` takes any expression on the right, including `return` and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. Both operators require a left side whose type includes `null`; on any other type they are dead code, and a compile error.
 
-The checker narrows after a `null` test, as in the last example, but only for a local variable or a parameter. A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`, and the `else` branch gets the complement: the union minus the tested member. When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`, `continue`, or `panic`, the complement applies to the rest of the block, so `if user == null { return }` leaves `user` a `User` below it. `x ?? return ...` and `x ?? panic(...)` narrow the same way. A narrowing lasts until the next assignment to the variable; inside a loop, an assignment anywhere in the body cancels it from the loop head on. A field path such as `user.address` never narrows, because any call between the test and the use may reassign it: bind it to a local first, or use `?.` or `??`. A local that a nested function assigns does not narrow either, for the same reason.
+The checker narrows after a `null` test, as in the last example, but only for a local variable or a parameter. A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`, and the `else` branch gets the complement: the union minus the tested member. When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`, `continue`, or `panic`, the complement applies to the rest of the block, so `if user == null { return }` leaves `user` a `User` below it. `x ?? return ...` and `x ?? panic(...)` narrow the same way. After a `while` whose body contains no `break`, the complement of its condition holds, whatever the body assigned, because the condition was evaluated last. An assignment narrows the variable to the type of the assigned expression, and where branches meet, the variable has the union of the branch types, so `if c == null { c = load() }` leaves `c` a `Config`. Otherwise a narrowing lasts until the next assignment to the variable; inside a loop, an assignment anywhere in the body cancels it from the loop head on.
+
+A field path such as `user.address` never narrows, because any call between the test and the use may reassign it: bind it to a local first, or use `?.` or `??`. Narrowing is limited to locals because a local can go stale in only one way, by reassignment: a record's tag never changes and a reference never becomes `null` on its own. Another goroutine can reassign a local only through a closure that captures it, so one rule about closures makes narrowing sound under concurrency. A nested body is a lambda, an anonymous `func`, a `go` block, or a `defer` block, and the rule has two directions. A local assigned inside a nested body never narrows in the enclosing function, since the assignment may run at any moment. Inside a nested body, outer locals start at their declared type, since the body may run after a later reassignment, except that a local never assigned after its declaration keeps its narrowing there: nothing can change it, so the narrowing holds whenever and wherever the body runs.
+
+```ant
+var user = find(id)                          // User | null, never reassigned
+if user != null {
+  Mutex.withLock(lock, { print(user.name) })  // ok: user keeps its narrowing
+}
+
+var hit: User | null = null
+go { hit = find(id) }                        // assigned in a go block
+if hit != null { print(hit.name) }           // compile error: hit never narrows
+```
 
 ```ant
 if user.address != null { print(user.address.city) }   // compile error: a path does not narrow
@@ -661,6 +674,27 @@ func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
 ```
 
 Reading and writing the same memory from two goroutines without synchronization is a data race. A data race is a program error. The runtime guarantees memory safety in its presence, but not any particular result.
+
+### Sharing results
+
+A local assigned inside a `go` block never narrows (section 7), so a goroutine does not hand back a result by reassigning a local of its parent, even when a `WaitGroup` makes that safe; the checker cannot see happens-before and does not try. Share through containers instead: write into an array slot, a map entry, a record field, or an `Atomic`, and after the wait read the value into a fresh local and narrow that. A fresh local is a snapshot, so the same idiom reads shared state under a mutex.
+
+```ant
+var results: Array[Response | null] = Array.filled(n, null)
+go { results[i] = Http.get(url) }            // an index write, not a reassignment
+WaitGroup.wait(wg)
+var r = results[i]                           // a snapshot
+if r != null { print(r.status) }
+
+var latest: Atomic[Response | null] = Atomic.new(null)
+go { Atomic.store(latest, Http.get(url)) }
+WaitGroup.wait(wg)
+var v = Atomic.load(latest)
+if v != null { print(v.status) }
+
+var config = Once.value({ load() })          // lazy initialization without a nullable variable
+print(config().name)
+```
 
 ### Panics in goroutines
 
@@ -889,6 +923,7 @@ WaitGroup.wait(wg: WaitGroup): void                            // blocks until t
 
 Once.new(): Once
 Once.do(once: Once, f: func(): void): void                     // runs f the first time only; later calls wait for it
+Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value
 
 Cond.new(m: Mutex): Cond
 Cond.wait(c: Cond): void                                       // ◆ m not locked; releases m, waits, reacquires
