@@ -188,7 +188,8 @@ for_expr        = "for" ( ident | destructure ) "in" expression block ;
 go_expr         = "go" block ;
 defer_expr      = "defer" block ;
 
-return_expr     = "return" [ expression ] ;    (* the expression must start on the same line *)
+return_expr     = "return" [ expression ] ;    (* the expression must start on the same line;
+                                                  none directly inside a go or defer block *)
 break_expr      = "break" ;
 continue_expr   = "continue" ;
 

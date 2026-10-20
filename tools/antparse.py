@@ -317,15 +317,18 @@ class Parser:
         self.header = False
         self.funcs = 0     # boundaries entered: function bodies, lambdas, go and defer blocks
         self.loops = 0     # loops entered inside the current boundary
+        self.boundary = None   # the innermost boundary: "func", "lambda", "go", or "defer"
 
-    def enter_boundary(self):
-        saved = (self.funcs, self.loops)
+    def enter_boundary(self, kind):
+        """kind is "func", "lambda", "go", or "defer"; return takes no value inside the last two."""
+        saved = (self.funcs, self.loops, self.boundary)
         self.funcs += 1
         self.loops = 0
+        self.boundary = kind
         return saved
 
     def leave_boundary(self, saved):
-        self.funcs, self.loops = saved
+        self.funcs, self.loops, self.boundary = saved
 
     def loop_body(self):
         self.loops += 1
@@ -495,7 +498,7 @@ class Parser:
         name = self.expect_ident("function name")
         tparams = self.type_params() if self.at("[") else []
         sig = self.signature()
-        saved = self.enter_boundary()
+        saved = self.enter_boundary("func")
         body = self.block()
         self.leave_boundary(saved)
         return ("Func", name, tparams, sig, body)
@@ -873,7 +876,7 @@ class Parser:
                 if self.at_kind("IDENT"):
                     self.error("a named function is only allowed at the top level; bind it with var")
                 sig = self.signature()
-                saved = self.enter_boundary()
+                saved = self.enter_boundary("func")
                 body = self.block()
                 self.leave_boundary(saved)
                 return ("AnonFunc", sig, body)
@@ -887,7 +890,7 @@ class Parser:
                 return self.for_expr()
             if t.value in ("go", "defer"):
                 self.next()
-                saved = self.enter_boundary()
+                saved = self.enter_boundary(t.value)
                 body = self.block()
                 self.leave_boundary(saved)
                 return (t.value.title(), body)
@@ -898,6 +901,8 @@ class Parser:
                 r = self.raw()
                 if r.kind == "NEWLINE" or (r.kind == "OP" and r.value in (";", "}", ")", "]", ",")) or r.kind == "EOF":
                     return ("Return", None)
+                if self.boundary in ("go", "defer"):
+                    self.error(f"'return' takes no value in a {self.boundary} block")
                 return ("Return", self.expression())
             if t.value in ("break", "continue"):
                 if self.loops == 0:
@@ -925,7 +930,7 @@ class Parser:
     def sub_parser(self, src, line, col):
         """A parser for an interpolated expression, inside the same function and loop as the template."""
         sub = Parser(src, self.spec, line, col)
-        sub.funcs, sub.loops = self.funcs, self.loops
+        sub.funcs, sub.loops, sub.boundary = self.funcs, self.loops, self.boundary
         return sub
 
     def template_expression(self):
@@ -1081,7 +1086,7 @@ class Parser:
     def lambda_(self):
         self.expect("{")
         saved = self.enter_block()
-        bound = self.enter_boundary()
+        bound = self.enter_boundary("lambda")
         stmts = self.statements()
         self.leave_boundary(bound)
         self.expect("}")

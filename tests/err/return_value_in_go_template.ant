@@ -1,0 +1,5 @@
+// expect error: 'return' takes no value in a go block
+func main(): void {
+  var s: string | null = null
+  go { print(`${s ?? return "x"}`) }
+}

@@ -1,0 +1,4 @@
+// expect error: 'return' takes no value in a go block
+func main(): void {
+  go { return 1 }
+}
