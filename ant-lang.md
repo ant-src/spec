@@ -206,7 +206,7 @@ var e = Meters(3.0) * 2.0                    // compile error; unwrap or tag the
 var byUser: Map[UserId, Account] = Map{}     // keys work, since == works
 ```
 
-An operator applies to two values of the same named primitive type when it applies to the base, and the result has that type; mixing a tagged value with a plain one, or two different tags, is a compile error and a kind panic. Library functions take the base kinds, so `String.length(id)` needs `string(id)`. `is UserId` tests the tag, so `UserId | string` and `UserId | AccountId` are distinguishable unions. A type parameter the body does not mention is allowed, so `type Id[T] = string` gives `Id[User]` and `Id[Account]` as distinct static types over one tag; a union of the two is rejected, since they share it. `Ok[T]` and `Err[E]` stay records rather than taking this form, because a tag over an arbitrary payload needs a field to get the payload out, and a record with one field is exactly that.
+An operator applies to two values of the same named primitive type when it applies to the base, and the result has that type; mixing a tagged value with a plain one, or two different tags, is a compile error and a kind panic. Library functions take the base kinds, so `String.length(id)` needs `string(id)`. In expression position `UserId` is a `Type[UserId]` value like any type name (section 11), and calling it is the constructor, in the checker as in the interpreter. `is UserId` tests the tag, so `UserId | string` and `UserId | AccountId` are distinguishable unions. A type parameter the body does not mention is allowed, so `type Id[T] = string` gives `Id[User]` and `Id[Account]` as distinct static types over one tag; a union of the two is rejected, since they share it. `Ok[T]` and `Err[E]` stay records rather than taking this form, because a tag over an arbitrary payload needs a field to get the payload out, and a record with one field is exactly that.
 
 ### Arrays and maps
 
@@ -1109,7 +1109,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | call | the callee is neither a function nor a primitive tag; a primitive tag given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
 | record literal | the head is not a record tag; a spread operand is not a record |
 | array literal | a spread operand is not an array |
-| `is` | the right side is a path that does not evaluate to a record tag |
+| `is` | the right side is a path that does not evaluate to a record or primitive tag |
 | `for` | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned |
 | destructuring | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions |
 | `_` | ◆ read |
