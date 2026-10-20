@@ -1,0 +1,14 @@
+// An interpolation is inside the function and loop that contain the template.
+
+func label(s: string | null): string {
+  `value: ${s ?? return "missing"}`
+}
+
+func main(): void {
+  for x in [1, null] {
+    print(`${x ?? continue}`)
+    print(`${x ?? break}`)
+  }
+  var f = { `${x ?? return "none"}` }
+  print(label(null) + f(null))
+}

@@ -857,7 +857,7 @@ class Parser:
             return (t.kind.title(), t.value)
         if t.kind == "TEMPLATE":
             self.next()
-            exprs = [Parser(src, self.spec, line, col).template_expression() for (line, col, src) in t.parts]
+            exprs = [self.sub_parser(src, line, col).template_expression() for (line, col, src) in t.parts]
             return ("Template", t.value, exprs)
         if t.kind == "IDENT":
             self.next()
@@ -921,6 +921,12 @@ class Parser:
                 self.next()
                 return ("Placeholder",)
         self.error(f"unexpected {t}")
+
+    def sub_parser(self, src, line, col):
+        """A parser for an interpolated expression, inside the same function and loop as the template."""
+        sub = Parser(src, self.spec, line, col)
+        sub.funcs, sub.loops = self.funcs, self.loops
+        return sub
 
     def template_expression(self):
         self.nl += 1
