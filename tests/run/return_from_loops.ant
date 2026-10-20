@@ -1,4 +1,4 @@
-// return leaves the function from inside loops and from a ?? operand (sections 5, 7).
+// return leaves the function from inside loops and from a ?? operand; while true without break is never (sections 5, 7).
 func firstNegative(xs: Array[int]): int | null {
   for x in xs {
     if x < 0 { return x }
@@ -10,11 +10,10 @@ func label(s: string | null): string { `value: ${s ?? return "missing"}` }
 
 func count(limit: int): int {
   var n = 0
-  while n < 100 {
+  while true {
     n += 1
     if n == limit { return n }
   }
-  n
 }
 
 func main(): void {

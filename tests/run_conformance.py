@@ -10,6 +10,7 @@ comments after a "// ---- expected" line:
     // exit: <status>                          (default 0)
     // err: <text standard error must contain> (repeat as needed)
     // noparse                                 (the program is a syntax error; exit must be 2)
+    // args: a b c                             (command-line arguments, split on spaces)
 
 tests/run/lib/ holds modules the programs import; they are not tests. With --ant, the
 interpreter is invoked as `<ant> run <file>` from the repository root with a timeout.
@@ -24,7 +25,7 @@ from antparse import ParseError, parse  # noqa: E402
 
 
 def expectations(src):
-    out, exit_status, err, noparse = [], 0, [], False
+    out, exit_status, err, noparse, args = [], 0, [], False, []
     for line in src.splitlines():
         if line.startswith("// out:"):
             rest = line[len("// out:"):]
@@ -35,7 +36,9 @@ def expectations(src):
             err.append(line[len("// err:"):].strip())
         elif line.strip() == "// noparse":
             noparse = True
-    return out, exit_status, err, noparse
+        elif line.startswith("// args:"):
+            args = line[len("// args:"):].split()
+    return out, exit_status, err, noparse, args
 
 
 def programs():
@@ -49,7 +52,7 @@ def main():
     for fn in programs():
         path = os.path.join(RUN, fn)
         src = open(path, encoding="utf-8").read()
-        out, status, err, noparse = expectations(src)
+        out, status, err, noparse, prog_args = expectations(src)
         count += 1
         if "// ---- expected" not in src:
             failures.append(f"{fn}: no expectations")
@@ -66,7 +69,7 @@ def main():
         if ant is None:
             continue
         try:
-            proc = subprocess.run([ant, "run", os.path.relpath(path, ROOT)], cwd=ROOT,
+            proc = subprocess.run([ant, "run", os.path.relpath(path, ROOT)] + prog_args, cwd=ROOT,
                                   capture_output=True, text=True, timeout=20)
         except subprocess.TimeoutExpired:
             failures.append(f"{fn}: timed out")

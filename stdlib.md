@@ -44,7 +44,7 @@ Time.monotonic(): int             // milliseconds from an arbitrary origin, for 
 ## Os
 
 ```
-Os.args(): Array[string]
+Os.args(): Array[string]              // the arguments after the program path: `ant run main.ant a b` gives ["a", "b"]
 Os.env(name: string): string | null
 Os.exit(status: int): never
 ```

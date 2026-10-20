@@ -447,7 +447,7 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 ### Loops
 
-`for` iterates over an array, a map, a string, or a sequence function; over a string it yields each code point as a one-character string. Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have type `void`. `break` and `continue` work as in JavaScript, without labels.
+`for` iterates over an array, a map, a string, or a sequence function; over a string it yields each code point as a one-character string. Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have type `void`, except that a `while` whose condition is the literal `true` and whose body contains no `break` has type `never`, since only `return` or a panic can leave it. `break` and `continue` work as in JavaScript, without labels.
 
 ```ant
 for user in users {
@@ -904,7 +904,7 @@ String.toFloat(s: string): float64 | null
 String.from[T](value: T): string
 ```
 
-`String.from` renders any value, and `print` and template strings use it, so this is the format a program's output has. Integers render in decimal. Floats render as the shortest decimal that reads back to the same value, with `.0` added when integral, and as `NaN`, `Infinity`, or `-Infinity`. A string renders as itself at the top level and quoted with escapes inside a container. `bool`, `null`, and `void` render as their literals. Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with keys always quoted when they are strings, and records as `Point{ x: 1.0, y: 2.0 }` with the name of their tag, each with entries in iteration order and separated by `, `. A named primitive renders as its constructor call, `UserId("u-1")`. Functions render as `func`, a constructor and a tag as their type's name, and sync objects as their namespace name. A value already being rendered renders as `...`, so cyclic structures terminate. It is the only function the language calls implicitly, and only inside template strings.
+`String.from` renders any value, and `print` and template strings use it, so this is the format a program's output has. Integers render in decimal. Floats render as the shortest decimal that reads back to the same value, with `.0` added when integral, and as `NaN`, `Infinity`, or `-Infinity`. A string renders as itself at the top level and quoted with escapes inside a container. `bool`, `null`, and `void` render as their literals. Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with keys always quoted when they are strings, and records as `Point{ x: 1.0, y: 2.0 }` with the name of their tag and the fields in declaration order, each with entries separated by `, `; an empty array, map, or record renders as `[]`, `Map{}`, or `Empty{}`, with nothing inside the brackets. A named primitive renders as its constructor call, `UserId("u-1")`. Functions render as `func`, a constructor and a tag as their type's name, and sync objects as their namespace name. A value already being rendered renders as `...`, so cyclic structures terminate. It is the only function the language calls implicitly, and only inside template strings.
 
 ### Iter
 
@@ -1018,7 +1018,7 @@ Every value has a kind, fixed when the value is created:
 | `bool`, `string`, `null`, `void` | as in section 4 |
 | array | a growable sequence of values |
 | map | a hash table from values to values, keyed by `==`; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==` |
-| record | a tag plus a fixed set of named fields |
+| record | a tag plus a fixed set of named fields, in the order the type declares them |
 | tagged primitive | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4) |
 | func | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind |
 | tag | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other |
@@ -1035,7 +1035,7 @@ A block opens a scope. `var` binds a name in the current scope from its declarat
 Operands evaluate left to right (section 5). Below, "must be" means the operation panics otherwise.
 
 - **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string evaluates each `${...}` in order and renders it with `String.from`.
-- **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. The result is a new record with that tag and those fields.
+- **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. The result is a new record with that tag and those fields, in declaration order whatever order the literal wrote them.
 - **Map literal `Map{ ... }`.** A key that is a single word, an identifier or a keyword, is the string of that word, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value that must be an array. The result is a new array.
 - **Variable.** The value bound to the name.

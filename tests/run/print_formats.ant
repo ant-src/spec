@@ -1,5 +1,6 @@
 // String.from: the rendering of every kind of value (section 11, String).
 type Point = { x: float64, y: float64 }
+type Empty = {}
 type UserId = string
 
 func main(): void {
@@ -28,6 +29,10 @@ func main(): void {
   print(nested)
   var empty: Array[int] = []
   print(empty)
+  var emptyMap: Map[string, int] = Map{}
+  print(emptyMap)
+  print(Empty{})
+  print(Point{ y: 2.0, x: 1.0 })
 }
 
 // ---- expected
@@ -53,3 +58,6 @@ func main(): void {
 // out: 2 and s
 // out: [[1], []]
 // out: []
+// out: Map{}
+// out: Empty{}
+// out: Point{ x: 1.0, y: 2.0 }
