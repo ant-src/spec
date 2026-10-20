@@ -307,7 +307,7 @@ There are no interfaces, no `where` clauses, and no bounds on type constructors.
 
 ### Type declarations
 
-`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records). Otherwise the name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. A type name in expression position is a value of type `Type[T]`, the handle that `Reflect` and decoders such as `Json.decode` take (section 11); a generic type needs its arguments and so has no expression form. There are no classes, interfaces, or prototypes.
+`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records), and the tag is marked as a record tag. Otherwise the name is an alias, and its tag is marked as an alias tag, which neither a record literal nor `is` accepts, since an alias has no runtime identity. The name is an alias: `type UserId = int` makes `UserId` interchangeable with `int`, and `type Shape = Circle | Rect` is interchangeable with the union written out. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. A type name in expression position is a value of type `Type[T]`, the handle that `Reflect` and decoders such as `Json.decode` take (section 11); a generic type needs its arguments and so has no expression form. There are no classes, interfaces, or prototypes.
 
 ### Assignability
 
@@ -414,7 +414,7 @@ The branches are checked against the expected type, or the `if` has the union of
 
 ### `is`
 
-`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record type, a primitive, `null`, `Array`, `Map`, or `func`, written without type arguments, because the runtime has only tags and kinds to look at. The static type of `x` must be a union with `T` as a member, or an anonymous record type to which the named record type `T` is assignable, in which case the test narrows `x` to the one instantiation of `T` assignable to that type and is a compile error when the anonymous type does not determine every type argument of `T`; otherwise the test is always true or always false, which is a compile error. `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
+`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record type, a primitive, `null`, `Array`, `Map`, or `func`, written without type arguments, because the runtime has only tags and kinds to look at. An alias is not accepted: with `type UserId = int`, the checker sees `UserId` as `int` while the runtime would see a tag no value carries, so `x is UserId` is a compile error that says to write `x is int`, and a panic in an unchecked program. The static type of `x` must be a union with `T` as a member, or an anonymous record type to which the named record type `T` is assignable, in which case the test narrows `x` to the one instantiation of `T` assignable to that type and is a compile error when the anonymous type does not determine every type argument of `T`; otherwise the test is always true or always false, which is a compile error. `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
 
 ```ant
 Array.filter(shapes, { x is Circle })
@@ -1027,7 +1027,7 @@ A block opens a scope. `var` binds a name in the current scope from its declarat
 Operands evaluate left to right (section 5). Below, "must be" means the operation panics otherwise.
 
 - **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string evaluates each `${...}` in order and renders it with `String.from`.
-- **Record literal `Head{ ... }`.** The head must evaluate to a tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. The result is a new record with that tag and those fields.
+- **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. The result is a new record with that tag and those fields.
 - **Map literal `Map{ ... }`.** A key that is a single identifier is the string of its name, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value that must be an array. The result is a new array.
 - **Variable.** The value bound to the name.
@@ -1039,7 +1039,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Arithmetic `+ - * / %`.** Both operands must be numbers of the same kind, except that `+` also takes two strings and concatenates them. An integer result that does not fit the kind panics, which includes unsigned subtraction below zero. Integer `/` truncates toward zero, `%` takes the sign of the dividend, and both panic on a zero divisor. Float arithmetic follows IEEE 754 and never panics. Unary `-` needs a number; `!` needs a `bool`.
 - **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, or two strings, which compare by code point.
 - **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`, `null`, and `void` values are equal by value; records have the same tag and `==` fields; arrays have the same length and `==` elements in order; maps have the same key set and `==` values per key; functions, tags, and sync objects are the same object. A pair of values already under comparison counts as equal (section 4). Values of different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
-- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`, and the ten numeric names test the kind of `a`. Any other path evaluates and must be a tag, and the test is whether `a` is a record with that tag. The result is a `bool`.
+- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`, and the ten numeric names test the kind of `a`. Any other path evaluates and must be a record tag, not an alias tag, and the test is whether `a` is a record with that tag. The result is a `bool`.
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right operand must be a `bool` when it is evaluated.
 - **`a ?? b`.** Yields `a`, unless it is `null`, in which case `b` is evaluated and yielded.
 - **Pipe `a | f(b)`.** Is `f(a, b)`: `a` evaluates, then `f`, then `b`.
@@ -1082,9 +1082,9 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | `a.b`, `a.b = v` | `a` is not a record, or has no field `b` |
 | `a[i]`, `a[i] = v` | `a` is neither an array nor a map; ◆ `a` is an array and `i` is not an `int` from `0` up to but excluding the length |
 | call | the callee is not a function; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
-| record literal | the head is not a tag; a spread operand is not a record |
+| record literal | the head is not a record tag; a spread operand is not a record |
 | array literal | a spread operand is not an array |
-| `is` | the right side is a path that does not evaluate to a tag |
+| `is` | the right side is a path that does not evaluate to a record tag |
 | `for` | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned |
 | destructuring | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions |
 | `_` | ◆ read |
