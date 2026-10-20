@@ -624,7 +624,7 @@ Because unions are flat, error types compose without wrapping. A function that p
 
 ### `try`
 
-`try` unwraps a `Result` or a nullable value. On `Ok{ value }` or a non-null value it evaluates to the value. On an `Err` it returns a fresh `Err` carrying the same error from the enclosing function, typed by that function's return type; on `null` it returns `null`. The enclosing function must therefore return a `Result` whose error type accepts the error, or a type that includes `null`.
+`try` unwraps a `Result`. Its operand must have a `Result[T, E]` type; on `Ok{ value }` it evaluates to the value, of type `T`, and on an `Err` it returns a fresh `Err` carrying the same error from the enclosing function, typed by that function's return type. The enclosing function must therefore return a `Result` whose error type accepts `E`. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a compile error, since it is not a `Result`; under erasure a second meaning chosen by static type would be unsound.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
@@ -1051,7 +1051,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates by index from zero while the index is below the current length, so elements appended during the loop are visited and removed ones are not. Over a map it visits each entry once as an `Entry` record in unspecified order; inserting or removing during the loop is a program error of the data-race kind, and entries may be skipped or seen twice. Over a string it yields each code point as a one-character string. Over a function it calls the function with a fresh `yield` function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or after the sequence function has returned, panics; a `return` or a panic in the body propagates through the sequence function like any other call. A destructuring on the left reads the named fields of each element, which must be a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop, running the deferred blocks of every block they exit.
 - **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body or lambda, running the deferred blocks of every block it exits.
-- **`try e`.** If the value is `null`, returns `null` from the enclosing function. If it is a record tagged `Err`, returns a new `Err` record with the same `error` field. If it is a record tagged `Ok`, yields its `value` field. Any other value is yielded unchanged.
+- **`try e`.** The value must be a record tagged `Ok` or `Err`. `Ok` yields its `value` field; `Err` returns a new `Err` record with the same `error` field from the enclosing function.
 - **Lambda and anonymous `func`.** Create a function value that captures the current scopes.
 - **`defer { ... }`.** Registers the block with the innermost enclosing block. The value is `void`.
 - **`go { ... }`.** Starts a new goroutine that evaluates the block, and yields `void` at once.
@@ -1093,7 +1093,8 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | ◆ `panic` | always |
 | ◆ `RecordOf.make` | the field names are not exactly the declared ones |
 | ◆ any call | the goroutine's call depth exceeds the runtime's limit |
-| `??`, `?.`, `try`, `==`, `!=` | never |
+| `try` | the operand is not a record tagged `Ok` or `Err` |
+| `??`, `?.`, `==`, `!=` | never |
 
 ## 13. Example
 
