@@ -642,7 +642,7 @@ func copy(src: string, dst: string): Result[void, Error] {
 
 ### Goroutines
 
-`go` runs a block on a new goroutine and returns immediately. Goroutines are cheap, and any function can start one or block inside one; there are no `async` functions or colored call chains. Blocking library calls such as file and network I/O block only the calling goroutine.
+`go` runs a block on a new goroutine and returns immediately, with type `void`. There is no handle to join or to read a result from: results come back through shared memory (Sharing results, below), completion through a `WaitGroup`, and a goroutine's panic is reported, not returned. Goroutines are cheap, and any function can start one or block inside one; there are no `async` functions or colored call chains. Blocking library calls such as file and network I/O block only the calling goroutine.
 
 ```ant
 go { sendReport(report) }
@@ -1102,9 +1102,8 @@ func main() {
 
 Each item below is a choice this draft made for the sake of having examples, not a settled design. The current choice is stated first.
 
-1. **`go` returns nothing.** Results come back through shared memory and a `WaitGroup`. A handle with `join` would be more convenient but is a channel in disguise, and panics would need a representation on it.
-2. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
-3. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
-4. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
-5. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
-6. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
+1. **Data races are undefined in outcome but memory safe.** The runtime cost of that guarantee is unexamined.
+2. **Packages.** Imports name files only. How packages are named, resolved, and versioned, and whether re-export is needed, are open.
+3. **Unions must be distinguishable at run time,** which limits them to one array, one map, one function, and one anonymous record member. Named records are free because they carry tags.
+4. **Nothing is immutable** except strings. A `readonly` field modifier or frozen records may be needed for safe sharing between goroutines.
+5. **Deferred syntax.** Raw strings, character literals, string literal types, pattern matching, labeled loops, record destructuring assignment, and destructuring in parameters are left out until a need appears.
