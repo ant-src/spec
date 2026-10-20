@@ -499,6 +499,8 @@ An array destructuring is also an assignment target. Its positions are assignabl
 
 These have type `never`, so they can appear anywhere an expression is expected. `return` takes the whole expression to its right, so `x ?? return y + 1` returns `y + 1`; parenthesize it to end earlier. `panic` is an ordinary function of type `never` (section 8).
 
+A function body, a lambda, a `go` block, and a `defer` block are the four boundaries. `return` leaves the innermost one; inside a `go` or `defer` block it takes no value, since neither has a result. `break` and `continue` target the innermost loop inside the same boundary, so a `break` in a lambda or a `go` block cannot leave a loop outside it, and one with no loop to target is a syntax error, as is a `return` outside any boundary. The parser enforces all of this.
+
 ```ant
 var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
 ```
@@ -644,7 +646,7 @@ Because unions are flat, error types compose without wrapping. A function that p
 
 ### `try`
 
-`try` unwraps a `Result`. Its operand must have a `Result[T, E]` type; on `Ok{ value }` it evaluates to the value, of type `T`, and on an `Err` it returns a fresh `Err` carrying the same error from the enclosing function, typed by that function's return type. The enclosing function must therefore return a `Result` whose error type accepts `E`. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a compile error, since it is not a `Result`; under erasure a second meaning chosen by static type would be unsound.
+`try` unwraps a `Result`. Its operand must have a `Result[T, E]` type; on `Ok{ value }` it evaluates to the value, of type `T`, and on an `Err` it returns a fresh `Err` carrying the same error from the enclosing function, typed by that function's return type. The enclosing function must therefore return a `Result` whose error type accepts `E`; a `go` or `defer` block has no result, so `try` directly inside one is a compile error. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a compile error, since it is not a `Result`; under erasure a second meaning chosen by static type would be unsound.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
@@ -715,6 +717,18 @@ func fetchAll(urls: Array[string]): Array[Result[Response, Error]] {
 ```
 
 Reading and writing the same memory from two goroutines without synchronization is a data race. A data race is a program error, and the runtime guarantees memory safety in its presence, but not any particular result. Concretely: a racy read of a variable, field, or element observes some value that was stored there, never a mix of two or a value from nowhere; a racy array or map operation observes the state before or after the concurrent mutation, or panics with the ordinary index or key error, never a corrupted structure; and the interpreter itself never crashes. An implementation may also detect a race and end the program with a report and exit status 1, since the state of a racy program is not worth continuing. The guarantee costs nothing for numbers, references, strings, and records, one atomic header load per array operation, and one lock per map mutation.
+
+### Visibility
+
+Within one goroutine, effects happen in program order. Across goroutines, a write is visible to a read only when something orders them, and these are the orderings, in the sense of Go's memory model:
+
+- The `go` expression happens before the first action of the goroutine it starts.
+- `Mutex.unlock`, and the release at the end of `withLock`, happen before every later `lock` of the same mutex. For an `RwMutex`, a write unlock happens before every later read or write lock, and a read unlock before every later write lock.
+- A `WaitGroup.done` happens before the return of the `wait` it unblocks.
+- The completion of the function given to `Once.do` or `Once.value` happens before any call of them returns.
+- All operations on all `Atomic` objects form one total order, and a `store` happens before every `load` that observes it.
+
+`Cond` adds nothing; its mutex supplies the order. A goroutine's exit is ordered with nothing, so a program that needs a goroutine's result waits on a `WaitGroup`, not on the goroutine being gone. A data race is then exactly two accesses to one variable, field, or element from different goroutines, at least one of them a write, with no ordering between them.
 
 ### Sharing results
 
@@ -1006,6 +1020,7 @@ WaitGroup.wait(wg: WaitGroup): void                            // blocks until t
 Once.new(): Once
 Once.do[T](once: Once, f: func(): T): void                     // runs f the first time only and discards its value; later calls wait for it
 Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value
+                                                               // for both: if f panics, the once is complete and every call, waiting or later, panics with the same message
 
 Cond.new(m: Mutex): Cond
 Cond.wait(c: Cond): void                                       // ◆ m not locked; releases m, waits, reacquires
@@ -1073,8 +1088,8 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **`if`.** The condition must be a `bool`. The value is the chosen branch's value; with no `else` and a `false` condition it is `void`.
 - **`while`.** Evaluates the condition, which must be a `bool`, before each iteration. The value is `void`.
 - **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates by index from zero while the index is below the current length, so elements appended during the loop are visited and removed ones are not. Over a map it visits each entry once as an `Entry` record in unspecified order; inserting or removing during the loop is a program error of the data-race kind, and entries may be skipped or seen twice. Over a string it yields each code point as a one-character string. Over a function it calls the function with a fresh `yield` function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or after the sequence function has returned, panics; a `return` or a panic in the body propagates through the sequence function like any other call. A destructuring on the left reads the named fields of each element, which must be a record with those fields. The value is `void`.
-- **`break`, `continue`.** Leave or restart the innermost enclosing loop, running the deferred blocks of every block they exit.
-- **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body or lambda, running the deferred blocks of every block it exits.
+- **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function body, lambda, `go` block, or `defer` block, running the deferred blocks of every block they exit.
+- **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body, lambda, `go` block, or `defer` block, running the deferred blocks of every block it exits. In a `go` block the value is discarded; in a `defer` block it is discarded and the deferred block ends.
 - **`try e`.** The value must be a record tagged `Ok` or `Err`. `Ok` yields its `value` field; `Err` returns a new `Err` record with the same `error` field from the enclosing function.
 - **Lambda and anonymous `func`.** Create a function value that captures the current scopes.
 - **`defer { ... }`.** Registers the block with the innermost enclosing block. The value is `void`.

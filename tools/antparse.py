@@ -289,6 +289,23 @@ class Parser:
         self.i = 0
         self.nl = 0        # > 0: newlines are ignored
         self.header = False
+        self.funcs = 0     # boundaries entered: function bodies, lambdas, go and defer blocks
+        self.loops = 0     # loops entered inside the current boundary
+
+    def enter_boundary(self):
+        saved = (self.funcs, self.loops)
+        self.funcs += 1
+        self.loops = 0
+        return saved
+
+    def leave_boundary(self, saved):
+        self.funcs, self.loops = saved
+
+    def loop_body(self):
+        self.loops += 1
+        body = self.block()
+        self.loops -= 1
+        return body
 
     # --- token helpers
     def raw(self):
@@ -442,7 +459,9 @@ class Parser:
         name = self.expect_ident("function name")
         tparams = self.type_params() if self.at("[") else []
         sig = self.signature()
+        saved = self.enter_boundary()
         body = self.block()
+        self.leave_boundary(saved)
         return ("Func", name, tparams, sig, body)
 
     def type_decl(self):
@@ -818,28 +837,35 @@ class Parser:
                 if self.at_kind("IDENT"):
                     self.error("a named function is only allowed at the top level; bind it with var")
                 sig = self.signature()
-                return ("AnonFunc", sig, self.block())
+                saved = self.enter_boundary()
+                body = self.block()
+                self.leave_boundary(saved)
+                return ("AnonFunc", sig, body)
             if t.value == "if":
                 return self.if_expr()
             if t.value == "while":
                 self.next()
                 cond = self.header_expr()
-                return ("While", cond, self.block())
+                return ("While", cond, self.loop_body())
             if t.value == "for":
                 return self.for_expr()
-            if t.value == "go":
+            if t.value in ("go", "defer"):
                 self.next()
-                return ("Go", self.block())
-            if t.value == "defer":
-                self.next()
-                return ("Defer", self.block())
+                saved = self.enter_boundary()
+                body = self.block()
+                self.leave_boundary(saved)
+                return (t.value.title(), body)
             if t.value == "return":
+                if self.funcs == 0 and not self.spec:
+                    self.error("'return' outside a function")
                 self.next()
                 r = self.raw()
                 if r.kind == "NEWLINE" or (r.kind == "OP" and r.value in (";", "}", ")", "]", ",")) or r.kind == "EOF":
                     return ("Return", None)
                 return ("Return", self.expression())
             if t.value in ("break", "continue"):
+                if self.loops == 0:
+                    self.error(f"'{t.value}' outside a loop in this function, lambda, go, or defer block")
                 self.next()
                 return (t.value.title(),)
             self.error(f"unexpected {t}")
@@ -897,7 +923,7 @@ class Parser:
             target = ("Name", self.expect_ident("loop variable"))
         self.expect("in")
         it = self.header_expr()
-        return ("For", target, it, self.block())
+        return ("For", target, it, self.loop_body())
 
     def destructure(self):
         if self.at("["):
@@ -1003,7 +1029,9 @@ class Parser:
     def lambda_(self):
         self.expect("{")
         saved = self.enter_block()
+        bound = self.enter_boundary()
         stmts = self.statements()
+        self.leave_boundary(bound)
         self.expect("}")
         self.leave(saved)
         return ("Lambda", stmts)

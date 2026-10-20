@@ -1,0 +1,6 @@
+// expect error: 'continue' outside a loop
+func f(xs: Array[int]) {
+  for x in xs {
+    Array.each(xs, { continue })
+  }
+}
