@@ -876,7 +876,7 @@ Map.same[K, V](m: Map[K, V], n: Map[K, V]): bool               // identity
 
 ### String
 
-A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear, so a loop over indices would be quadratic, and indexing by byte would be a trap. Lengths, indices, and slices count code points, `for` iterates them (section 5), and `String.toBytes` gives the bytes.
+A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear, so a loop over indices would be quadratic, and indexing by byte would be a trap. Lengths, indices, and slices count code points, `for` iterates them (section 5), `String.toCodePoints` gives them as integers, and `String.toBytes` gives the bytes.
 
 ```
 String.length(s: string): int
@@ -897,6 +897,8 @@ String.toLower(s: string): string
 String.chars(s: string): Array[string]                         // one code point each
 String.toBytes(s: string): Array[byte]                         // UTF-8
 String.fromBytes(bytes: Array[byte]): string | null            // null on invalid UTF-8
+String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
+String.fromCodePoints(points: Array[int]): string | null       // null when a value is not a scalar value
 String.toInt(s: string): int | null                            // decimal, optional sign; null otherwise
 String.toFloat(s: string): float64 | null
 String.from[T](value: T): string
