@@ -1,0 +1,13 @@
+// Keywords and reserved words as field names: after a dot and before a colon.
+
+type Event = { type: string, class: string, in: bool }
+
+func main(): void {
+  var ev = Event{ type: "login", class: "a", in: true }
+  var kind = ev.type
+  var cls = ev?.class
+  var m = Map{ type: 1, null: 2, function: 3, "if": 4 }
+  var { type: t, in: inside } = ev
+  print(`${ev.type} ${t} ${inside} ${m["type"]} ${cls}`)
+  if ev.in { print(kind) }
+}

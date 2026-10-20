@@ -106,6 +106,9 @@ def run_inline():
     # shorthand record entry
     e = expr("Point{ x, y: 2 }")
     check("shorthand", e == ("RecordLit", ["Point"], [("Entry", ("Ident", "x"), ("Ident", "x")), ("Entry", ("Ident", "y"), ("Int", "2"))]), repr(e))
+    # a keyword before ":" is a name, and as a map key the string of that word
+    e = expr("Map{ type: 1, null: 2 }")
+    check("keyword keys", e == ("MapLit", [("Entry", ("String", '"type"'), ("Int", "1")), ("Entry", ("String", '"null"'), ("Int", "2"))]), repr(e))
     # greedy function return type
     f = file("type H = func(int): A | B\n")
     check("greedy return type", f[2][0][3][0] == "TFunc" and f[2][0][3][2][0] == "Union", repr(f))

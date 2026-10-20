@@ -1,0 +1,4 @@
+// expect error: cannot be bound
+func main(): void {
+  var { type } = ev
+}

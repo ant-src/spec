@@ -28,6 +28,7 @@ digit           = "0" | ... | "9" ;
 hex_digit       = digit | "a" | ... | "f" | "A" | ... | "F" ;
 ident           = ( letter | "_" ) { letter | digit | "_" } ;
                   (* not a keyword or a reserved word; "_" alone is write-only *)
+name            = ident | keyword | reserved ;                  (* a field name; section 2 *)
 
 keyword         = "break" | "continue" | "defer" | "else" | "export" | "false"
                 | "for" | "func" | "go" | "if" | "import" | "in" | "is"
@@ -86,7 +87,7 @@ type_term       = type_path [ type_args ]
 type_path       = ident { "." ident } ;      (* int, bool, never, Array, Geometry.Point, ... *)
 type_args       = "[" type { "," type } [ "," ] "]" ;
 record_type     = "{" [ field_type { "," field_type } [ "," ] ] "}" ;
-field_type      = ident ":" type ;
+field_type      = name ":" type ;
 func_type       = "func" "(" [ ft_param { "," ft_param } [ "," ] ] ")" ":" type ;
                   (* the return type is greedy: func(T): A | B returns A | B *)
 ft_param        = [ ident ":" ] type ;       (* ident followed by ":" names the parameter *)
@@ -133,8 +134,8 @@ unary           = ( "-" | "!" | "try" ) unary
                 | postfix ;
 
 postfix         = primary { postfix_op } ;
-postfix_op      = "." ident
-                | "?." ident
+postfix_op      = "." name
+                | "?." name
                 | "[" expression "]"
                 | "?." "[" expression "]"
                 | call_args
@@ -164,9 +165,10 @@ literal         = int_lit | float_lit | string_lit | template_lit
 brace_lit       = ident_path "{" [ brace_entry { "," brace_entry } [ "," ] ] "}" ;
 ident_path      = ident { "." ident } ;
 brace_entry     = "..." expression                               (* records only *)
+                | ( keyword | reserved ) ":" expression          (* a keyword key needs ":" *)
                 | expression [ ":" expression ] ;
-                  (* a bare ident key is a name: the field of a record, the string
-                     key of a map; without ":" it is shorthand for key: key.
+                  (* a bare word key is a name: the field of a record, the string
+                     key of a map; a bare ident without ":" is shorthand for key: key.
                      Any other map key is an expression, so (name) is the variable *)
 
 array_lit       = "[" [ array_elem { "," array_elem } [ "," ] ] "]" ;
@@ -195,7 +197,7 @@ continue_expr   = "continue" ;
 
 destructure     = record_destructure | array_destructure ;
 record_destructure = "{" [ destructure_field { "," destructure_field } [ "," ] ] "}" ;
-destructure_field = ident [ ":" target ] ;                       (* field, or field: target *)
+destructure_field = ident | name ":" target ;                    (* field, or field: target *)
 array_destructure = "[" [ array_targets ] "]" ;
 array_targets   = "..." ident
                 | target { "," target } [ "," [ "..." ident ] ] ;   (* no comma after the rest *)

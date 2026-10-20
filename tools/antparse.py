@@ -211,9 +211,16 @@ class Lexer:
         while self.peekc() and (is_letter(self.peekc()) or is_digit(self.peekc()) or self.peekc() == "_"):
             self.advance()
         word = src[start:self.pos]
-        if word in RESERVED:
-            self.error(f"reserved word '{word}'")
-        self.emit("KW" if word in KEYWORDS else "IDENT", word, line, col)
+        prev = self.toks[-1] if self.toks else None
+        if prev is not None and prev.kind == "OP" and prev.value in (".", "?."):
+            kind = "IDENT"                      # a field name: any word is a name after a dot (section 2)
+        elif word in RESERVED:
+            kind = "RESERVED"
+        elif word in KEYWORDS:
+            kind = "KW"
+        else:
+            kind = "IDENT"
+        self.emit(kind, word, line, col)
 
     def escape(self, closing):
         """At a backslash: validate the escape and step over it."""
@@ -349,6 +356,8 @@ class Parser:
 
     def error(self, msg, tok=None):
         tok = tok or self.peek()
+        if tok.kind == "RESERVED":              # a reserved word anywhere but after a dot or before ':' is the error
+            msg = f"reserved word '{tok.value}'"
         raise ParseError(tok.line, tok.col, msg)
 
     def expect(self, value):
@@ -361,6 +370,14 @@ class Parser:
     def expect_ident(self, what="identifier"):
         t = self.peek()
         if t.kind != "IDENT":
+            self.error(f"expected {what}, got {t}")
+        self.i += 1
+        return t.value
+
+    def expect_name(self, what="field name"):
+        """A field name before ':': an identifier, a keyword, or a reserved word (section 2)."""
+        t = self.peek()
+        if t.kind not in ("IDENT", "KW", "RESERVED"):
             self.error(f"expected {what}, got {t}")
         self.i += 1
         return t.value
@@ -577,7 +594,7 @@ class Parser:
         saved = self.enter_list()
         fields = []
         while not self.at("}"):
-            name = self.expect_ident("field name")
+            name = self.expect_name()
             self.expect(":")
             fields.append((name, self.type()))
             if not self.at("}"):
@@ -951,8 +968,11 @@ class Parser:
         saved = self.enter_list()
         fields = []
         while not self.at("}"):
-            name = self.expect_ident("field name")
+            word = self.peek()
+            name = self.expect_name()
             target = None
+            if word.kind != "IDENT" and not self.at(":"):
+                self.error(f"'{name}' is a keyword and cannot be bound: write {{ {name}: name }}")
             if self.at(":"):
                 self.next()
                 target = self.target()
@@ -1006,7 +1026,14 @@ class Parser:
                         self.error("spread is not allowed in a map literal")
                     entries.append(("Spread", self.expression()))
             else:
-                key = self.expression()
+                word = self.peek()
+                if word.kind in ("KW", "RESERVED"):          # a keyword key is a name and needs ':'
+                    self.next()
+                    if not self.at(":"):
+                        self.error(f"'{word.value}' is a keyword: as a key it needs ':'")
+                    key = ("Ident", word.value)
+                else:
+                    key = self.expression()
                 if self.at(":"):
                     self.next()
                     value = self.expression()

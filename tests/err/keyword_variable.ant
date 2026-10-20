@@ -1,0 +1,4 @@
+// expect error: expected identifier
+func main(): void {
+  var type = 1
+}

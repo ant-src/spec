@@ -47,6 +47,8 @@ as async await catch class const enum finally function interface
 let match switch this throw undefined
 ```
 
+Both lists apply to the names a program declares: variables, functions, types, and parameters. A field can have any name. After `.` or `?.`, and before `:` in a record type, a record or map literal, or a record destructuring, a keyword or reserved word is a name, so `event.type`, `{ type: string }`, and `Map{ class: "a" }` are fine, and the key of `Map{ null: 1 }` is the string `"null"`, as in JavaScript. The shorthand forms `Map{ type }` and `var { type } = event` read or bind a variable of that name, which cannot exist, so they are errors; write `var { type: kind } = event`.
+
 Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordinary identifiers bound by the standard library. They are not keywords.
 
 ### Literals
@@ -218,7 +220,7 @@ var keyed = Map{ (name): 1, 7: "seven" }    // computed and non-string keys
 var empty: Map[string, int] = Map{}
 ```
 
-Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. A key that is a single identifier is the string of that identifier, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`; any other expression is evaluated as the key, and a parenthesized identifier `(name)` is the variable. A bare identifier alone is shorthand, so `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare identifier before `:` is a name: the field of a record, the string key of a map. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A key is hashed when it is inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the entry may become unreachable. Section 11 covers the operations.
+Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. A key that is a single word, an identifier or a keyword, is the string of that word, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`; any other expression is evaluated as the key, and a parenthesized identifier `(name)` is the variable. A bare identifier alone is shorthand, so `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare word before `:` is a name: the field of a record, the string key of a map. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A key is hashed when it is inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the entry may become unreachable. Section 11 covers the operations.
 
 ### Unions
 
@@ -1082,7 +1084,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 
 - **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string evaluates each `${...}` in order and renders it with `String.from`.
 - **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. The result is a new record with that tag and those fields.
-- **Map literal `Map{ ... }`.** A key that is a single identifier is the string of its name, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
+- **Map literal `Map{ ... }`.** A key that is a single word, an identifier or a keyword, is the string of that word, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value that must be an array. The result is a new array.
 - **Variable.** The value bound to the name.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace is a record, so this rule also covers `Array.map` and `Geometry.Point`.
