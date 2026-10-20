@@ -214,7 +214,18 @@ func describe(id: Id): string {
 
 A nullable type is written `T | null`. See section 7.
 
-The members of a union must be distinguishable at run time, because `is` has only kinds and tags to look at. Each member has a discriminator: the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds; the word array, map, or func, type arguments not counting; or the tag, for a named record type. A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile error and `Array[int | string]` is the type to write, while `int | float64` is fine. An anonymous record type has no discriminator and cannot be tested by `is`, so a union may contain at most one, and it serves as the remainder of an `is` chain: in `Named | { name: string }`, the `else` branch of `x is Named` holds the anonymous member. A type parameter has no discriminator either; it may share a union only with `null`, `void`, named record types, and other type parameters, since `T | Array[int]` would become ambiguous once `T` is an array. The checker's work for `is` and for exhaustive chains is therefore one lookup per member.
+The members of a union must be distinguishable at run time, because `is` has only kinds and tags to look at. Each member has a discriminator: the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds; the word array, map, or func, type arguments not counting; or the tag, for a named record type. A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile error and `Array[int | string]` is the type to write, while `int | float64` is fine. An anonymous record type has no discriminator and cannot be tested by `is`, so a union may contain at most one, as in `{ name: string } | null`, and it may not share a union with any named record type. The reason is that width subtyping lets a value in by shape while `is` tests only the tag, which carries no type arguments:
+
+```ant
+type Box[T] = { value: T }
+type Mixed = Box[int] | { value: string }        // compile error, and here is why
+
+func increment(b: Mixed): int {
+  if b is Box { b.value + 1 } else { 0 }        // a Box[string] enters through the anonymous member and passes the test
+}
+```
+
+A type parameter has no discriminator either; it may share a union only with `null`, `void`, other type parameters, and named record types that take no type arguments. `T | null`, `T | NotFound`, and `Ok[T] | Err[E]` are fine, while `T | Array[int]` would become ambiguous once `T` is an array and `T | Box[int]` once `T` is a `Box[string]`. With these two restrictions every value in a union carries the discriminator of one declared member at that member's type arguments, and the checker's work for `is` and for exhaustive chains is one lookup per member.
 
 ### Tagged unions
 
@@ -393,7 +404,7 @@ The branches are checked against the expected type, or the `if` has the union of
 
 ### `is`
 
-`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record type, a primitive, `null`, `Array`, `Map`, or `func`, written without type arguments, because the runtime has only tags and kinds to look at. The static type of `x` must be a union with `T` as a member, or an anonymous record type to which the named record type `T` is assignable; otherwise the test is always true or always false, which is a compile error. `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
+`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record type, a primitive, `null`, `Array`, `Map`, or `func`, written without type arguments, because the runtime has only tags and kinds to look at. The static type of `x` must be a union with `T` as a member, or an anonymous record type to which the named record type `T` is assignable, in which case the test narrows `x` to the one instantiation of `T` assignable to that type and is a compile error when the anonymous type does not determine every type argument of `T`; otherwise the test is always true or always false, which is a compile error. `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
 
 ```ant
 Array.filter(shapes, { x is Circle })
