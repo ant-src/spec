@@ -130,10 +130,11 @@ var scores: Array[int] = []
 ```
 
 A name cannot be redeclared in the same scope, which is a syntax error; an inner scope may shadow an
-outer one. A `var` is visible from its declaration to the end of the enclosing block. Top-level
-`func`, `type`, and `var` declarations are visible throughout the module regardless of order, but a
-top-level initializer may refer directly, outside a nested function body, only to the `var`s above
-it (section 10).
+outer one, except that no declaration in any scope may shadow a prelude name (section 10). A `var`
+is visible from its declaration to the end of the enclosing block. Top-level `func`, `type`, and
+`var` declarations are visible throughout the module regardless of order, but a top-level
+initializer may refer directly, outside a nested function body, only to the `var`s above it (section
+10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -1296,9 +1297,11 @@ module's current value each time, and assigning to an imported name or to a fiel
 from outside the module is a compile error. Two imports binding the same local name, or a top-level
 declaration that shadows an imported name, are syntax errors, so every name in a file has one
 visible origin. The prelude names count as imports in every module: `print`, `panic`, the type and
-conversion names such as `int` and `Result`, and the namespaces. There is no re-export. An import
-cycle is an error in both commands, since no module in it could be initialized after its imports:
-`ant run` stops before `main`.
+conversion names such as `int` and `Result`, and the namespaces. Unlike other imports, a prelude
+name cannot be shadowed in an inner scope either, so `int` and `x is int` mean one thing everywhere;
+the parser enforces it, since the prelude is a fixed list. There is no re-export. An import cycle is
+an error in both commands, since no module in it could be initialized after its imports: `ant run`
+stops before `main`.
 
 Imports are resolved depth first in source order, and each module is initialized once, after
 everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may
