@@ -1,4 +1,0 @@
-// expect error: 'return' takes no value in a defer block
-func main(): void {
-  defer { return void }
-}

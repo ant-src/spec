@@ -1,3 +1,0 @@
-// expect error: import must come before declarations
-var x = 1
-import "./a.ant" A

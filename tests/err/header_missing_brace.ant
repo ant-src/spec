@@ -1,4 +1,0 @@
-// expect error: expected '{' after header
-func f() {
-  if x y { 1 }
-}

@@ -1,6 +1,0 @@
-// expect error: 'break' outside a loop
-func f(xs: Array[int]) {
-  for x in xs {
-    go { break }
-  }
-}

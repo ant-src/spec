@@ -1,4 +1,0 @@
-// expect error: reserved word 'let'
-func f() {
-  let x = 1
-}

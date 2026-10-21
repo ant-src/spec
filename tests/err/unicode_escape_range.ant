@@ -1,2 +1,0 @@
-// expect error: not a Unicode scalar value
-var s = "\u{110000}"

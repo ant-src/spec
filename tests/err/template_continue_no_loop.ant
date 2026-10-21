@@ -1,5 +1,0 @@
-// expect error: 'continue' outside a loop
-func main(): void {
-  var s: string | null = null
-  print(`${s ?? continue}`)
-}

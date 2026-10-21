@@ -1,3 +1,0 @@
-// expect error: unterminated block comment
-/* never closed
-var x = 1

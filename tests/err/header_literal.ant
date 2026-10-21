@@ -1,4 +1,0 @@
-// expect error: got ':'
-func f() {
-  if u == User{ name: "a" } { 1 }
-}

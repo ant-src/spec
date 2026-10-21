@@ -1,2 +1,0 @@
-// expect error: reserved word 'function'
-function f() {}

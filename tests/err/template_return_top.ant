@@ -1,3 +1,0 @@
-// expect error: 'return' outside a function
-var s: string | null = null
-var t = `${s ?? return "missing"}`

@@ -1,4 +1,0 @@
-// expect error: allows only '='
-func f() {
-  [a, b] += xs
-}

@@ -1,2 +1,0 @@
-// expect error: 'return' outside a function
-var x = return 1

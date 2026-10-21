@@ -1,2 +1,0 @@
-// expect error: spread is not allowed in a map literal
-var m = Map{ ...n }

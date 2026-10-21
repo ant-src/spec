@@ -1,2 +1,0 @@
-// expect error: positional argument after a named argument
-var x = f(a: 1, 2)

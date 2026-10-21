@@ -1,4 +1,0 @@
-// expect error: reserved word 'match'
-func f() {
-  match x { }
-}

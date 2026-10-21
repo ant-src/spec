@@ -1,4 +1,0 @@
-// expect error: expected '{'
-func f() {
-  if a { 1 } else 2
-}

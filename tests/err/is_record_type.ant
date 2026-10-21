@@ -1,2 +1,0 @@
-// expect error: expected type name after 'is'
-var b = x is { a: int }

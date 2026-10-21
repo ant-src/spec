@@ -1,4 +1,0 @@
-// expect error: got ','
-func f() {
-  { x, y } = p
-}

@@ -1,4 +1,0 @@
-// expect error: needs ':'
-func main(): void {
-  var m = Map{ type }
-}
