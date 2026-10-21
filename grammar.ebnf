@@ -67,7 +67,8 @@ import_item     = ident [ ":" ident ] ;                          (* export: loca
 declaration     = [ "export" ] ( var_decl | func_decl | type_decl ) term ;
 
 var_decl        = "var" ( ident [ ":" type ] | destructure ) "=" expression ;
-func_decl       = "func" ident [ type_params ] signature block ;
+func_decl       = "func" ident [ "." name ] [ type_params ] signature block ;
+                  (* ident "." name declares the function on a type of this module (section 6) *)
 type_decl       = "type" ident [ type_params ] "=" type ;
 
 type_params     = "[" type_param { "," type_param } [ "," ] "]" ;

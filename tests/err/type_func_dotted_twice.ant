@@ -1,0 +1,4 @@
+// expect error: a function belongs to one type
+type A = {}
+func A.B.c(): int { 1 }
+func main(): void { void }

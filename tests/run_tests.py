@@ -113,6 +113,9 @@ def run_inline():
     # a keyword before ":" is a name, and as a map key the string of that word
     e = expr("Map{ type: 1, null: 2 }")
     check("keyword keys", e == ("MapLit", [("Entry", ("String", '"type"'), ("Int", "1")), ("Entry", ("String", '"null"'), ("Int", "2"))]), repr(e))
+    # a function declared on a type
+    f = file("type P = {}\nfunc P.make(): P { P{} }\n")
+    check("function on a type", f[2][1][0] == "TypeFunc" and f[2][1][1] == "P" and f[2][1][2] == "make", repr(f))
     # greedy function return type
     f = file("type H = func(int): A | B\n")
     check("greedy return type", f[2][0][3][0] == "TFunc" and f[2][0][3][2][0] == "Union", repr(f))

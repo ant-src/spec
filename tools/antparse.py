@@ -496,12 +496,18 @@ class Parser:
     def func_decl(self):
         self.expect("func")
         name = self.expect_ident("function name")
+        owner = None
+        if self.at("."):                       # func Type.name: a function declared on a type (section 6)
+            self.next()
+            owner, name = name, self.expect_name("function name")
+            if self.at("."):
+                self.error("a function belongs to one type: func Type.name")
         tparams = self.type_params() if self.at("[") else []
         sig = self.signature()
         saved = self.enter_boundary("func")
         body = self.block()
         self.leave_boundary(saved)
-        return ("Func", name, tparams, sig, body)
+        return ("Func", name, tparams, sig, body) if owner is None else ("TypeFunc", owner, name, tparams, sig, body)
 
     def type_decl(self):
         self.expect("type")

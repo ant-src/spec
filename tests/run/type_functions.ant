@@ -1,0 +1,45 @@
+// Functions on types through every import form, as values, with named arguments, and with the pipe (section 6).
+import "./lib/points.ant" Geometry
+import "./lib/points.ant" { Point, Shape, Circle, Rect, UserId, Box: Container, Tree }
+
+type Counter = { n: int }
+
+func Counter.new(): Counter { Counter{ n: 0 } }
+func Counter.bump(c: Counter): Counter { c.n += 1; c }
+
+func main(): void {
+  var p = Point{ x: 3.0, y: 4.0 }
+  print(p | Point.norm())
+  print(Point.distance(a: p, b: Point.origin()))
+  print(Geometry.Point.norm(Geometry.Point{ x: 0.0, y: 1.0 }))
+  print(Array.map([p, Point.origin()], Point.norm))
+  print(Point.describe(p))
+  var shapes: Array[Shape] = [Circle{ radius: 1.0 }, Rect{ width: 2.0, height: 3.0 }]
+  print(Array.map(shapes, Shape.area))
+  print(UserId.parse("u-1"))
+  print(UserId.parse("x"))
+  print(Container.map(Container{ value: 2 }, { x * 10 }))
+  var t = Tree{ value: 1, children: [Tree.leaf(2), Tree.leaf(3)] }
+  print(Tree.size(t))
+  print(String.from(Point.distance))
+  var norm = Point.norm
+  print(norm(p))
+  print(Geometry.Tree.size(Geometry.Tree.leaf(9)))
+  print((Counter.new() | Counter.bump() | Counter.bump()).n)
+}
+
+// ---- expected
+// out: 5.0
+// out: 5.0
+// out: 1.0
+// out: [5.0, 0.0]
+// out: 3.0,4.0 (private)
+// out: [3.0, 6.0]
+// out: UserId("u-1")
+// out: null
+// out: Box{ value: 20 }
+// out: 3
+// out: func
+// out: 5.0
+// out: 1
+// out: 2

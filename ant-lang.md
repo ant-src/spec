@@ -329,7 +329,7 @@ There are no interfaces, no `where` clauses, and no bounds on type constructors.
 
 ### Type declarations
 
-`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records), and the tag is marked as a record tag. When the body is a primitive type, it creates a new type as well (see Named primitive types), and the name binds the type's constructor, a function value that carries the tag and its base kind. Otherwise the name is an alias, and its tag is marked as an alias tag, which neither a record literal, a constructor call, nor `is` accepts, since an alias has no runtime identity. An alias is interchangeable with its body: `type Id = int | string` is the union written out, and `type Shape = Circle | Rect` likewise. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. A type name is an expression only as the head of a record literal, as the target of `is`, or, for a named primitive type, as its constructor; anywhere else it is a compile error, since a type has no value. There are no classes, interfaces, or prototypes.
+`type` declares a name and appears only at the top level of a module. When the body is a record type, the declaration creates a new type with that name as its tag (see Records), and the tag is marked as a record tag. When the body is a primitive type, it creates a new type as well (see Named primitive types), and the name binds the type's constructor, a function value that carries the tag and its base kind. Otherwise the name is an alias, and its tag is marked as an alias tag, which neither a record literal, a constructor call, nor `is` accepts, since an alias has no runtime identity. An alias is interchangeable with its body: `type Id = int | string` is the union written out, and `type Shape = Circle | Rect` likewise. A type may refer to itself through a record, array, map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of plain aliases, is a compile error. A type name is also the namespace of the functions declared on it (section 6, Functions on types). It is an expression only as the head of a record literal, as the target of `is`, as the left side of `.` naming one of its functions, or, for a named primitive type, as its constructor; anywhere else it is a compile error, since a type has no value. There are no classes, interfaces, or prototypes.
 
 ### Assignability
 
@@ -566,6 +566,39 @@ next()    // 1
 next()    // 2
 ```
 
+### Functions on types
+
+A function may be declared on a type: `func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`, and the call is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared by the same module and may be a record, a named primitive type, or an alias, including an alias of a union; a type's namespace is therefore closed, and the prelude's types cannot be extended. The function is an ordinary function. It need not take the type as a parameter, which is how `Point.origin()` and `UserId.parse(s)` are written; it is a value like any other; and named arguments apply to it as to any declared function. It is reached only through the type name, never bare. Two functions on one type may not share a name, a function may not share its name with a field of the type, and an exported function needs an exported type. There is no method call: `p.distance(q)` reads a field of `p`, which does not exist.
+
+```ant
+type Point = { x: float64, y: float64 }
+
+func Point.origin(): Point { Point{ x: 0.0, y: 0.0 } }
+
+func Point.distance(a: Point, b: Point): float64 {
+  Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
+}
+
+func Point.norm(p: Point): float64 { p | Point.distance(Point.origin()) }
+
+type Circle = { radius: float64 }
+type Rect = { width: float64, height: float64 }
+type Shape = Circle | Rect
+
+func Shape.area(s: Shape): float64 {
+  if s is Circle { 3.14159 * s.radius * s.radius } else { s.width * s.height }
+}
+
+type Box[T] = { value: T }
+
+func Box.map[T, U](b: Box[T], f: func(T): U): Box[U] { Box{ value: f(b.value) } }
+
+var lengths = Array.map(points, Point.norm)
+var box = Box{ value: 2 } | Box.map({ x * 10 })        // Box{ value: 20 }
+```
+
+At run time the functions are fields of the type's tag or constructor (section 12), so `Geometry.Point.norm` is a field read like `Array.map`, and `Point.norm` is a function value. The standard library is written this way: `Result.ok`, `Mutex.new`, and `Atomic.load` are functions on the types `Result`, `Mutex`, and `Atomic` (section 11).
+
 ## 7. Nullability
 
 `null` is a value of type `null` and nothing else. There is no `undefined`. A variable of type `string` can never hold `null`; a variable of type `string | null` can. There is no `Option` wrapper: a nullable type is just a union with `null`, so `T | null | null` is `T | null`. Where the difference between absent and null matters, ask the container instead of the value: `Map.has(m, k)` tells a missing key from a stored `null`.
@@ -782,7 +815,7 @@ import "./geometry.ant" Geometry
 var d = Geometry.distance(p, q)
 ```
 
-The path is a file path relative to the importing file, extension included; there are no packages, and a program is the files it imports. A module is identified by its canonical path, so two spellings of one file are one module. The path comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given.
+The path is a file path relative to the importing file, extension included; there are no packages, and a program is the files it imports. A module is identified by its canonical path, so two spellings of one file are one module. The path comes first so that an editor knows the module before the names are typed. Types and values import alike: a `type` export is its tag, so a record built in one module passes an `is` test written against the imported name in another, under whatever local name it was given. The exported functions declared on a type come with it: `import "./geometry.ant" { Point }` makes `Point.distance` available and `Point: P` makes it `P.distance`, while a function without `export` is a compile error outside its module, like any other private field.
 
 Imports are live and read-only. `export var` is allowed; an imported name reads the exporting module's current value each time, and assigning to an imported name or to a field of a namespace from outside the module is a compile error. Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. The prelude names, `print`, `panic`, the type and conversion names such as `int` and `Result`, and the namespaces, count as imports in every module. There is no re-export. Import cycles are a compile error.
 
@@ -792,7 +825,7 @@ Execution starts at `func main()` in the module given to `ant run`, which must d
 
 ## 11. Standard library
 
-The standard library is a set of namespaces in the prelude. Each is a plain record of functions and types, exactly like an imported module (section 10), so a type a namespace declares is written through it, as in `Http.Response`; none has methods or state. Every function takes its subject as the first argument so it composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`, `Time`, `Os`, and `Json` are policy rather than language and live in `stdlib.md`.
+The standard library is a set of namespaces in the prelude. Each is a plain record of functions and types, exactly like an imported module (section 10), so a type a namespace declares is written through it, as in `Http.Response`; none has methods or state. `Array` and `Map` are the functions of the two built-in container types, and `Result` and the sync types are types with functions declared on them (section 6); all read as `Name.function`, like a namespace. Every function takes its subject as the first argument so it composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`, `Time`, `Os`, and `Json` are policy rather than language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics). A callback whose result the library ignores is typed with a type parameter, never with `void`, so any lambda fits; the library discards the value itself. A function marked `mutates` changes its first argument and returns `void` or the removed element; every other function leaves its arguments untouched and returns a new value. A function marked ◆ has a value-dependent panic, named in its comment; every function also panics when an argument has a kind it does not take (section 12).
 
@@ -964,9 +997,11 @@ Result.all[T, E](rs: Array[Result[T, E]]): Result[Array[T], E]   // the first Er
 Record.same[T: {}](a: T, b: T): bool                           // identity; {} bounds T to any record
 ```
 
+`Result.ok` and the others are functions declared on the `Result` type (section 6), so `Result` names the alias in a type and its functions in an expression. `Record` is a namespace.
+
 ### Synchronization
 
-The sync objects of section 9. Each is created by its `new` function and compared by identity. The `with` forms acquire, run the function, and release even if it panics.
+The sync objects of section 9. Each is a prelude type with its functions declared on it (section 6), so `Mutex` is the type in an annotation and `Mutex.new()` creates one; objects compare by identity. The `with` forms acquire, run the function, and release even if it panics.
 
 ```
 Mutex.new(): Mutex
@@ -1020,15 +1055,15 @@ Every value has a kind, fixed when the value is created:
 | map | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==` |
 | record | a tag plus a fixed set of named fields, in the order the type declares them |
 | tagged primitive | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4) |
-| func | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind |
-| tag | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other; a record tag also lists the field names in declaration order |
+| func | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6) |
+| tag | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
 | sync | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic` |
 
 Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, and tags are immutable, so for them the distinction never shows.
 
 ### Names and scopes
 
-A block opens a scope. `var` binds a name in the current scope from its declaration to the end of the block; a function body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the scopes it was created in, so it sees later assignments to the variables it captured. Each iteration of a `for` opens a fresh scope for the loop variable. The module scope holds every top-level name from the start, so a function body can name a `var` declared below it; reading a top-level `var` whose initializer has not run yet panics (section 10). A module's scope is a record, and `export` is a checker rule: at run time every field of a module record is readable.
+A block opens a scope. `var` binds a name in the current scope from its declaration to the end of the block; a function body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the scopes it was created in, so it sees later assignments to the variables it captured. Each iteration of a `for` opens a fresh scope for the loop variable. The module scope holds every top-level name from the start, so a function body can name a `var` declared below it, and a function declared on a type is a field of its tag or constructor from the start; reading a top-level `var` whose initializer has not run yet panics (section 10). A module's scope is a record, and `export` is a checker rule: at run time every field of a module record is readable.
 
 ### Expressions
 
@@ -1039,7 +1074,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Map literal `Map{ ... }`.** A key that is a single word, an identifier or a keyword, is the string of that word, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces its value and keeps its position. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value that must be an array. The result is a new array.
 - **Variable.** The value bound to the name.
-- **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace is a record, so this rule also covers `Array.map` and `Geometry.Point`.
+- **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace is a record, so this rule also covers `Array.map` and `Geometry.Point`; a tag and a constructor have the functions declared on their type as fields, so it also covers `Point.distance`.
 - **Index read `a[i]`.** `a` must be an array or a map. For an array, `i` must be an `int` from `0` up to but excluding the length, and the value is that element. For a map, the value is the entry whose key is `==` to `i`, or `null` when there is none.
 - **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest of the postfix chain is skipped. Otherwise the plain rule applies.
 - **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one positional argument, which must have its base kind, and yields that value carrying the tag. For any other function, arguments evaluate in order. Positional arguments fill parameters left to right; a named argument fills the parameter of that name, which must exist and must not be filled already; every parameter still unfilled must have a default, and the defaults evaluate in the callee's scope, in parameter order, after the arguments. A lambda has the single parameter `x` and accepts zero or one positional argument. The body then runs in a new scope, and the call's value is the body's value, or the operand of the `return` that ended it.

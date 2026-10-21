@@ -1,0 +1,30 @@
+// Functions declared on types: records, aliases, named primitives, generics; factories; keywords as names.
+
+type Id = int | string
+
+func Id.describe(id: Id): string { if id is int { `number ${id}` } else { `text ${id}` } }
+
+type Counter = { n: int }
+
+func Counter.new(): Counter { Counter{ n: 0 } }
+func Counter.bump(c: Counter): Counter { c.n += 1; c }
+func Counter.type(c: Counter): string { "counter" }
+
+type UserId = string
+
+func UserId.parse(s: string): UserId | null { if String.startsWith(s, "u-") { UserId(s) } else { null } }
+
+type Box[T] = { value: T }
+
+export func Box.map[T, U](b: Box[T], f: func(T): U): Box[U] { Box{ value: f(b.value) } }
+
+func main(): void {
+  print(Id.describe(1))
+  var c = Counter.new() | Counter.bump() | Counter.bump()
+  print(c.n)
+  print(Counter.type(c))
+  print(UserId.parse("u-1"))
+  print(Box.map(Box{ value: 2 }, { x * 10 }))
+  var f = Counter.bump
+  print(f(c).n)
+}
