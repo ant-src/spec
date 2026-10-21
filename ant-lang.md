@@ -872,7 +872,9 @@ There are no variadic parameters; pass an array.
 An anonymous function is `func` without a name. Its parameters are annotated and it may state a
 return type, exactly like a declaration. A lambda is a bare block with one implicit parameter named
 `x`. At run time a lambda accepts zero or one argument, so it also serves where a zero-parameter
-function is expected; the checker gives it the arity of the expected function type.
+function is expected; the checker gives it the arity of the expected function type. In a lambda of
+arity zero, `x` is not in scope, and reading it is a compile error; at run time a lambda called
+without an argument binds `x` to `void`.
 
 ```ant
 var add = func(a: int, b: int) { a + b }
@@ -1348,6 +1350,11 @@ string(x): string                                // x is a string or a named pri
 bool(x): bool                                    // likewise
 ```
 
+The twelve conversion names are built into the checker. The signatures give their shape; each also
+accepts a value of a named primitive type whose base is a kind it takes, and unwraps it, so
+`int(count)` works on a `Count` declared over `int` although `Count` is not assignable to `Number`
+(section 4, Named primitive types).
+
 ### Array
 
 `Array[T]` is dense and growable. `xs[i]` reads and `xs[i] = v` writes, and both panic when `i` is
@@ -1633,14 +1640,15 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   whose key is `==` to `i`, or `null` when there is none.
 - **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest
   of the postfix chain is skipped. Otherwise the plain rule applies.
-- **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one
+-  **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one
   positional argument, which must have its base kind, and yields that value carrying the tag. For
   any other function, arguments evaluate in order. Positional arguments fill parameters left to
   right; a named argument fills the parameter of that name, which must exist and must not be filled
   already; every parameter still unfilled must have a default, and the defaults evaluate in the
   callee's scope, in parameter order, after the arguments. A lambda has the single parameter `x` and
-  accepts zero or one positional argument. The body then runs in a new scope, and the call's value
-  is the body's value, or the operand of the `return` that ended it.
+  accepts zero or one positional argument, binding `x` to `void` when none is given. The body then
+  runs in a new scope, and the call's value is the body's value, or the operand of the `return` that
+  ended it.
 - **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are
   prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their
   own kind and yield the value. For the numeric names the argument must be a number, and the result
