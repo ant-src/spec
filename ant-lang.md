@@ -413,6 +413,15 @@ an array, and `T | Box[int]` once `T` is a `Box[string]`. With these two restric
 a union carries the discriminator of one declared member at that member's type arguments, and the
 checker's work for `is` and for exhaustive chains is one lookup per member.
 
+Substituting type arguments forms unions too, and the same rules apply where the arguments are
+written. `type Either[A, B] = A | B` is allowed, since two type parameters may share a union, but
+`Either[Box[int], Box[string]]` repeats a tag and `Either[Box[int], { value: string }]` is the
+`Mixed` type above, so both are compile errors at the use.
+
+A sync type has no discriminator either, because `is` does not accept one (section 5). A union may
+contain at most one sync type, and it is narrowed by testing the other members: after `m != null`,
+an `m` of type `Mutex | null` is a `Mutex`.
+
 ### Tagged unions
 
 A union of named record or primitive types is a tagged union: the tag each value carries tells the
