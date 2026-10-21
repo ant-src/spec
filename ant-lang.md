@@ -1295,8 +1295,9 @@ module's current value each time, and assigning to an imported name or to a fiel
 from outside the module is a compile error. Two imports binding the same local name are a compile
 error, and a top-level declaration cannot shadow an imported name, so every name in a file has one
 visible origin. The prelude names count as imports in every module: `print`, `panic`, the type and
-conversion names such as `int` and `Result`, and the namespaces. There is no re-export. Import
-cycles are a compile error.
+conversion names such as `int` and `Result`, and the namespaces. There is no re-export. An import
+cycle is an error in both commands, since no module in it could be initialized after its imports:
+`ant run` stops before `main`.
 
 Imports are resolved depth first in source order, and each module is initialized once, after
 everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may
@@ -1307,7 +1308,7 @@ a function call before it is initialized is a runtime panic, since the checker d
 Execution starts at `func main()` in the module given to `ant run`, which must declare it. `main`
 takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit
 status is `0` when `main` returns, `1` when the main goroutine panics, and `2` when the program
-could not be loaded because of a syntax error or a missing module or `main`.
+could not be loaded because of a syntax error, an import cycle, or a missing module or `main`.
 
 ## 11. Standard library
 
