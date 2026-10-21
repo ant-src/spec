@@ -15,7 +15,6 @@ The name "Ant" is a placeholder.
 - **Types are advisory.** `ant check` reads annotations and `ant run` discards them. From a `type` declaration the interpreter keeps only the name, which becomes a tag, and for a record the field names in order (section 4). No evaluation rule consults a type that was written down.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type checker.
 
-
 ## 2. Lexical structure
 
 Source files are UTF-8 text. The file extension is `.ant`.
@@ -115,16 +114,16 @@ Types are checked by a separate command and erased before the program runs. `ant
 
 ### Primitives
 
-| Type | Values |
-|---|---|
-| `bool` | `true`, `false` |
-| `int8` `int16` `int32` `int64` | signed integers |
-| `uint8` `uint16` `uint32` `uint64` | unsigned integers |
-| `float32` `float64` | IEEE 754 floats |
-| `string` | immutable sequence of Unicode code points, stored as UTF-8 |
-| `null` | the single value `null` |
-| `void` | the single value `void`, which carries no information |
-| `never` | the type of expressions that do not return, such as `panic(...)` or `return` |
+| Type                               | Values                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `bool`                             | `true`, `false`                                                              |
+| `int8` `int16` `int32` `int64`     | signed integers                                                              |
+| `uint8` `uint16` `uint32` `uint64` | unsigned integers                                                            |
+| `float32` `float64`                | IEEE 754 floats                                                              |
+| `string`                           | immutable sequence of Unicode code points, stored as UTF-8                   |
+| `null`                             | the single value `null`                                                      |
+| `void`                             | the single value `void`, which carries no information                        |
+| `never`                            | the type of expressions that do not return, such as `panic(...)` or `return` |
 
 `int` is an alias for `int64` and `byte` is an alias for `uint8`: `int` is the default, and the sized names are for when the size matters. The prelude also declares `Integer`, the union of the eight integer types, `Number`, which adds the two float types, and `Ordered`, which is `Number | string`; they exist to bound type parameters (see Generics).
 
@@ -385,18 +384,18 @@ Evaluation is strictly left to right: the callee before its arguments, arguments
 
 From tightest to loosest binding:
 
-| Level | Operators | Notes |
-|---|---|---|
-| postfix | `a.b` `a?.b` `a[i]` `f(x)` | |
-| prefix | `-a` `!a` `try a` | |
-| multiplicative | `*` `/` `%` | integer `/` truncates toward zero; `%` is the truncated remainder with the dividend's sign, for floats too |
-| additive | `+` `-` | `+` also concatenates strings |
-| comparison | `<` `<=` `>` `>=` `is` | numbers and strings; `is` tests a union member |
-| equality | `==` `!=` | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4) |
-| logical | `&&` then `\|\|` | short-circuit, `bool` only |
-| null | `??` | cannot mix with `&&` or `\|\|` without parentheses |
-| pipe | `\|` | left associative; in a type, `\|` is a union (section 4) |
-| assignment | `=` `+=` `-=` `*=` `/=` `%=` | type `void` |
+| Level          | Operators                    | Notes                                                                                                                    |
+| -------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| postfix        | `a.b` `a?.b` `a[i]` `f(x)`   |                                                                                                                          |
+| prefix         | `-a` `!a` `try a`            |                                                                                                                          |
+| multiplicative | `*` `/` `%`                  | integer `/` truncates toward zero; `%` is the truncated remainder with the dividend's sign, for floats too               |
+| additive       | `+` `-`                      | `+` also concatenates strings                                                                                            |
+| comparison     | `<` `<=` `>` `>=` `is`       | numbers and strings; `is` tests a union member                                                                           |
+| equality       | `==` `!=`                    | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4) |
+| logical        | `&&` then `\|\|`             | short-circuit, `bool` only                                                                                               |
+| null           | `??`                         | cannot mix with `&&` or `\|\|` without parentheses                                                                       |
+| pipe           | `\|`                         | left associative; in a type, `\|` is a union (section 4)                                                                 |
+| assignment     | `=` `+=` `-=` `*=` `/=` `%=` | type `void`                                                                                                              |
 
 There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`. An arithmetic or comparison operator needs both operands of the same type, and that type must be a single numeric kind, `string` where strings are allowed, or one named primitive type over such a base. An arithmetic result has the operands' type, tag included; a comparison or an equality test is a plain `bool`. A union such as `Number` is not a kind, so `a > b` on two `Number` values is a compile error until they are narrowed. Integer overflow panics, including unsigned subtraction below zero. Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is `Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width panics.
 
@@ -1047,17 +1046,17 @@ This section is the contract of `ant run`. It defines what every construct does 
 
 Every value has a kind, fixed when the value is created:
 
-| Kind | Values |
-|---|---|
-| the ten numeric kinds | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it |
-| `bool`, `string`, `null`, `void` | as in section 4 |
-| array | a growable sequence of values |
-| map | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==` |
-| record | a tag plus a fixed set of named fields, in the order the type declares them |
-| tagged primitive | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4) |
-| func | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6) |
-| tag | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
-| sync | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic` |
+| Kind                             | Values                                                                                                                                                                                                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the ten numeric kinds            | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it                                                                                                                              |
+| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                |
+| array                            | a growable sequence of values                                                                                                                                                                                                                  |
+| map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                           |
+| record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                    |
+| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
+| func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
+| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
+| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic`                                                                                                                                                                                 |
 
 Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, and tags are immutable, so for them the distinction never shows.
 
@@ -1080,12 +1079,13 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one positional argument, which must have its base kind, and yields that value carrying the tag. For any other function, arguments evaluate in order. Positional arguments fill parameters left to right; a named argument fills the parameter of that name, which must exist and must not be filled already; every parameter still unfilled must have a default, and the defaults evaluate in the callee's scope, in parameter order, after the arguments. A lambda has the single parameter `x` and accepts zero or one positional argument. The body then runs in a new scope, and the call's value is the body's value, or the operand of the `return` that ended it.
 - **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their own kind and yield the value. For the numeric names the argument must be a number, and the result follows this table:
 
-  | From | To | Rule |
-  |---|---|---|
+  | From    | To      | Rule                                                                                         |
+  | ------- | ------- | -------------------------------------------------------------------------------------------- |
   | integer | integer | exact; panics when out of the target's range, including a negative value to an unsigned kind |
-  | integer | float | rounds to the nearest representable value, ties to even; never panics |
-  | float | integer | must be integral and in range; panics on a fraction, out of range, `NaN`, or an infinity |
-  | float | float | rounds to the nearest representable value; `NaN` and infinities are preserved |
+  | integer | float   | rounds to the nearest representable value, ties to even; never panics                        |
+  | float   | integer | must be integral and in range; panics on a fraction, out of range, `NaN`, or an infinity     |
+  | float   | float   | rounds to the nearest representable value; `NaN` and infinities are preserved                |
+
 - **Arithmetic `+ - * / %`.** Both operands must be numbers of the same kind, except that `+` also takes two strings and concatenates them. Two tagged values with the same tag are unwrapped, operated on as their base kind, and the result carries the tag; a tagged value with a plain one, or two different tags, panics. An integer result that does not fit the kind panics, which includes unsigned subtraction below zero. Integer `/` truncates toward zero, `%` takes the sign of the dividend, and both panic on a zero divisor. Float arithmetic follows IEEE 754 and never panics. Unary `-` needs a number; `!` needs a `bool`.
 - **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, or two strings, which compare by code point, or two tagged values with the same tag, which compare as their base kind.
 - **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`, `null`, and `void` values are equal by value; records have the same tag and `==` fields; tagged primitives have the same tag and equal payloads; arrays have the same length and `==` elements in order; maps have the same key set and `==` values per key; functions, tags, and sync objects are the same object. A pair of values already under comparison counts as equal (section 4). Values of different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
@@ -1121,30 +1121,30 @@ Goroutines are preemptive: a goroutine that never blocks cannot keep others from
 
 The complete list. The checker rules out every kind and arity row. The value-dependent rows, marked ◆, can occur in a checked program.
 
-| Operation | Panics when |
-|---|---|
-| `+ - * / %`, `< <= > >=`, unary `-` | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings |
-| `!`, `&&`, `\|\|`, `if`, `while` | an operand or condition is not a `bool` |
-| ◆ integer `+ - *`, compound assignment, `Array.sum` | the result does not fit the kind |
-| ◆ integer `/`, `%` | the divisor is zero |
-| ◆ `Bits.shiftLeft`, `Bits.shiftRight` | the count is negative or not below the operand's width |
-| ◆ numeric conversion | an integer target is given a fraction, a value out of range, `NaN`, or an infinity |
-| `string`, `bool` | the argument, after unwrapping, is not of that kind |
-| `a.b`, `a.b = v` | `a` is not a record, or has no field `b` |
-| `a[i]`, `a[i] = v` | `a` is neither an array nor a map; ◆ `a` is an array and `i` is not an `int` from `0` up to but excluding the length |
-| call | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
-| record literal | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value |
-| array literal | a spread operand is not an array |
-| `is` | the right side is a path that does not evaluate to a record tag or a constructor |
-| `for` | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned |
-| destructuring | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions |
-| `_` | ◆ read |
-| library function | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked |
-| ◆ top-level `var` | read before its initializer has run |
-| ◆ `panic` | always |
-| ◆ any call | the goroutine's call depth exceeds the runtime's limit |
-| `try` | the operand is not a record tagged `Ok` or `Err` |
-| `??`, `?.`, `==`, `!=` | never |
+| Operation                                           | Panics when                                                                                                                                                                                                                                           |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `+ - * / %`, `< <= > >=`, unary `-`                 | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                      |
+| `!`, `&&`, `\|\|`, `if`, `while`                    | an operand or condition is not a `bool`                                                                                                                                                                                                               |
+| ◆ integer `+ - *`, compound assignment, `Array.sum` | the result does not fit the kind                                                                                                                                                                                                                      |
+| ◆ integer `/`, `%`                                  | the divisor is zero                                                                                                                                                                                                                                   |
+| ◆ `Bits.shiftLeft`, `Bits.shiftRight`               | the count is negative or not below the operand's width                                                                                                                                                                                                |
+| ◆ numeric conversion                                | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                                                    |
+| `string`, `bool`                                    | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                   |
+| `a.b`, `a.b = v`                                    | `a` is not a record, or has no field `b`                                                                                                                                                                                                              |
+| `a[i]`, `a[i] = v`                                  | `a` is neither an array nor a map; ◆ `a` is an array and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                  |
+| call                                                | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
+| record literal                                      | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |
+| array literal                                       | a spread operand is not an array                                                                                                                                                                                                                      |
+| `is`                                                | the right side is a path that does not evaluate to a record tag or a constructor                                                                                                                                                                      |
+| `for`                                               | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned                                                                                                      |
+| destructuring                                       | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions                                                  |
+| `_`                                                 | ◆ read                                                                                                                                                                                                                                                |
+| library function                                    | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                       |
+| ◆ top-level `var`                                   | read before its initializer has run                                                                                                                                                                                                                   |
+| ◆ `panic`                                           | always                                                                                                                                                                                                                                                |
+| ◆ any call                                          | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                                                |
+| `try`                                               | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |
+| `??`, `?.`, `==`, `!=`                              | never                                                                                                                                                                                                                                                 |
 
 ## 13. Example
 

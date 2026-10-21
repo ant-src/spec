@@ -59,4 +59,3 @@ Json.stringify[T](value: T): string                     // records as objects wi
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse as `float64`; a program that needs integers converts with `Math.toInt`, which returns `null` wherever `int(x)` would panic: a fraction, a value outside the `int` range such as `1e30`, `NaN`, or an infinity. A decoder into records is a function per type: narrow the tree with `is`, build the record, and propagate errors with `try`, passing the path along so an error can say `$.servers[2].port`; `tests/ok/json_decoder.ant` in the specification repository is the pattern. Typed decoding through reflection is deferred; the design is in the repository history at commit 81525d2.
-
