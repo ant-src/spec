@@ -220,7 +220,7 @@ var keyed = Map{ (name): 1, 7: "seven" }    // computed and non-string keys
 var empty: Map[string, int] = Map{}
 ```
 
-Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. A key that is a single word, an identifier or a keyword, is the string of that word, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`; any other expression is evaluated as the key, and a parenthesized identifier `(name)` is the variable. A bare identifier alone is shorthand, so `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare word before `:` is a name: the field of a record, the string key of a map. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A key is hashed when it is inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the entry may become unreachable. Section 11 covers the operations.
+Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. A key that is a single word, an identifier or a keyword, is the string of that word, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`; any other expression is evaluated as the key, and a parenthesized identifier `(name)` is the variable. A bare identifier alone is shorthand, so `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare word before `:` is a name: the field of a record, the string key of a map. `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A map keeps insertion order: `for`, `Map.keys`, `Map.values`, `Map.entries`, and rendering visit entries in the order their keys were first inserted. Replacing a value keeps the entry's position, and a key removed and inserted again goes to the end. A key is hashed when it is inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the entry may become unreachable. Section 11 covers the operations.
 
 ### Unions
 
@@ -855,7 +855,7 @@ Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 
 ### Map
 
-`Map[K, V]` is an unordered hash map keyed by `==`. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes `null`, `Map.has` is the only way to tell a missing key from a stored `null`. Functions that take a predicate or a mapper receive each `Entry[K, V]`.
+`Map[K, V]` is a hash map keyed by `==` that keeps insertion order (section 4). A function that builds a map from another keeps the order of its source, and `Map.merge` appends the keys of `n` that `m` lacks. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes `null`, `Map.has` is the only way to tell a missing key from a stored `null`. Functions that take a predicate or a mapper receive each `Entry[K, V]`.
 
 ```
 Map.size[K, V](m: Map[K, V]): int
@@ -864,7 +864,7 @@ Map.has[K, V](m: Map[K, V], k: K): bool
 Map.get[K, V](m: Map[K, V], k: K): V | null
 Map.set[K, V](m: Map[K, V], k: K, v: V): void                  // mutates; same as m[k] = v
 Map.remove[K, V](m: Map[K, V], k: K): V | null                 // mutates; the removed value
-Map.keys[K, V](m: Map[K, V]): Array[K]                         // unspecified order
+Map.keys[K, V](m: Map[K, V]): Array[K]                         // insertion order, as are values and entries
 Map.values[K, V](m: Map[K, V]): Array[V]
 Map.entries[K, V](m: Map[K, V]): Array[Entry[K, V]]
 Map.fromEntries[K, V](entries: Array[Entry[K, V]]): Map[K, V]  // later entries win
@@ -1017,7 +1017,7 @@ Every value has a kind, fixed when the value is created:
 | the ten numeric kinds | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it |
 | `bool`, `string`, `null`, `void` | as in section 4 |
 | array | a growable sequence of values |
-| map | a hash table from values to values, keyed by `==`; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==` |
+| map | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==` |
 | record | a tag plus a fixed set of named fields, in the order the type declares them |
 | tagged primitive | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4) |
 | func | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind |
@@ -1036,7 +1036,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 
 - **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string evaluates each `${...}` in order and renders it with `String.from`.
 - **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag. Entries evaluate in order; a spread copies every field of a value that must be a record; a later entry replaces an earlier one with the same name. Every name must be one the tag lists, and every name the tag lists must have received a value. The result is a new record with that tag and those fields, in the tag's order whatever order the literal wrote them.
-- **Map literal `Map{ ... }`.** A key that is a single word, an identifier or a keyword, is the string of that word, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces it. The result is a new map.
+- **Map literal `Map{ ... }`.** A key that is a single word, an identifier or a keyword, is the string of that word, decided by the parser (section 4); other keys and all values evaluate in order; a later entry whose key is `==` to an earlier one replaces its value and keeps its position. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value that must be an array. The result is a new array.
 - **Variable.** The value bound to the name.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace is a record, so this rule also covers `Array.map` and `Geometry.Point`.
@@ -1063,7 +1063,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Block.** Opens a scope and evaluates its statements in order. Its value is that of the last expression, or `void` when the block is empty or ends in a declaration or an assignment. Deferred blocks registered in it run when it exits (below).
 - **`if`.** The condition must be a `bool`. The value is the chosen branch's value; with no `else` and a `false` condition it is `void`.
 - **`while`.** Evaluates the condition, which must be a `bool`, before each iteration. The value is `void`.
-- **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates by index from zero while the index is below the current length, so elements appended during the loop are visited and removed ones are not. Over a map it visits each entry once as an `Entry` record in unspecified order; inserting or removing during the loop is a program error of the data-race kind, and entries may be skipped or seen twice. Over a string it yields each code point as a one-character string. Over a function it calls the function with a fresh `yield` function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or after the sequence function has returned, panics; a `return` or a panic in the body propagates through the sequence function like any other call. A destructuring on the left reads the named fields of each element, which must be a record with those fields. The value is `void`.
+- **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates by index from zero while the index is below the current length, so elements appended during the loop are visited and removed ones are not. Over a map it visits the entries as `Entry` records in insertion order, reading the map as it goes, like an array: an entry inserted during the loop is visited, an entry removed before the loop reaches it is not, and no entry is visited twice; a key removed and inserted again is a new entry at the end. Over a string it yields each code point as a one-character string. Over a function it calls the function with a fresh `yield` function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or after the sequence function has returned, panics; a `return` or a panic in the body propagates through the sequence function like any other call. A destructuring on the left reads the named fields of each element, which must be a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function body, lambda, `go` block, or `defer` block, running the deferred blocks of every block they exit.
 - **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body, lambda, `go` block, or `defer` block, running the deferred blocks of every block it exits. Directly inside a `go` or `defer` block it has no operand (section 5), so it ends the block with `void`.
 - **`try e`.** The value must be a record tagged `Ok` or `Err`. `Ok` yields its `value` field; `Err` returns a new `Err` record with the same `error` field from the enclosing function.
