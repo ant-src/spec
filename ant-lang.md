@@ -164,7 +164,7 @@ compile error is an error the checker reports.
 
 `ant run file.ant` does no static work beyond parsing. It loads the import graph, so a syntax error
 anywhere stops the program before `main`, and then it runs with annotations parsed and discarded. An
-unknown name fails when it is reached, not before, though an implementation may resolve names to
+unknown name panics when it is reached, not before, though an implementation may resolve names to
 slots as it loads. Every runtime rule is defined on values, which carry their concrete type: every
 value has a kind, such as `int`, `string`, array, or record, and a record or a tagged primitive also
 carries a tag (section 12). A program can run without being checked. Where the checker would have
@@ -1634,7 +1634,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   position. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value
   that must be an array. The result is a new array.
-- **Variable.** The value bound to the name.
+-  **Variable.** The value bound to the name; a name no scope binds panics.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace
   is a record, so this rule also covers `Array.map` and `Geometry.Point`; a tag and a constructor
   have the functions declared on their type as fields, so it also covers `Point.distance`.
@@ -1775,6 +1775,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | `is`                                                | the right side is a path that does not evaluate to a record tag or a constructor                                                                                                                                                                      |
 | `for`                                               | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned                                                                                                      |
 | destructuring                                       | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions                                                  |
+| variable                                            | no scope binds the name                                                                                                                                                                                                                               |
 | `_`                                                 | read                                                                                                                                                                                                                                                  |
 | library function                                    | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                       |
 | ◆ top-level `var`                                   | read before its initializer has run                                                                                                                                                                                                                   |
