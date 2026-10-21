@@ -385,10 +385,17 @@ look at. Each member has a discriminator:
 - the tag, for a named record or primitive type.
 
 A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile
-error and `Array[int | string]` is the type to write, while `int | float64` is fine. An anonymous
-record type has no discriminator and cannot be tested by `is`, so a union may contain at most one,
-as in `{ name: string } | null`, and never alongside a named record type. The reason is that width
-subtyping lets a value in by shape while `is` tests only the tag, which carries no type arguments:
+error and `Array[int | string]` is the type to write, while `int | float64` is fine. The rule
+applies to every union the checker forms, not only to those written in an annotation: an `if` whose
+branches join to `Array[int] | Array[string]`, a field read through a union whose members declare it
+as `Array[User]` and `Array[Order]` (see Tagged unions), or a variable assigned `Box[int]` on one
+path and `Box[string]` on another is a compile error at the join, which says to narrow first or to
+give the whole an expected type.
+
+An anonymous record type has no discriminator and cannot be tested by `is`, so a union may contain
+at most one, as in `{ name: string } | null`, and never alongside a named record type. The reason is
+that width subtyping lets a value in by shape while `is` tests only the tag, which carries no type
+arguments:
 
 ```ant
 type Box[T] = { value: T }
@@ -436,8 +443,9 @@ no member left, so the checker knows the chain is complete (section 5, `if`). Ad
 the exhaustiveness check. A union of empty records is an enumeration, and each member is also a type
 of its own that a function can take as a parameter.
 
-Through a value of union type, a field can be read when every member has it, and its type is the
-union of the members' field types. A field can never be assigned through a union type: narrow first,
+Through a value of union type, a field can be read when every member declares it and the union of
+the members' field types is itself a valid union (see Unions); that union is the field's type.
+Otherwise narrow the value first. A field can never be assigned through a union type: narrow first,
 then assign.
 
 `Result[T, E]` is a standard tagged union of `Ok[T]` and `Err[E]` (section 8).
