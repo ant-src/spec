@@ -1640,7 +1640,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   whose key is `==` to `i`, or `null` when there is none.
 - **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest
   of the postfix chain is skipped. Otherwise the plain rule applies.
--  **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one
+- **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one
   positional argument, which must have its base kind, and yields that value carrying the tag. For
   any other function, arguments evaluate in order. Positional arguments fill parameters left to
   right; a named argument fills the parameter of that name, which must exist and must not be filled
@@ -1677,7 +1677,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   order; maps have the same key set and `==` values per key; functions, tags, and sync objects are
   the same object. A pair of values already under comparison counts as equal (section 4). Values of
   different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
--  **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
+- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
   the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other path
   evaluates and must be a record tag or a constructor, not an alias tag, and the test is whether `a`
   is a record or tagged primitive carrying that tag. The result is a `bool`.
