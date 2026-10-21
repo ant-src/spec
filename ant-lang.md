@@ -131,10 +131,11 @@ var scores: Array[int] = []
 
 A name cannot be redeclared in the same scope, which is a syntax error; an inner scope may shadow an
 outer one, except that no declaration in any scope may shadow a prelude name (section 10). A `var`
-is visible from its declaration to the end of the enclosing block. Top-level `func`, `type`, and
-`var` declarations are visible throughout the module regardless of order, but a top-level
-initializer may refer directly, outside a nested function body, only to the `var`s above it (section
-10).
+is visible from its declaration to the end of the enclosing block; its own initializer may refer to
+it only inside a nested function body, which is how a local function calls itself (section 6).
+Top-level `func`, `type`, and `var` declarations are visible throughout the module regardless of
+order, but a top-level initializer may refer directly, outside a nested function body, only to the
+`var`s above it (section 10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -838,7 +839,10 @@ var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user
 ## 6. Functions
 
 `func` declares a named function at the top level of a module; inside a block, bind a function with
-`var`. Parameters are annotated; the return type is inferred unless the function is exported or
+`var`. Such a function may call itself, since the closure finds the name when it runs, but its type
+must be stated before its body is checked, by a return type on the `func` or a type on the `var`:
+inferring it from a body that calls it would meet its own inference in progress (section 4,
+Inference). Parameters are annotated; the return type is inferred unless the function is exported or
 recursive (section 4, Inference). The body is a block, so the last expression is the result and
 `return` is only needed to leave early.
 
@@ -1611,8 +1615,10 @@ A block opens a scope. `var` binds a name in the current scope from its declarat
 the block, each name at most once per scope, which the parser enforces (section 3); a function
 body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the
 module scope and then to the prelude. A closure keeps a reference to the scopes it was created in,
-so it sees later assignments to the variables it captured. Each iteration of a `for` opens a fresh
-scope for the loop variable.
+so it sees later assignments to the variables it captured, and a closure made in a `var`'s
+initializer sees that `var` once it is bound. The initializer runs first, so a call that reaches the
+variable before it is bound panics, as for a top-level `var`. Each iteration of a `for` opens a
+fresh scope for the loop variable.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
@@ -1781,7 +1787,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | variable                                            | no scope binds the name                                                                                                                                                                                                                               |
 | `_`                                                 | read                                                                                                                                                                                                                                                  |
 | library function                                    | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                       |
-| ◆ top-level `var`                                   | read before its initializer has run                                                                                                                                                                                                                   |
+| ◆ `var`                                             | read before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                                                                                                                       |
 | ◆ `panic`                                           | always                                                                                                                                                                                                                                                |
 | ◆ any call                                          | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                                                |
 | `try`                                               | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |
