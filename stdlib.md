@@ -1,8 +1,13 @@
 # Ant Standard Library: I/O Namespaces
 
-Companion to `ant-lang.md`. The core library, which every program needs, is section 11 of the specification. The namespaces here talk to the world outside the program, and they follow one rule: every operation that can fail returns a `Result` with `Error` as the error type, and nothing here panics on bad input. Blocking calls block only the calling goroutine (section 9).
+Companion to `ant-lang.md`. The core library, which every program needs, is section 11 of the
+specification. The namespaces here talk to the world outside the program, and they follow one rule:
+every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
+panics on bad input. Blocking calls block only the calling goroutine (section 9).
 
-This file is a sketch of shape, not a finished API. A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`, since a namespace is a record like an imported module and the bare name would collide with it.
+This file is a sketch of shape, not a finished API. A type a namespace declares is written through
+the namespace, `Json.Value` or `Http.Response`, since a namespace is a record like an imported
+module and the bare name would collide with it.
 
 ## File
 
@@ -58,4 +63,11 @@ Json.parse(text: string): Result[Json.Value, Error]
 Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would
 ```
 
-`Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse as `float64`; a program that needs integers converts with `Math.toInt`, which returns `null` wherever `int(x)` would panic: a fraction, a value outside the `int` range such as `1e30`, `NaN`, or an infinity. A decoder into records is a function per type: narrow the tree with `is`, build the record, and propagate errors with `try`, passing the path along so an error can say `$.servers[2].port`; `tests/ok/json_decoder.ant` in the specification repository is the pattern. Typed decoding through reflection is deferred; the design is in the repository history at commit 81525d2.
+`Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
+as `float64`; a program that needs integers converts with `Math.toInt`, which returns `null`
+wherever `int(x)` would panic: a fraction, a value outside the `int` range such as `1e30`, `NaN`, or
+an infinity. A decoder into records is a function per type: narrow the tree with `is`, build the
+record, and propagate errors with `try`, passing the path along so an error can say
+`$.servers[2].port`; `tests/ok/json_decoder.ant` in the specification repository is the pattern.
+Typed decoding through reflection is deferred; the design is in the repository history at commit
+81525d2.
