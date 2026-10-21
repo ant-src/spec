@@ -841,10 +841,10 @@ var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user
 `func` declares a named function at the top level of a module; inside a block, bind a function with
 `var`. Such a function may call itself, since the closure finds the name when it runs, but its type
 must be stated before its body is checked, by a return type on the `func` or a type on the `var`:
-inferring it from a body that calls it would meet its own inference in progress (section 4,
-Inference). Parameters are annotated; the return type is inferred unless the function is exported or
-recursive (section 4, Inference). The body is a block, so the last expression is the result and
-`return` is only needed to leave early.
+inferring it from a body that calls it would meet its own inference in progress. Parameters are
+annotated; the return type is inferred unless the function is exported or recursive (section 4,
+Inference). The body is a block, so the last expression is the result and `return` is only needed to
+leave early.
 
 ```ant
 func clamp(value: int, low: int, high: int): int {
@@ -1643,7 +1643,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   position. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value
   that must be an array. The result is a new array.
--  **Variable.** The value bound to the name; a name no scope binds panics.
+- **Variable.** The value bound to the name; a name no scope binds panics.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace
   is a record, so this rule also covers `Array.map` and `Geometry.Point`; a tag and a constructor
   have the functions declared on their type as fields, so it also covers `Point.distance`.
