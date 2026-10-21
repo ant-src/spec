@@ -95,7 +95,7 @@ var name: string = "ant"
 var scores: Array[int] = []
 ```
 
-A name cannot be redeclared in the same scope. An inner scope may shadow an outer one. A `var` is visible from its declaration to the end of the enclosing block. Top-level `func` and `type` declarations are visible throughout the module regardless of order; top-level `var` is not.
+A name cannot be redeclared in the same scope. An inner scope may shadow an outer one. A `var` is visible from its declaration to the end of the enclosing block. Top-level `func` and `type` declarations are visible throughout the module regardless of order. A top-level `var` is visible throughout the module as well, but an initializer may refer directly, outside a nested function body, only to the `var`s above it (section 10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -786,7 +786,7 @@ The path is a file path relative to the importing file, extension included; ther
 
 Imports are live and read-only. `export var` is allowed; an imported name reads the exporting module's current value each time, and assigning to an imported name or to a field of a namespace from outside the module is a compile error. Two imports binding the same local name are a compile error, and a top-level declaration cannot shadow an imported name, so every name in a file has one visible origin. The prelude names, `print`, `panic`, the type and conversion names such as `int` and `Result`, and the namespaces, count as imports in every module. There is no re-export. Import cycles are a compile error.
 
-Imports are resolved depth first in source order, and each module is initialized once, after everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may refer to each other in any order. Top-level `var` initializers run in source order. An initializer that refers directly to a later `var` is a compile error; reaching one through a function call before it is initialized is a runtime panic, since the checker does not trace calls.
+Imports are resolved depth first in source order, and each module is initialized once, after everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may refer to each other in any order. Top-level `var` initializers run in source order. An initializer that refers to a later `var` outside a nested function body is a compile error; reaching one through a function call before it is initialized is a runtime panic, since the checker does not trace calls.
 
 Execution starts at `func main()` in the module given to `ant run`, which must declare it. `main` takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit status is `0` when `main` returns, `1` when the main goroutine panics, and `2` when the program could not be loaded because of a syntax error or a missing module or `main`.
 
@@ -1028,7 +1028,7 @@ Arrays, maps, records, functions, and sync objects are references: a variable ho
 
 ### Names and scopes
 
-A block opens a scope. `var` binds a name in the current scope from its declaration to the end of the block; a function body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the scopes it was created in, so it sees later assignments to the variables it captured. Each iteration of a `for` opens a fresh scope for the loop variable. Reading a top-level `var` whose initializer has not run yet panics (section 10). A module's scope is a record, and `export` is a checker rule: at run time every field of a module record is readable.
+A block opens a scope. `var` binds a name in the current scope from its declaration to the end of the block; a function body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the scopes it was created in, so it sees later assignments to the variables it captured. Each iteration of a `for` opens a fresh scope for the loop variable. The module scope holds every top-level name from the start, so a function body can name a `var` declared below it; reading a top-level `var` whose initializer has not run yet panics (section 10). A module's scope is a record, and `export` is a checker rule: at run time every field of a module record is readable.
 
 ### Expressions
 
