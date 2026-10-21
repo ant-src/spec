@@ -80,7 +80,7 @@ An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowe
 float literal has digits on both sides of the point, an exponent, or both; `.5` and `1.` are errors.
 There are no literal suffixes: an integer literal is always an `int` and a float literal is always a
 `float64`. `1` is never a float; write `1.0`. Other numeric types are reached through a conversion,
-as in `byte(255)` or `float32(1.5)`. An integer literal that does not fit an `int` is a compile
+as in `byte(255)` or `float32(1.5)`. An integer literal that does not fit an `int` is a syntax
 error, so the most negative `int` is written `Math.minInt`.
 
 The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, whose hexadecimal value
