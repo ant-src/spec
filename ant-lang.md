@@ -1658,10 +1658,10 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   order; maps have the same key set and `==` values per key; functions, tags, and sync objects are
   the same object. A pair of values already under comparison counts as equal (section 4). Values of
   different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
-- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
-  and the ten numeric names test the kind of `a`. Any other path evaluates and must be a record tag
-  or a constructor, not an alias tag, and the test is whether `a` is a record or tagged primitive
-  carrying that tag. The result is a `bool`.
+-  **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
+  the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other path
+  evaluates and must be a record tag or a constructor, not an alias tag, and the test is whether `a`
+  is a record or tagged primitive carrying that tag. The result is a `bool`.
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the
   left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right
   operand must be a `bool` when it is evaluated.
@@ -1753,7 +1753,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | `is`                                                | the right side is a path that does not evaluate to a record tag or a constructor                                                                                                                                                                      |
 | `for`                                               | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned                                                                                                      |
 | destructuring                                       | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions                                                  |
-| `_`                                                 | ◆ read                                                                                                                                                                                                                                                |
+| `_`                                                 | read                                                                                                                                                                                                                                                  |
 | library function                                    | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                       |
 | ◆ top-level `var`                                   | read before its initializer has run                                                                                                                                                                                                                   |
 | ◆ `panic`                                           | always                                                                                                                                                                                                                                                |
