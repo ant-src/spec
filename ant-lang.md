@@ -129,10 +129,11 @@ var name: string = "ant"
 var scores: Array[int] = []
 ```
 
-A name cannot be redeclared in the same scope; an inner scope may shadow an outer one. A `var` is
-visible from its declaration to the end of the enclosing block. Top-level `func`, `type`, and `var`
-declarations are visible throughout the module regardless of order, but a top-level initializer may
-refer directly, outside a nested function body, only to the `var`s above it (section 10).
+A name cannot be redeclared in the same scope, which is a syntax error; an inner scope may shadow an
+outer one. A `var` is visible from its declaration to the end of the enclosing block. Top-level
+`func`, `type`, and `var` declarations are visible throughout the module regardless of order, but a
+top-level initializer may refer directly, outside a nested function body, only to the `var`s above
+it (section 10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -1292,8 +1293,8 @@ compile error outside its module, like any other private field.
 
 Imports are live and read-only. `export var` is allowed; an imported name reads the exporting
 module's current value each time, and assigning to an imported name or to a field of a namespace
-from outside the module is a compile error. Two imports binding the same local name are a compile
-error, and a top-level declaration cannot shadow an imported name, so every name in a file has one
+from outside the module is a compile error. Two imports binding the same local name, or a top-level
+declaration that shadows an imported name, are syntax errors, so every name in a file has one
 visible origin. The prelude names count as imports in every module: `print`, `panic`, the type and
 conversion names such as `int` and `Result`, and the namespaces. There is no re-export. An import
 cycle is an error in both commands, since no module in it could be initialized after its imports:
@@ -1604,10 +1605,11 @@ immutable, so for them the distinction never shows.
 ### Names and scopes
 
 A block opens a scope. `var` binds a name in the current scope from its declaration to the end of
-the block; a function body's scope starts with the parameters. Lookup walks outward through the
-enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the
-scopes it was created in, so it sees later assignments to the variables it captured. Each iteration
-of a `for` opens a fresh scope for the loop variable.
+the block, each name at most once per scope, which the parser enforces (section 3); a function
+body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the
+module scope and then to the prelude. A closure keeps a reference to the scopes it was created in,
+so it sees later assignments to the variables it captured. Each iteration of a `for` opens a fresh
+scope for the loop variable.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
