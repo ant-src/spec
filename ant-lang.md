@@ -994,7 +994,9 @@ parameter:
   assignment anywhere in the body cancels it from the loop head on.
 
 A field path such as `user.address` never narrows, because any call between the test and the use may
-reassign it. Bind it to a local first, or use `?.` or `??`.
+reassign it. Bind it to a local first, or use `?.` or `??`. A top-level `var`, including an imported
+one, never narrows either, because any call may reassign it; read it into a local first in the same
+way.
 
 Narrowing is limited to locals because a local can go stale in only one way, by reassignment: a
 record's tag never changes and a reference never becomes `null` on its own. Another goroutine can
