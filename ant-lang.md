@@ -4,7 +4,7 @@ Draft 0.1 · October 2026
 
 Ant is a general-purpose, garbage-collected language with JavaScript-like syntax, static types,
 expression-oriented control flow, and goroutine-style concurrency. This document describes the
-language as a programmer sees it. It does not describe the compiler or the runtime.
+language as a programmer sees it, not the compiler or the runtime.
 
 The name "Ant" is a placeholder.
 
@@ -15,15 +15,15 @@ The name "Ant" is a placeholder.
 - **Everything is an expression.** Blocks, `if`, and loops produce values.
 - **Errors are values.** `Result` carries expected failures and `null` carries absence. `panic` is
   for bugs.
-- **Types are advisory.** `ant check` reads annotations and `ant run` discards them. From a `type`
-  declaration the interpreter keeps only the name, which becomes a tag, and for a record the field
-  names in order (section 4). No evaluation rule consults a type that was written down.
+- **Types are advisory.** `ant check` reads annotations and `ant run` discards them. The interpreter
+  keeps only a type's name, as a tag, and a record's field names in order (section 4). No evaluation
+  rule consults a written type.
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type
   checker.
 
 ## 2. Lexical structure
 
-Source files are UTF-8 text. The file extension is `.ant`.
+Source files are UTF-8 text with the extension `.ant`.
 
 ### Comments
 
@@ -38,8 +38,8 @@ Block comments do not nest.
 
 An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`.
 Case carries no meaning. `_` on its own is a write-only identifier: it can be bound or assigned
-wherever a name can, which discards the value, and reading it is a compile error in `ant check` and
-a panic in `ant run`.
+wherever a name can, which discards the value. Reading it is a compile error in `ant check` and a
+panic in `ant run`.
 
 Keywords:
 
@@ -48,24 +48,23 @@ break continue defer else export false for func go if import
 in is null return true try type var void while
 ```
 
-These words are reserved so that they stay available and so that JavaScript habits produce an error
-rather than an identifier:
+Reserved words, so that they stay available and JavaScript habits produce an error rather than an
+identifier:
 
 ```
 as async await catch class const enum finally function interface
 let match switch this throw undefined
 ```
 
-Both lists apply to the names a program declares: variables, functions, types, and parameters. A
-field can have any name. After `.` or `?.`, and before `:` in a record type, a record or map
-literal, or a record destructuring, a keyword or reserved word is a name, so `event.type`,
-`{ type: string }`, and `Map{ class: "a" }` are fine, and the key of `Map{ null: 1 }` is the string
-`"null"`, as in JavaScript. The shorthand forms `Map{ type }` and `var { type } = event` read or
-bind a variable of that name, which cannot exist, so they are errors; write
-`var { type: kind } = event`.
+Neither list can name a variable, function, type, or parameter. A field can have any name: after `.`
+or `?.`, and before `:` in a record type, a record or map literal, or a record destructuring, a
+keyword or reserved word is a plain name. So `event.type`, `{ type: string }`, and
+`Map{ class: "a" }` are fine, and the key of `Map{ null: 1 }` is the string `"null"`, as in
+JavaScript. The shorthands `Map{ type }` and `var { type } = event` would read or bind a variable
+named `type`, which cannot exist, so they are errors; write `var { type: kind } = event`.
 
-Names such as `Array`, `Map`, `Result`, `never`, `print`, and `panic` are ordinary identifiers bound
-by the standard library. They are not keywords.
+`Array`, `Map`, `Result`, `never`, `print`, `panic`, and the other standard library names are
+ordinary identifiers bound by the prelude, not keywords.
 
 ### Literals
 
@@ -79,37 +78,37 @@ true        false         null
 
 An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowed between digits. A
 float literal has digits on both sides of the point, an exponent, or both; `.5` and `1.` are errors.
-An integer literal is always an `int` and a float literal is always a `float64`. An integer literal
-that does not fit an `int` is a compile error, so the most negative `int` is written `Math.minInt`.
-Other numeric types are reached through a conversion, as in `byte(255)` or `float32(1.5)`. `1` is
-never a float; write `1.0`.
+There are no literal suffixes: an integer literal is always an `int` and a float literal is always a
+`float64`. `1` is never a float; write `1.0`. Other numeric types are reached through a conversion,
+as in `byte(255)` or `float32(1.5)`. An integer literal that does not fit an `int` is a compile
+error, so the most negative `int` is written `Math.minInt`.
 
 The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, whose hexadecimal value
 must be a Unicode scalar value: at most `10FFFF` and not a surrogate. A plain string stays on one
-line; a template string may span lines. Template strings interpolate any expression. Each `${...}`
-is converted with `String.from`, which is defined for every type (section 11), and braces nest
-inside it, so a lambda or a record literal can appear there. There are no raw strings and no
+line; a template string may span lines. A template string interpolates any expression: each `${...}`
+is rendered with `String.from`, which is defined for every type (section 11). Braces nest inside
+`${...}`, so a lambda or a record literal can appear there. There are no raw strings and no
 character literals.
 
 ### Line endings
 
-A newline ends an expression, except when:
+A newline or a semicolon ends an expression. A newline does not end one when:
 
 - the line ends with a token that cannot end an expression, such as a binary operator, `,`, `(`,
   `[`, `{`, or `=`; or
 - the next non-blank line starts with `.`, `?.`, `|`, or `else`.
 
-A semicolon also ends an expression. Nothing else is inferred. In particular, a line that starts
-with `(` or `[` begins a new statement, so `a` followed by `(b)` on the next line is two statements
-and not a call, and a `return` at the end of a line returns `void`, which the checker rejects in a
-function with another return type. A trailing comment does not change any of this.
+Nothing else is inferred. A line that starts with `(` or `[` begins a new statement, so `a` followed
+by `(b)` on the next line is two statements, not a call. A `return` at the end of a line returns
+`void`, which the checker rejects in a function with another return type. A trailing comment changes
+none of this.
 
-Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. The
-items of a call, a literal, a record type, a parameter list, and an import list are separated by
-commas, with an optional trailing comma. Only blocks separate their items by newlines.
+Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. Calls,
+literals, record types, parameter lists, and import lists separate their items with commas and allow
+a trailing comma. Only blocks separate their items with newlines.
 
-The continuation rule for a leading `.`, `?.`, `|`, or `else` exists so that pipelines, union types,
-and `else` chains read top to bottom; none of those tokens can start a statement, so the rule is
+The continuation rule for a leading `.`, `?.`, `|`, or `else` lets pipelines, union types, and
+`else` chains read top to bottom. None of those tokens can start a statement, so the rule is
 unambiguous:
 
 ```ant
@@ -121,8 +120,8 @@ var total = orders
 
 ## 3. Variables
 
-`var` declares a mutable binding. Every declaration has an initializer. The type is inferred from
-the initializer or written explicitly.
+`var` declares a mutable binding. Every declaration has an initializer, and the type is inferred
+from it or written explicitly.
 
 ```ant
 var count = 0
@@ -130,11 +129,10 @@ var name: string = "ant"
 var scores: Array[int] = []
 ```
 
-A name cannot be redeclared in the same scope. An inner scope may shadow an outer one. A `var` is
-visible from its declaration to the end of the enclosing block. Top-level `func` and `type`
-declarations are visible throughout the module regardless of order. A top-level `var` is visible
-throughout the module as well, but an initializer may refer directly, outside a nested function
-body, only to the `var`s above it (section 10).
+A name cannot be redeclared in the same scope; an inner scope may shadow an outer one. A `var` is
+visible from its declaration to the end of the enclosing block. Top-level `func`, `type`, and `var`
+declarations are visible throughout the module regardless of order, but a top-level initializer may
+refer directly, outside a nested function body, only to the `var`s above it (section 10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -149,30 +147,39 @@ destructuring of targets such as `[a, b]` (section 5). There is no `++`, `--`, o
 
 ## 4. Types
 
-Ant is statically typed. Types are checked before the program runs, and most annotations are
-inferred. A named record or primitive type is nominal: each `type` declaration whose body is a
-record type or a primitive type is a distinct type, identified by its tag. Every other type is
-structural: two types with the same shape are the same type.
+Ant is statically typed, and most annotations are inferred. A named record type or a named primitive
+type is nominal: each `type` declaration whose body is a record type or a primitive type is a
+distinct type, identified by its tag. Every other type is structural: two types with the same shape
+are the same type.
 
-Types are checked by a separate command and erased before the program runs. `ant check file.ant`
-runs the checker over the file and every module it imports, including code nothing calls, and exits
-non-zero with the errors; this is where inference, bounds, and narrowing live, and where their cost
-goes. `ant run file.ant` performs no static work beyond parsing: it loads the import graph, so a
-syntax error anywhere stops the program before `main`, and then it runs, with annotations parsed and
-discarded and no checking ahead of time: an unknown name fails when it is reached, not before,
-though an implementation may resolve names to slots as it loads. Editors and continuous integration
-run `check`; the terminal runs `run`. There is no flag that makes `run` check first. A `type`
-declaration is the one exception: its name is bound to a fresh tag, or, for a named primitive type,
-to a constructor function that carries one; a record literal with that name stores the tag (see
-Records), and calling the constructor tags a primitive (see Named primitive types); the body is
-discarded, except that a record tag keeps the names of its fields in declaration order. Every `type`
-declaration binds a tag or a constructor, even an alias binds a tag; only record literals,
-constructors, and `is` tests use tags, and the checker allows a literal head only on a record type.
-Every rule in this document that mentions a type is enforced by the checker, and every runtime rule
-is defined on values, which carry their concrete type. A program can run without being checked;
-where the checker would have rejected it, the runtime panics at the point of the error, such as `+`
-on operands of different types, a call on a value that is not a function, or a field read on a value
-that is not a record. Section 12 lists every such check.
+### Checking and running
+
+Types are checked by one command and erased by the other.
+
+`ant check file.ant` runs the checker over the file and every module it imports, including code
+nothing calls, and exits non-zero with the errors. Inference, bounds, and narrowing live here, and
+so does their cost. Every rule in this document that mentions a type is a checker rule, and a
+compile error is an error the checker reports.
+
+`ant run file.ant` does no static work beyond parsing. It loads the import graph, so a syntax error
+anywhere stops the program before `main`, and then it runs with annotations parsed and discarded. An
+unknown name fails when it is reached, not before, though an implementation may resolve names to
+slots as it loads. Every runtime rule is defined on values, which carry their concrete type: every
+value has a kind, such as `int`, `string`, array, or record, and a record or a tagged primitive also
+carries a tag (section 12). A program can run without being checked. Where the checker would have
+rejected it, the runtime panics at the point of the error: `+` on operands of different types, a
+call on a value that is not a function, a field read on a value that is not a record. Section 12
+lists every such check.
+
+Editors and continuous integration run `check`; the terminal runs `run`. No flag makes `run` check
+first.
+
+A `type` declaration is the one thing the interpreter keeps of the type language. It binds the name
+to a fresh tag, or, for a named primitive type, to a constructor function that carries one. A record
+tag also keeps the names of its fields in declaration order; the rest of the body is discarded (see
+Type declarations). Every `type` declaration binds a tag or a constructor, even an alias, but only
+record literals, constructor calls, and `is` tests use tags, and the checker allows a literal head
+only on a record type.
 
 ### Primitives
 
@@ -187,25 +194,23 @@ that is not a record. Section 12 lists every such check.
 | `void`                             | the single value `void`, which carries no information                        |
 | `never`                            | the type of expressions that do not return, such as `panic(...)` or `return` |
 
-`int` is an alias for `int64` and `byte` is an alias for `uint8`: `int` is the default, and the
-sized names are for when the size matters. The prelude also declares `Integer`, the union of the
-eight integer types, `Number`, which adds the two float types, and `Ordered`, which is
-`Number | string`; they exist to bound type parameters (see Generics).
+`int` is an alias for `int64` and `byte` for `uint8`. `int` is the default; the sized names are for
+when the size matters. The prelude also declares `Integer`, the union of the eight integer types,
+`Number`, which adds the two float types, and `Ordered`, which is `Number | string`. They exist to
+bound type parameters (see Generics).
 
 `void` is both a type and its only value, like `null`. A block that ends in a declaration or
 assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly
 when a value is required, as in `Result.ok(void)`.
 
-Numeric types never mix. Convert explicitly by calling the target type as a function: each of the
+Numeric types never mix. Convert explicitly by calling the target type as a function. Each of the
 ten numeric names is a prelude function that takes any numeric value, and it is a value in its own
-right, so `Array.map([72, 105], byte)` builds an `Array[byte]`. A conversion into an integer kind
-must be exact: a fraction, a value out of range, `NaN`, or an infinity panics, and truncation is
-spelled `int(Math.trunc(x))`. A conversion into a float kind rounds to the nearest representable
-value and never panics. Section 12 has the table. `string` and `bool` are callable too, but only to
-unwrap a named primitive type (see Named primitive types) or as the identity on their own kind:
-parsing is `String.toInt` and `String.toFloat`, rendering is `String.from`. There are no literal
-suffixes; an integer literal is always an `int` and a float literal a `float64`, so a `byte` is
-written `byte(255)`.
+right, so `Array.map([72, 105], byte)` builds an `Array[byte]`. A conversion to an integer kind must
+be exact: a fraction, a value out of range, `NaN`, or an infinity panics, and truncation is spelled
+`int(Math.trunc(x))`. A conversion to a float kind rounds to the nearest representable value and
+never panics. Section 12 has the table. `string` and `bool` are callable too, but only to unwrap a
+named primitive type (see Named primitive types) or as the identity on their own kind. Parsing is
+`String.toInt` and `String.toFloat`; rendering is `String.from`.
 
 ```ant
 var n = 7
@@ -227,30 +232,27 @@ var p = Point{ x: 1.0, y: 2.0 }
 p.x = 3.0
 ```
 
-Every record value therefore has a name; there are no anonymous record literals. The head of a
-literal is an identifier path, so a type reached through a namespace is written
-`Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a shorthand
-entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses. Map
-literals follow the same two rules (next section).
+Every record value has a name; there are no anonymous record literals. The head of a literal is an
+identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type
+arguments are never written there. A bare identifier is a shorthand entry: `Point{ x, y }` means
+`Point{ x: x, y: y }`, the same shorthand destructuring uses. Map literals follow the same two rules
+(see Arrays and maps).
 
-The name is part of the value. A `type` declaration whose body is a record type binds its name to a
-fresh tag, and a literal stores the tag of its head in the record. The tag, with the record's field
-names in declaration order, is all the interpreter keeps of a type declaration. The names are what
-let `ant run` reject a literal with a missing or unknown field and render fields in declaration
-order; no field type is kept. The tag is compared only by identity and no evaluation rule reads the
-declaration, so the interpreter never interprets a type, and a tag reached through an import or an
-alias is the same tag. The checker identifies the type by the same tag: two declarations with the
-same fields are different types, and `type B = A` is a compile error when `A` is a record or named
-primitive type, since it would mint a second tag for one type. Declare the fields, or the base type,
-again instead.
+The name is part of the value: a literal stores the tag of its head in the record. The interpreter
+keeps the field names so that `ant run` can reject a literal with a missing or unknown field and
+render fields in declaration order; it keeps no field type. A tag is compared only by identity, and
+a tag reached through an import or an alias is the same tag. The checker identifies the type by the
+same tag, so two declarations with the same fields are different types. `type B = A` is a compile
+error when `A` is a record or named primitive type, since it would mint a second tag for one type.
+Declare the fields, or the base type, again instead.
 
 A record has no dynamic access: `p["x"]` is a compile error, and `for` does not iterate a record.
-When the keys are data rather than part of the type, use a `Map` (next section).
+When the keys are data rather than part of the type, use a `Map`.
 
 A named record type accepts only values that carry its tag. An anonymous record type, written in an
-annotation as `{ name: string }`, accepts any record that has at least those fields, whatever its
-tag. This is structural width subtyping, and it is how a function takes "anything with a name". A
-record literal must list exactly the fields of its named type, which catches typos.
+annotation as `{ name: string }`, accepts any record with at least those fields, whatever its tag.
+This is structural width subtyping, and it is how a function takes "anything with a name". A record
+literal must list exactly the fields of its named type, which catches typos.
 
 ```ant
 type Named = { name: string }
@@ -263,7 +265,7 @@ var n: Named = user                         // compile error: a Person is not a 
 greet(Named{ name: "ada", age: 36 })        // compile error: Named has no field age
 ```
 
-The spread `...` copies all fields of a record into a new literal. Later fields win. The tag comes
+The spread `...` copies all fields of a record into a new literal; later fields win. The tag comes
 from the head, so a spread also converts between record types with the same fields. The operand must
 have a named record type: a value of anonymous record type may carry fields its type does not list,
 and the spread would copy them too.
@@ -277,13 +279,13 @@ var v = Vec{ ...p }                        // a Vec with the fields of p
 
 Records, arrays, and maps are reference values: assigning or passing one shares it, and a change
 made through one name is visible through every other. `==` compares structure, never identity. Two
-records are equal when they carry the same tag and their fields are equal; arrays compare by length
-and elements, maps by key set and values, primitives by value, and functions and synchronization
-objects by identity. The comparison recurses with `==` over every run-time field, including fields
-the static type does not mention, so it agrees with `String.from` and `Json.stringify`. A pair of
-values already under comparison counts as equal, so cyclic structures compare in finite time.
-Identity is a library call: `Record.same`, `Array.same`, and `Map.same` report whether two names
-refer to one value.
+records are equal when they carry the same tag and their fields are equal. Arrays compare by length
+and elements, maps by key set and values, primitives by value, and functions and sync objects by
+identity. The comparison recurses with `==` over every run-time field, including fields the static
+type does not mention, so it agrees with `String.from` and `Json.stringify`. A pair of values
+already under comparison counts as equal, so cyclic structures compare in finite time. Identity is a
+library call: `Record.same`, `Array.same`, and `Map.same` report whether two names refer to one
+value.
 
 ```ant
 var p = Point{ x: 1.0, y: 2.0 }
@@ -300,10 +302,10 @@ Record.same(p, Point{ ...p })     // false
 A `type` declaration whose body is one of the twelve primitive types, the ten numeric kinds, `bool`,
 and `string`, also creates a new nominal type, with its name as the tag. A value of it is a
 primitive carrying the tag, built by calling the type name with one argument of the base type,
-exactly as `byte(255)` builds a `byte`; a literal cannot carry the tag, because the interpreter
+exactly as `byte(255)` builds a `byte`. A literal cannot carry the tag, because the interpreter
 never sees an annotation. Calling the base type name on it, `string(id)` or `int(count)`, gives the
-payload back. It is assignable only to itself, never to its base or to another type over the same
-base, which is what keeps two kinds of identifier apart.
+payload back. The type is assignable only to itself, never to its base or to another type over the
+same base, which is what keeps two kinds of identifier apart.
 
 ```ant
 type UserId = string
@@ -319,19 +321,20 @@ var e = Meters(3.0) * 2.0                    // compile error; unwrap or tag the
 var byUser: Map[UserId, Account] = Map{}     // keys work, since == works
 ```
 
-An arithmetic operator applies to two values of the same named primitive type when it applies to the
-base, and the result has that type; a comparison on them is a plain `bool`, as is `==`, which
+An arithmetic operator applies to two values of one named primitive type when it applies to the
+base, and the result has that type. A comparison on them is a plain `bool`, as is `==`, which
 follows the equality rule of section 5 and never panics. Mixing a tagged value with a plain one, or
 two different tags, in arithmetic or a comparison is a compile error and a kind panic. Library
-functions take the base kinds, so `String.length(id)` needs `string(id)`. In expression position
-`UserId` is its constructor, a function from the base type to `UserId`, in the checker as in the
-interpreter: the name binds a function value that carries the tag, so `UserId is func` holds and
-`Array.map(raw, UserId)` tags every element. `is UserId` tests the tag, so `UserId | string` and
-`UserId | AccountId` are distinguishable unions. A type parameter the body does not mention is
-allowed, so `type Id[T] = string` gives `Id[User]` and `Id[Account]` as distinct static types over
-one tag; a union of the two is rejected, since they share it. `Ok[T]` and `Err[E]` stay records
-rather than taking this form, because a tag over an arbitrary payload needs a field to get the
-payload out, and a record with one field is exactly that.
+functions take the base kinds, so `String.length(id)` needs `string(id)`.
+
+In expression position `UserId` is its constructor, a function from the base type to `UserId`, in
+the checker as in the interpreter. The name binds a function value that carries the tag, so
+`UserId is func` holds and `Array.map(raw, UserId)` tags every element. `is UserId` tests the tag,
+so `UserId | string` and `UserId | AccountId` are distinguishable unions. A type parameter the body
+does not mention is allowed: `type Id[T] = string` gives `Id[User]` and `Id[Account]` as distinct
+static types over one tag, and a union of the two is rejected, since they share it. `Ok[T]` and
+`Err[E]` stay records rather than taking this form, because a tag over an arbitrary payload needs a
+field to get the payload out, and a record with one field is exactly that.
 
 ### Arrays and maps
 
@@ -345,16 +348,17 @@ var empty: Map[string, int] = Map{}
 
 Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name
 prefix as a record literal. A key that is a single word, an identifier or a keyword, is the string
-of that word, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`; any other expression is
+of that word, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`. Any other expression is
 evaluated as the key, and a parenthesized identifier `(name)` is the variable. A bare identifier
-alone is shorthand, so `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a
-bare word before `:` is a name: the field of a record, the string key of a map. `Array[T]` is dense
-and growable. `Map[K, V]` keys compare the way `==` does, so a record or an array can be a key. A
-map keeps insertion order: `for`, `Map.keys`, `Map.values`, `Map.entries`, and rendering visit
-entries in the order their keys were first inserted. Replacing a value keeps the entry's position,
-and a key removed and inserted again goes to the end. A key is hashed when it is inserted, and
-mutating it afterwards is a program error like a data race: memory stays safe, but the entry may
-become unreachable. Section 11 covers the operations.
+alone is shorthand: `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare
+word before `:` is a name: the field of a record, the string key of a map.
+
+`Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an
+array can be a key. A map keeps insertion order: `for`, `Map.keys`, `Map.values`, `Map.entries`, and
+rendering visit entries in the order their keys were first inserted. Replacing a value keeps the
+entry's position; a key removed and inserted again goes to the end. A key is hashed when it is
+inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the
+entry may become unreachable. Section 11 covers the operations.
 
 ### Unions
 
@@ -371,17 +375,20 @@ func describe(id: Id): string {
 }
 ```
 
-A nullable type is written `T | null`. See section 7.
+A nullable type is written `T | null` (section 7).
 
 The members of a union must be distinguishable at run time, because `is` has only kinds and tags to
-look at. Each member has a discriminator: the kind, for `bool`, `string`, `null`, `void`, and each
-of the ten numeric kinds; the word array, map, or func, type arguments not counting; or the tag, for
-a named record or primitive type. A union may contain each discriminator at most once, so
-`Array[int] | Array[string]` is a compile error and `Array[int | string]` is the type to write,
-while `int | float64` is fine. An anonymous record type has no discriminator and cannot be tested by
-`is`, so a union may contain at most one, as in `{ name: string } | null`, and it may not share a
-union with any named record type. The reason is that width subtyping lets a value in by shape while
-`is` tests only the tag, which carries no type arguments:
+look at. Each member has a discriminator:
+
+- the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds;
+- the word array, map, or func, type arguments not counting; or
+- the tag, for a named record or primitive type.
+
+A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile
+error and `Array[int | string]` is the type to write, while `int | float64` is fine. An anonymous
+record type has no discriminator and cannot be tested by `is`, so a union may contain at most one,
+as in `{ name: string } | null`, and never alongside a named record type. The reason is that width
+subtyping lets a value in by shape while `is` tests only the tag, which carries no type arguments:
 
 ```ant
 type Box[T] = { value: T }
@@ -392,12 +399,12 @@ func increment(b: Mixed): int {
 }
 ```
 
-A type parameter has no discriminator either; it may share a union only with `null`, `void`, other
+A type parameter has no discriminator either. It may share a union only with `null`, `void`, other
 type parameters, and named record or primitive types that take no type arguments. `T | null`,
-`T | NotFound`, and `Ok[T] | Err[E]` are fine, while `T | Array[int]` would become ambiguous once
-`T` is an array and `T | Box[int]` once `T` is a `Box[string]`. With these two restrictions every
-value in a union carries the discriminator of one declared member at that member's type arguments,
-and the checker's work for `is` and for exhaustive chains is one lookup per member.
+`T | NotFound`, and `Ok[T] | Err[E]` are fine; `T | Array[int]` would become ambiguous once `T` is
+an array, and `T | Box[int]` once `T` is a `Box[string]`. With these two restrictions every value in
+a union carries the discriminator of one declared member at that member's type arguments, and the
+checker's work for `is` and for exhaustive chains is one lookup per member.
 
 ### Tagged unions
 
@@ -430,10 +437,10 @@ the exhaustiveness check. A union of empty records is an enumeration, and each m
 of its own that a function can take as a parameter.
 
 Through a value of union type, a field can be read when every member has it, and its type is the
-union of the members' field types. A field can never be assigned through a union type; narrow first,
+union of the members' field types. A field can never be assigned through a union type: narrow first,
 then assign.
 
-`Result[T, E]` is a standard tagged union of `Ok[T]` and `Err[E]`. See section 8.
+`Result[T, E]` is a standard tagged union of `Ok[T]` and `Err[E]` (section 8).
 
 ### Function types
 
@@ -470,8 +477,8 @@ for `T` must be assignable to the bound, and when the bound is a union, the solu
 single member of it, never a union: `[T: Ordered]` admits `int` or `string`, not `int | string` and
 not `Ordered` itself. Inside the body, `T` is known only to be assignable to its bound: the fields
 of a record bound can be read and assigned, and an operator applies to `T` when it applies to every
-member of the bound, which is sound only because `T` stands for one member. The restriction is what
-keeps this body honest:
+member of the bound. That is sound only because `T` stands for one member, which is what the
+restriction guarantees:
 
 ```ant
 func bigger[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
@@ -503,33 +510,38 @@ generic type with different type arguments is a different type: `Array[Circle]` 
 
 ### Type declarations
 
-`type` declares a name and appears only at the top level of a module. When the body is a record
-type, the declaration creates a new type with that name as its tag (see Records), and the tag is
-marked as a record tag. When the body is a primitive type, it creates a new type as well (see Named
-primitive types), and the name binds the type's constructor, a function value that carries the tag
-and its base kind. Otherwise the name is an alias, and its tag is marked as an alias tag, which
-neither a record literal, a constructor call, nor `is` accepts, since an alias has no runtime
-identity. An alias is interchangeable with its body: `type Id = int | string` is the union written
-out, and `type Shape = Circle | Rect` likewise. A type may refer to itself through a record, array,
-map, or function type, so `type Tree = { value: int, children: Array[Tree] }` is fine;
-`type A = A | null`, or a cycle of plain aliases, is a compile error. A type name is also the
-namespace of the functions declared on it (section 6, Functions on types). It is an expression only
-as the head of a record literal, as the target of `is`, as the left side of `.` naming one of its
-functions, or, for a named primitive type, as its constructor; anywhere else it is a compile error,
-since a type has no value. There are no classes, interfaces, or prototypes.
+`type` declares a name and appears only at the top level of a module. The body decides what the name
+means:
+
+- A record type creates a new type with that name as its tag, marked as a record tag (see Records).
+- A primitive type creates a new type as well, and the name binds the type's constructor, a function
+  value that carries the tag and its base kind (see Named primitive types).
+- Any other body makes the name an alias. Its tag is marked as an alias tag, which neither a record
+  literal, a constructor call, nor `is` accepts, since an alias has no runtime identity. An alias is
+  interchangeable with its body: `type Id = int | string` is the union written out, and
+  `type Shape = Circle | Rect` likewise.
+
+A type may refer to itself through a record, array, map, or function type, so
+`type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of
+plain aliases, is a compile error.
+
+A type name is also the namespace of the functions declared on it (section 6, Functions on types).
+It is an expression only as the head of a record literal, as the target of `is`, as the left side of
+`.` naming one of its functions, or, for a named primitive type, as its constructor. Anywhere else
+it is a compile error, since a type has no value. There are no classes, interfaces, or prototypes.
 
 ### Assignability
 
 A value of type `S` can be used where `T` is expected when one of these holds:
 
-- `S` and `T` are the same type. Primitives never widen; `int8` is not an `int`, and a named
+- `S` and `T` are the same type. Primitives never widen: `int8` is not an `int`, and a named
   primitive type is neither its base nor another type over that base.
 - `T` is a union and `S` is assignable to one of its members, or `S` is a union and every member of
   `S` is assignable to `T`. Members flatten and deduplicate, so `T | null | null` is `T | null`.
 - `S` is `never`. `void` is assignable only to `void`, and `null` only to a type that includes it.
 - `T` is an anonymous record type and `S` is a record type with at least the fields of `T`, each
   with exactly the type `T` gives it. A named record type accepts only its own tag.
-- `S` and `T` are the same generic type with identical type arguments. Type arguments are invariant,
+- `S` and `T` are the same generic type with identical type arguments. Type arguments are invariant
   because contents are mutable: if `Array[Circle]` were an `Array[Shape]`, a widened alias could
   store a `Rect` among the circles for a later read to panic on, and the checker's guarantee would
   be gone.
@@ -566,8 +578,8 @@ Inference is local and bidirectional. Every expression either synthesizes a type
 against an expected type. Expected types come from annotations, parameter types, declared return
 types, the field types of a record literal, the element types of an expected array or map, and the
 branches of an `if` whose whole has an expected type. Nothing is inferred across statements: an
-unannotated `var` takes exactly the type of its initializer, so `var s = Active{}` has type
-`Active`, and a later `s = Suspended{ reason: "x" }` is a compile error unless the declaration says
+unannotated `var` takes exactly the type of its initializer. `var s = Active{}` has type `Active`,
+and a later `s = Suspended{ reason: "x" }` is a compile error unless the declaration says
 `var s: Status`.
 
 A generic call solves its type parameters in a fixed order: from the expected type first, then from
@@ -597,13 +609,13 @@ expression has the union of the branch types, with `never` dropped, so
 `if n > 0 { "positive" } else { null }` has type `string | null`.
 
 Literals get no help from context: an integer literal is always `int`, a float literal always
-`float64`, and a string literal never carries a tag, so `var id: UserId = "u-1"` is a compile error
-and `UserId("u-1")` the spelling, because the interpreter never sees the expected type (see
-Primitives).
+`float64`, and a string literal never carries a tag. `var id: UserId = "u-1"` is a compile error and
+`UserId("u-1")` is the spelling, because the interpreter never sees the expected type (see Named
+primitive types).
 
 ## 5. Expressions
 
-Every construct is an expression with a type. Statements are just expressions whose value is `void`.
+Every construct is an expression with a type. Statements are expressions whose value is `void`.
 
 Evaluation is strictly left to right: the callee before its arguments, arguments in written order,
 and record fields, array elements, and map entries in written order. An assignment evaluates the
@@ -660,9 +672,12 @@ var names = users
 A block is a sequence of expressions separated by newlines or semicolons. Its value is the value of
 the last expression. A block that ends in a declaration or assignment has type `void`.
 
-Braces mean one of three things, decided by the token before them. After a type name, including
-`Map`, they build a value of that type. After `func(...)`, `else`, `go`, or `defer`, and at the end
-of an `if`, `while`, or `for` header, they are a block. Anywhere else they are a lambda (section 6).
+Braces mean one of three things, decided by the token before them:
+
+- After a type name, including `Map`, they build a value of that type.
+- After `func(...)`, `else`, `go`, or `defer`, and at the end of an `if`, `while`, or `for` header,
+  they are a block.
+- Anywhere else they are a lambda (section 6).
 
 So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is a lambda
 that returns `void`. A record or map literal inside a block needs no extra braces:
@@ -691,15 +706,18 @@ error.
 
 `x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record or primitive type, a
 primitive kind, `null`, `Array`, `Map`, or `func`, written without type arguments, because the
-runtime has only tags and kinds to look at. An alias is not accepted: with `type Id = int | string`,
-the checker sees `Id` as the union while the runtime would see a tag no value carries, so `x is Id`
-is a compile error that says to test the members, and a panic in an unchecked program. The static
-type of `x` must be a union with `T` as a member, or an anonymous record type to which the named
-record type `T` is assignable, in which case the test narrows `x` to the one instantiation of `T`
-assignable to that type and is a compile error when the anonymous type does not determine every type
-argument of `T`; otherwise the test is always true or always false, which is a compile error. `is`
-binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected. As the
-condition of an `if` on a local variable or a parameter, it narrows (section 7).
+runtime has only tags and kinds to look at. An alias is not accepted. With `type Id = int | string`,
+the checker sees `Id` as the union, while the runtime would see a tag no value carries. So `x is Id`
+is a compile error that says to test the members, and a panic in an unchecked program.
+
+The static type of `x` must be a union with `T` as a member, or an anonymous record type to which
+the named record type `T` is assignable. In the second case the test narrows `x` to the one
+instantiation of `T` assignable to that type, and it is a compile error when the anonymous type does
+not determine every type argument of `T`. Otherwise the test is always true or always false, which
+is a compile error.
+
+`is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected.
+As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
 
 ```ant
 Array.filter(shapes, { x is Circle })
@@ -731,7 +749,7 @@ while !done { done = step() }
 ```
 
 A sequence is a function that pushes elements to a callback, as in Go: `Seq[T]` is the prelude alias
-`func(func(T): bool): void`. `for x in seq` calls `seq` with a `yield` function; each call of
+`func(func(T): bool): void`. `for x in seq` calls `seq` with a `yield` function. Each call of
 `yield` runs the body once and returns `true`, or `false` after a `break`, after which the sequence
 must return. `return` and panics in the body propagate through the sequence as through any call.
 Writing a sequence is an ordinary loop that calls `yield`, so user types and lazy ranges need no
@@ -756,15 +774,15 @@ Iter.range(0, 1000) | Iter.filter({ x % 7 == 0 }) | Iter.take(5) | Iter.toArray(
 
 `var` and `for` accept a destructuring on the left side instead of a name. A record destructuring
 `{ x, y }` binds the fields `x` and `y`, and `{ x: px }` binds the field `x` as `px`; fields not
-mentioned are ignored. An array destructuring `[a, b]` binds elements by position, extra elements
-are ignored, and `[head, ...tail]` binds the rest as a new array. Each position holds a name, `_` to
+mentioned are ignored. An array destructuring `[a, b]` binds elements by position and ignores extra
+elements, and `[head, ...tail]` binds the rest as a new array. Each position holds a name, `_` to
 discard, or another destructuring, so they nest.
 
-Destructuring is binding plus indexing, and it fails the way indexing does: an array with fewer
-elements than the fixed positions panics, as `xs[1]` would on a one-element array, and a nested
-record destructuring that meets a non-record such as `null` panics as a field read would. The
-checker types each binding from the source, `T` for an element of `Array[T]` and `Array[T]` for the
-rest, and cannot know lengths.
+Destructuring is binding plus indexing, and it fails the way indexing does. An array with fewer
+elements than the fixed positions panics, as `xs[1]` would on a one-element array. A nested record
+destructuring that meets a non-record such as `null` panics as a field read would. The checker types
+each binding from the source, `T` for an element of `Array[T]` and `Array[T]` for the rest, and
+cannot know lengths.
 
 ```ant
 var { x, y } = origin
@@ -791,8 +809,8 @@ earlier. `panic` is an ordinary function of type `never` (section 8).
 A function body, a lambda, a `go` block, and a `defer` block are the four boundaries. `return`
 leaves the innermost one; inside a `go` or `defer` block it takes no value, since neither has a
 result. `break` and `continue` target the innermost loop inside the same boundary, so a `break` in a
-lambda or a `go` block cannot leave a loop outside it, and one with no loop to target is a syntax
-error, as is a `return` outside any boundary. The parser enforces all of this.
+lambda or a `go` block cannot leave a loop outside it. A `break` or `continue` with no loop to
+target is a syntax error, as is a `return` outside any boundary. The parser enforces all of this.
 
 ```ant
 var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
@@ -870,16 +888,17 @@ next()    // 2
 
 ### Functions on types
 
-A function may be declared on a type: `func Point.distance(a: Point, b: Point)` declares `distance`
-in the namespace of `Point`, and the call is `Point.distance(p, q)`, or `p | Point.distance(q)`
-through the pipe. The type must be declared by the same module and may be a record, a named
-primitive type, or an alias, including an alias of a union; a type's namespace is therefore closed,
-and the prelude's types cannot be extended. The function is an ordinary function. It need not take
-the type as a parameter, which is how `Point.origin()` and `UserId.parse(s)` are written; it is a
-value like any other; and named arguments apply to it as to any declared function. It is reached
-only through the type name, never bare. Two functions on one type may not share a name, a function
-may not share its name with a field of the type, and an exported function needs an exported type.
-There is no method call: `p.distance(q)` reads a field of `p`, which does not exist.
+`func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`. The call
+is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared by
+the same module and may be a record, a named primitive type, or an alias, including an alias of a
+union. A type's namespace is therefore closed, and the prelude's types cannot be extended.
+
+The function is an ordinary function. It need not take the type as a parameter, which is how
+`Point.origin()` and `UserId.parse(s)` are written; it is a value like any other; and named
+arguments apply to it as to any declared function. It is reached only through the type name, never
+bare. Two functions on one type may not share a name, a function may not share its name with a field
+of the type, and an exported function needs an exported type. There is no method call:
+`p.distance(q)` reads a field of `p`, which does not exist.
 
 ```ant
 type Point = { x: float64, y: float64 }
@@ -917,7 +936,7 @@ the types `Result`, `Mutex`, and `Atomic` (section 11).
 
 `null` is a value of type `null` and nothing else. There is no `undefined`. A variable of type
 `string` can never hold `null`; a variable of type `string | null` can. There is no `Option`
-wrapper: a nullable type is just a union with `null`, so `T | null | null` is `T | null`. Where the
+wrapper: a nullable type is a union with `null`, so `T | null | null` is `T | null`. Where the
 difference between absent and null matters, ask the container instead of the value: `Map.has(m, k)`
 tells a missing key from a stored `null`.
 
@@ -944,33 +963,43 @@ if user != null {
 `?.` applies to field access, indexing, and calls, spelled `a?.b`, `a?.[i]`, and `f?.(x)`; each
 yields `null` when the left side is null. `??` takes any expression on the right, including `return`
 and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. Both
-operators require a left side whose type includes `null`; on any other type they are dead code, and
-a compile error.
+operators require a left side whose type includes `null`; on any other type they are dead code and a
+compile error.
 
-The checker narrows after a `null` test, as in the last example, but only for a local variable or a
-parameter. A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and
-`!`, and the `else` branch gets the complement: the union minus the tested member. When an `if` has
-no `else` and its branch has type `never`, because it ends in `return`, `break`, `continue`, or
-`panic`, the complement applies to the rest of the block, so `if user == null { return }` leaves
-`user` a `User` below it. `x ?? return ...` and `x ?? panic(...)` narrow the same way. After a
-`while` whose body contains no `break`, the complement of its condition holds, whatever the body
-assigned, because the condition was evaluated last. An assignment narrows the variable to the type
-of the assigned expression, and where branches meet, the variable has the union of the branch types,
-so `if c == null { c = load() }` leaves `c` a `Config`. Otherwise a narrowing lasts until the next
-assignment to the variable; inside a loop, an assignment anywhere in the body cancels it from the
-loop head on.
+### Narrowing
+
+The checker narrows after a test, as in the last example, but only for a local variable or a
+parameter:
+
+- A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`. The
+  `else` branch gets the complement: the union minus the tested member.
+- When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`,
+  `continue`, or `panic`, the complement applies to the rest of the block, so
+  `if user == null { return }` leaves `user` a `User` below it. `x ?? return ...` and
+  `x ?? panic(...)` narrow the same way.
+- After a `while` whose body contains no `break`, the complement of its condition holds, whatever
+  the body assigned, because the condition was evaluated last.
+- An assignment narrows the variable to the type of the assigned expression, and where branches
+  meet, the variable has the union of the branch types, so `if c == null { c = load() }` leaves `c`
+  a `Config`.
+- Otherwise a narrowing lasts until the next assignment to the variable. Inside a loop, an
+  assignment anywhere in the body cancels it from the loop head on.
 
 A field path such as `user.address` never narrows, because any call between the test and the use may
-reassign it: bind it to a local first, or use `?.` or `??`. Narrowing is limited to locals because a
-local can go stale in only one way, by reassignment: a record's tag never changes and a reference
-never becomes `null` on its own. Another goroutine can reassign a local only through a closure that
-captures it, so one rule about closures makes narrowing sound under concurrency. A nested body is a
-lambda, an anonymous `func`, a `go` block, or a `defer` block, and the rule has two directions. A
-local assigned inside a nested body never narrows in the enclosing function, since the assignment
-may run at any moment. Inside a nested body, outer locals start at their declared type, since the
-body may run after a later reassignment, except that a local never assigned after its declaration
-keeps its narrowing there: nothing can change it, so the narrowing holds whenever and wherever the
-body runs.
+reassign it. Bind it to a local first, or use `?.` or `??`.
+
+Narrowing is limited to locals because a local can go stale in only one way, by reassignment: a
+record's tag never changes and a reference never becomes `null` on its own. Another goroutine can
+reassign a local only through a closure that captures it, so one rule about closures makes narrowing
+sound under concurrency. A nested body is a lambda, an anonymous `func`, a `go` block, or a `defer`
+block, and the rule has two directions:
+
+- A local assigned inside a nested body never narrows in the enclosing function, since the
+  assignment may run at any moment.
+- Inside a nested body, outer locals start at their declared type, since the body may run after a
+  later reassignment. The exception is a local never assigned after its declaration: it keeps its
+  narrowing there, because nothing can change it, so the narrowing holds whenever and wherever the
+  body runs.
 
 ```ant
 var user = find(id)                          // User | null, never reassigned
@@ -1034,10 +1063,10 @@ where `try` does not apply.
 
 ### `try`
 
-`try` unwraps a `Result`. Its operand must have a `Result[T, E]` type; on `Ok{ value }` it evaluates
-to the value, of type `T`, and on an `Err` it returns a fresh `Err` carrying the same error from the
+`try` unwraps a `Result`. Its operand must have a `Result[T, E]` type. On `Ok{ value }` it evaluates
+to the value, of type `T`; on an `Err` it returns a fresh `Err` carrying the same error from the
 enclosing function, typed by that function's return type. The enclosing function must therefore
-return a `Result` whose error type accepts `E`; a `go` or `defer` block has no result, so `try`
+return a `Result` whose error type accepts `E`. A `go` or `defer` block has no result, so `try`
 directly inside one is a compile error. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it
 yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section
 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a
@@ -1056,8 +1085,8 @@ func loadConfig(path: string): Result[Config, Error] {
 first stage and pipes the value onward. To propagate the error of a whole pipeline, parenthesize it:
 `try (xs | Array.map(parse) | Result.all())`.
 
-Besides the two constructors, the `Result` namespace provides `Result.map`, `Result.mapErr`,
-`Result.unwrap` (panics on an error), `Result.unwrapOr`, and `Result.isOk`.
+Besides the two constructors, `Result` provides `Result.map`, `Result.mapErr`, `Result.unwrap`
+(panics on an error), `Result.unwrapOr`, and `Result.isOk` (section 11).
 
 ### `panic`
 
@@ -1089,7 +1118,7 @@ func copy(src: string, dst: string): Result[void, Error] {
 ### Goroutines
 
 `go` runs a block on a new goroutine and returns immediately, with type `void`. There is no handle
-to join or to read a result from: results come back through shared memory (Sharing results, below),
+to join or to read a result from: results come back through shared memory (see Sharing results),
 completion through a `WaitGroup`, and a goroutine's panic is reported, not returned. Goroutines are
 cheap, and any function can start one or block inside one; there are no `async` functions or colored
 call chains. Blocking library calls such as file and network I/O block only the calling goroutine.
@@ -1126,23 +1155,28 @@ func fetchAll(urls: Array[string]): Array[Result[Http.Response, Error]] {
 }
 ```
 
+### Data races
+
 Reading and writing the same memory from two goroutines without synchronization is a data race. A
-data race is a program error, and the runtime guarantees memory safety in its presence, but not any
-particular result. Concretely: a racy read of a variable, field, or element observes some value that
-was stored there, never a mix of two or a value from nowhere; a racy array or map operation observes
-the state before or after the concurrent mutation, or panics with the ordinary index or key error,
-never a corrupted structure; and the interpreter itself never crashes. An implementation may also
-detect a race and end the program with a report and exit status 1, since the state of a racy program
-is not worth continuing. The guarantee costs one word per value, so that a variable, field, or
-element store is a single machine word and cannot tear, plus one atomic header load per array
-operation and one lock per map mutation; an implementation in a language whose strings or dynamic
-values span two words boxes them.
+data race is a program error. The runtime guarantees memory safety in its presence, but not any
+particular result:
+
+- A racy read of a variable, field, or element observes some value that was stored there, never a
+  mix of two or a value from nowhere.
+- A racy array or map operation observes the state before or after the concurrent mutation, or
+  panics with the ordinary index or key error, never a corrupted structure.
+- The interpreter itself never crashes.
+
+An implementation may also detect a race and end the program with a report and exit status 1, since
+the state of a racy program is not worth continuing. The guarantee costs one word per value, so that
+a variable, field, or element store is a single machine word and cannot tear, plus one atomic header
+load per array operation and one lock per map mutation. An implementation in a language whose
+strings or dynamic values span two words boxes them.
 
 ### Visibility
 
 Within one goroutine, effects happen in program order. Across goroutines, a write is visible to a
-read only when something orders them, and these are the orderings, in the sense of Go's memory
-model:
+read only when something orders them. These are the orderings, in the sense of Go's memory model:
 
 - The `go` expression happens before the first action of the goroutine it starts.
 - `Mutex.unlock`, and the release at the end of `withLock`, happen before every later `lock` of the
@@ -1162,8 +1196,8 @@ at least one of them a write, with no ordering between them.
 ### Sharing results
 
 A local assigned inside a `go` block never narrows (section 7), so a goroutine does not hand back a
-result by reassigning a local of its parent, even when a `WaitGroup` makes that safe; the checker
-cannot see happens-before and does not try. Share through containers instead: write into an array
+result by reassigning a local of its parent, even when a `WaitGroup` makes that safe. The checker
+cannot see happens-before and does not try. Share through containers instead. Write into an array
 slot, a map entry, a record field, or an `Atomic`, and after the wait read the value into a fresh
 local and narrow that. A fresh local is a snapshot, so the same idiom reads shared state under a
 mutex.
@@ -1224,23 +1258,24 @@ import "./geometry.ant" Geometry
 var d = Geometry.distance(p, q)
 ```
 
-The path is a file path relative to the importing file, extension included; there are no packages,
-and a program is the files it imports. A module is identified by its canonical path, so two
-spellings of one file are one module. The path comes first so that an editor knows the module before
-the names are typed. Types and values import alike: a `type` export is its tag, so a record built in
-one module passes an `is` test written against the imported name in another, under whatever local
-name it was given. The exported functions declared on a type come with it:
-`import "./geometry.ant" { Point }` makes `Point.distance` available and `Point: P` makes it
-`P.distance`, while a function without `export` is a compile error outside its module, like any
-other private field.
+The path is a file path relative to the importing file, extension included. There are no packages: a
+program is the files it imports. A module is identified by its canonical path, so two spellings of
+one file are one module. The path comes first so that an editor knows the module before the names
+are typed.
+
+Types and values import alike. A `type` export is its tag, so a record built in one module passes an
+`is` test written against the imported name in another, under whatever local name it was given. The
+exported functions declared on a type come with it: `import "./geometry.ant" { Point }` makes
+`Point.distance` available and `Point: P` makes it `P.distance`. A function without `export` is a
+compile error outside its module, like any other private field.
 
 Imports are live and read-only. `export var` is allowed; an imported name reads the exporting
 module's current value each time, and assigning to an imported name or to a field of a namespace
 from outside the module is a compile error. Two imports binding the same local name are a compile
 error, and a top-level declaration cannot shadow an imported name, so every name in a file has one
-visible origin. The prelude names, `print`, `panic`, the type and conversion names such as `int` and
-`Result`, and the namespaces, count as imports in every module. There is no re-export. Import cycles
-are a compile error.
+visible origin. The prelude names count as imports in every module: `print`, `panic`, the type and
+conversion names such as `int` and `Result`, and the namespaces. There is no re-export. Import
+cycles are a compile error.
 
 Imports are resolved depth first in source order, and each module is initialized once, after
 everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may
@@ -1329,7 +1364,7 @@ Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 ```
 
 `Array.sum` returns `null` on an empty array rather than zero because the interpreter never knows
-`T` and so cannot produce the zero of the right kind (section 4, erasure). Write
+`T` and so cannot produce the zero of the right kind (section 4, Checking and running). Write
 `Array.sum(xs) ?? 0.0`.
 
 ### Map
@@ -1390,18 +1425,22 @@ String.toFloat(s: string): float64 | null
 String.from[T](value: T): string
 ```
 
-`String.from` renders any value, and `print` and template strings use it, so this is the format a
-program's output has. Integers render in decimal. Floats render as the shortest decimal that reads
-back to the same value, with `.0` added when integral, and as `NaN`, `Infinity`, or `-Infinity`. A
-string renders as itself at the top level and quoted with escapes inside a container. `bool`,
-`null`, and `void` render as their literals. Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with
-keys always quoted when they are strings, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
-their tag and the fields in declaration order, each with entries separated by `, `; an empty array,
-map, or record renders as `[]`, `Map{}`, or `Empty{}`, with nothing inside the brackets. A named
-primitive renders as its constructor call, `UserId("u-1")`. Functions render as `func`, a
-constructor and a tag as their type's name, and sync objects as their namespace name. A value
-already being rendered renders as `...`, so cyclic structures terminate. It is the only function the
-language calls implicitly, and only inside template strings.
+`String.from` renders any value. `print` and template strings use it, so this is the format a
+program's output has. It is the only function the language calls implicitly, and only inside
+template strings.
+
+- Integers render in decimal. Floats render as the shortest decimal that reads back to the same
+  value, with `.0` added when integral, and as `NaN`, `Infinity`, or `-Infinity`.
+- A string renders as itself at the top level and quoted with escapes inside a container. `bool`,
+  `null`, and `void` render as their literals.
+- Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, and records as
+  `Point{ x: 1.0, y: 2.0 }` with the name of their tag and the fields in declaration order. Entries
+  are separated by `, `. An empty array, map, or record renders as `[]`, `Map{}`, or `Empty{}`, with
+  nothing inside the brackets.
+- A named primitive renders as its constructor call, `UserId("u-1")`.
+- Functions render as `func`, a constructor and a tag as their type's name, and sync objects as
+  their namespace name.
+- A value already being rendered renders as `...`, so cyclic structures terminate.
 
 ### Iter
 
@@ -1541,11 +1580,13 @@ A block opens a scope. `var` binds a name in the current scope from its declarat
 the block; a function body's scope starts with the parameters. Lookup walks outward through the
 enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the
 scopes it was created in, so it sees later assignments to the variables it captured. Each iteration
-of a `for` opens a fresh scope for the loop variable. The module scope holds every top-level name
-from the start, so a function body can name a `var` declared below it, and a function declared on a
-type is a field of its tag or constructor from the start; reading a top-level `var` whose
-initializer has not run yet panics (section 10). A module's scope is a record, and `export` is a
-checker rule: at run time every field of a module record is readable.
+of a `for` opens a fresh scope for the loop variable.
+
+The module scope holds every top-level name from the start, so a function body can name a `var`
+declared below it, and a function declared on a type is a field of its tag or constructor from the
+start. Reading a top-level `var` whose initializer has not run yet panics (section 10). A module's
+scope is a record, and `export` is a checker rule: at run time every field of a module record is
+readable.
 
 ### Expressions
 
@@ -1640,8 +1681,8 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates
   by index from zero while the index is below the current length, so elements appended during the
   loop are visited and removed ones are not. Over a map it visits the entries as `Entry` records in
-  insertion order, reading the map as it goes, like an array: an entry inserted during the loop is
-  visited, an entry removed before the loop reaches it is not, and no entry is visited twice; a key
+  insertion order, reading the map as it goes, like an array. An entry inserted during the loop is
+  visited, an entry removed before the loop reaches it is not, and no entry is visited twice. A key
   removed and inserted again is a new entry at the end. Over a string it yields each code point as a
   one-character string. Over a function it calls the function with a fresh `yield` function; each
   call of `yield` with one argument binds `x`, runs the body, and returns `true`, or `false` when
