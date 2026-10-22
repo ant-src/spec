@@ -45,7 +45,7 @@ Keywords:
 
 ```
 break continue defer else export false for func go if import
-in is null return true try type var void while
+in is null return select true try type var void while
 ```
 
 Reserved words, so that they stay available and JavaScript habits produce an error rather than an
@@ -737,8 +737,8 @@ the last expression. A block that ends in a declaration or assignment has type `
 Braces mean one of three things, decided by the token before them:
 
 - After a type name, including `Map`, they build a value of that type.
-- After `func(...)`, `else`, `go`, or `defer`, and at the end of an `if`, `while`, or `for` header,
-  they are a block.
+- After `func(...)`, `else`, `go`, or `defer`, at the end of an `if`, `while`, or `for` header,
+  and at the end of a `select` clause's head, they are a block.
 - Anywhere else they are a lambda (section 6).
 
 So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is a lambda
@@ -836,6 +836,56 @@ func evens(limit: int): Seq[int] {
 for n in evens(10) { print(n) }
 Iter.range(0, 1000) | Iter.filter({ x % 7 == 0 }) | Iter.take(5) | Iter.toArray()
 ```
+
+### `select`
+
+A `select` waits for the first of several things, with a block for each:
+
+```ant
+select {
+  var line = Chan.receive(lines) { print(line ?? "closed") }
+  Chan.send(out, batch) { batch = [] }
+  Time.sleep(1000) { flush() }
+  Context.wait(ctx) { return }
+  else { idle += 1 }
+}
+```
+
+A clause is a head and a block, one clause per line. A head is one of five blocking calls of
+section 11 and `stdlib.md`, written as the call would be and not performed: `Chan.receive(c)`,
+`Chan.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(ms)`. `var x =`
+before a head binds the call's result in the block: a receive binds `T | null`, `null` when the
+channel is closed, a send binds `bool`, and a binding on a head that returns `void` is a compile
+error. A head takes no context, since the context is its own clause, and a head given one is a
+compile error. An `else` block, written last, runs when no head can proceed at once, so a `select`
+with `else` never waits. The block begins at the head's `{`, which the header rule above finds: a
+`{` after a `)` ends a header.
+
+The heads' operands evaluate first, in order, once. Then the `select` waits until one head can
+proceed, performs it, binds its result, and runs its block, whose value is the value of the
+`select`. A head can proceed when its channel holds a value or is closed, when its channel can
+take the value, when its context is done, when its group's counter is zero, or when its time has
+passed. When several can proceed at once, one is chosen at random, so no source starves. A
+`select` without `else` whose heads can never proceed waits until the run is cancelled, as any
+wait does. A closed channel's receive is always ready, so a loop that keeps one in its `select`
+spins until the block leaves the loop on `null`. A send chosen on a closed channel is a ◆, as
+`Chan.send` is (section 12).
+
+A `select` is an expression: its blocks are checked against the expected type, or it has the
+union of their types with `never` dropped, as an `if`. A block's `return`, `break`, and
+`continue` act on the function or loop around the `select`, since the block belongs to that body;
+a bound variable is a local of its block and narrows there.
+
+```ant
+var event: Event = select {
+  var line = Chan.receive(lines) { if line == null { Closed{} } else { Line{ text: line } } }
+  Time.sleep(1000) { Timeout{} }
+}
+```
+
+A `select` needs at least one head. A body with no clause or with `else` alone, two `else`
+clauses, an `else` that is not last, a binding on `else`, a head that is not a call of one of the
+five, and a `{` on a line after its head are each a syntax error.
 
 ### Destructuring
 
@@ -1219,9 +1269,9 @@ Goroutines coordinate through shared memory guarded by the sync objects of the s
 `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, and `Atomic[T]`; through channels, `Chan[T]`,
 which carry values from goroutine to goroutine and block the side that is ahead; and through
 contexts, `Context`, which bound a wait with a deadline or end it with a cancellation. Each is a
-reference value created by its `new` function, and section 11 lists their operations. There is no
-`select` statement: `Select.wait` is a call over clauses (section 11), and Waiting, below, shows how
-a program waits for several things.
+reference value created by its `new` function, and section 11 lists their operations. A `select`
+(section 5) waits on several of them at once, and Waiting, below, shows how a program waits for
+several things.
 
 ```ant
 func fetchAll(urls: Array[string]): Array[Result[Http.Response, Error]] {
@@ -1258,34 +1308,35 @@ var ctx = Context.new(Time.duration(seconds: 2))
 var reply = Chan.receive(replies, ctx) ?? return Result.err(Error{ message: "no reply" })
 ```
 
-A goroutine that waits for several kinds of thing owns one channel, a mailbox, whose element type
-is a union of them, and every producer sends into it. An event loop is a loop over the mailbox with
-an `is` chain, so a transition is ordinary control flow:
+A goroutine that waits on several channels writes a `select` (section 5) in a loop, one clause
+per source, and a transition is the block's own `return` or `break`:
 
 ```ant
-type SpeechStarted = {}
-type UserMessage = { text: string, synthetic: bool }
-type Interrupt = { offsetMs: int }
-type Event = SpeechStarted | UserMessage | Interrupt
-
 func generating(s: Session, ctx: Context): void {
-  for event in Chan.values(s.events, ctx) {          // ends when ctx is done
-    if event is SpeechStarted {
-      flushRenderer(s)
-      Context.cancel(s.generation)
-    } else if event is UserMessage {
-      Array.push(s.pendingMessages, event)           // deferred to the next state
-    } else if event is Interrupt {
-      s.turn.interrupt = event
-      return
+  while true {
+    select {
+      Context.wait(ctx) { return }
+      Chan.receive(s.speechStarted) {
+        flushRenderer(s)
+        Context.cancel(s.generation)
+      }
+      var message = Chan.receive(s.userMessages) {
+        if message != null { Array.push(s.pendingMessages, message) }   // deferred to the next state
+      }
+      var interrupt = Chan.receive(s.interrupts) {
+        if interrupt != null { s.turn.interrupt = interrupt }
+        return
+      }
     }
   }
 }
 ```
 
-Every event reaches whatever state is current, in arrival order across all sources, and a state
-defers what it cannot handle. The first of several things is the same shape: a goroutine per
-source, one mailbox, one receive, and a context that stops the rest.
+When the producers are the program's own, one channel can carry them all: a mailbox whose element
+type is a union of the events, and a loop over it with an `is` chain. Every event then reaches
+whatever state is current, in arrival order across all sources, and a state defers what it cannot
+handle. The first of several things is the mailbox's shape too: a goroutine per source, one
+receive, and a context that stops the rest.
 
 ```ant
 type Line = { text: string }
@@ -1313,23 +1364,6 @@ results, and a `WaitGroup` that says when to close it. A future is a channel of 
 ticker is a loop of `Time.sleep` with a context. A goroutine that should stop checks
 `Context.isDone` between steps and passes the context into its waits; one that ignores its context
 runs until the run ends.
-
-A wait on channels that exist already, that another goroutine reads too, or that a later state will
-read, is `Select.wait`: a clause per channel, each with the function to run when it is chosen, and
-nothing taken from any channel until the choice is made (section 11). A clause's function returns
-from itself, so what the loop around the wait does next goes through the result, and the clauses
-agree on that result's type through an annotation:
-
-```ant
-type Continue = {}
-type Stop = {}
-
-var clauses: Array[Select.Case[Continue | Stop]] = [
-  Select.receive(lines, { if x == null { Stop{} } else { print(x); Continue{} } }),
-  Select.receive(ticks, { flush(); Continue{} }),
-]
-while Select.wait(clauses, ctx) is Continue {}
-```
 
 ### Data races
 
@@ -1373,7 +1407,7 @@ sense of Go's memory model:
 - All operations on all `Atomic` objects form one total order, and a `store` happens before every
   `load` that observes it.
 - A send on a channel happens before the receive that takes its value, and a close happens before
-  a receive that returns `null` because of it; a clause of `Select.wait` is a send or a receive.
+  a receive that returns `null` because of it; a clause of `select` is a send or a receive.
 - `Context.cancel`, and the passing of a deadline, happen before the return of every wait the
   context ends.
 
@@ -1856,8 +1890,7 @@ names the alias in a type and its functions in an expression. `Record` is a name
 The sync objects of section 9. Each is a prelude type with its functions declared on it (section 6),
 so `Mutex` is the type in an annotation and `Mutex.new()` creates one; objects compare by identity.
 The `with` forms acquire, run the function, and release even if it panics. A `ctx` parameter is the
-context of section 9, Waiting: the call gives up when the context is done. `Select` is a namespace,
-since a type carries no types (section 6): it declares `Select.Case` and the functions over clauses.
+context of section 9, Waiting: the call gives up when the context is done.
 
 ```
 Mutex.new(): Mutex
@@ -1909,15 +1942,6 @@ Chan.close[T](c: Chan[T]): void                                // ◆ closed alr
 Chan.isClosed[T](c: Chan[T]): bool
 Chan.length[T](c: Chan[T]): int                                // values buffered now
 Chan.values[T](c: Chan[T], ctx: Context | null = null): Seq[T] // every value until closed, or until ctx ends
-
-type Select.Case[R]                                            // opaque: one clause, compared by identity
-
-Select.receive[T, R](c: Chan[T], f: func(T | null): R): Select.Case[R]   // ready when c holds a value or is closed; f gets the value, or null
-Select.send[T, R](c: Chan[T], v: T, f: func(): R): Select.Case[R]        // ready when c can take v; ◆ closed, when chosen
-Select.otherwise[R](f: func(): R): Select.Case[R]                        // ready at once; chosen when no other clause is ready
-Select.wait[R](cases: Array[Select.Case[R]], ctx: Context | null = null): R | null
-                                                               // runs one ready clause and returns its result; null when ctx ends first
-                                                               // ◆ no cases, or two otherwise clauses
 ```
 
 A context's timeout converts as `Http.request`'s does, days at 24 hours and the smaller units
@@ -1931,14 +1955,9 @@ what is buffered and then get `null`; a later `send` is a ◆, since a value wit
 sender's bug. `Chan.new` fixes `T` from nothing, so a declaration annotates:
 `var jobs: Chan[Job] = Chan.new()`. `Chan.receive` conflates a `null` value with the end of the
 channel when `T` includes `null`, as `Map.get` and `Array.pop` do; a program with such a `T` wraps
-the value, and `Context.isDone(ctx)` tells a cancellation from a close.
-
-`Select.wait` takes nothing until a clause is chosen: a value stays in its channel until the
-moment it is taken, so a channel that another goroutine reads, or that a later state will read,
-is not drained. Among several ready clauses one is chosen at random, so no source starves. With an
-`otherwise` clause the call never blocks. The clauses hide each channel's element type inside
-their function, so channels of different types mix in one wait, and `R` is what the functions
-return; a wait whose clauses return `void` has the type `void | null`, which a statement ignores.
+the value, and `Context.isDone(ctx)` tells a cancellation from a close. A wait on several channels
+at once, or on a channel and a context, a group or a timer, is a `select` (section 5), which takes
+nothing from any channel until its choice is made.
 
 ## 12. Dynamic semantics
 
@@ -1962,7 +1981,7 @@ Every value has a kind, fixed when the value is created:
 | tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
 | func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
 | tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
-| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Chan`, or `Context`, or a `Select.Case`                                                                                                                                          |
+| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Chan`, or `Context`                                                                                                                                                              |
 | time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
 | regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
 
@@ -2082,6 +2101,14 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   and a `false` condition it is `void`.
 - **`while`.** Evaluates the condition, which must be a `bool`, before each iteration. The value is
   `void`.
+- **`select`.** The operands of every head evaluate in order; each must have the kind its call
+  takes. Then the goroutine waits until a head can proceed: a receive when its channel holds a
+  value or is closed, a send when its channel can take the value, `Context.wait` when the context
+  is done, `WaitGroup.wait` when the counter is zero, `Time.sleep` when the time has passed; with
+  an `else` clause it does not wait, and `else` is taken when no head can proceed at once. One of
+  the heads that can proceed is performed, chosen at random among them, its result is bound when
+  the clause binds, and its block is evaluated; the value is the block's. A send performed on a
+  closed channel panics.
 - **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates
   by index from zero while the index is below the current length, so elements appended during the
   loop are visited and removed ones are not. Over a map it visits the entries as `Entry` records in
@@ -2156,6 +2183,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | ◆ `panic`                                           | always                                                                                                                                                                                                                                                |
 | ◆ any call                                          | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                                                |
 | `try`                                               | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |
+| ◆ `select`                                          | a send clause is chosen on a closed channel                                                                                                                                                                                                           |
 | `??`, `?.`, `==`, `!=`                              | never                                                                                                                                                                                                                                                 |
 
 ## 13. Example
