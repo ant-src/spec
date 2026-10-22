@@ -198,7 +198,9 @@ Time.parseDuration(s: string): Result[Time.Duration, Error]          // P1Y2M3DT
 
 The forms: an `Instant` is `2026-10-22T14:03:05.5Z`; a `ZonedDateTime` is
 `2024-11-03T01:00:00-04:00[America/New_York]`, offset and zone both, so the exact moment survives
-a round trip even where the wall-clock time is ambiguous; a `PlainDate` is `2026-10-22`, a
+a round trip even where the wall-clock time is ambiguous, with the offset rounded to the minute,
+since RFC 9557 has no seconds in it, where `Time.offset` keeps the seconds of a historical offset;
+a `PlainDate` is `2026-10-22`, a
 `PlainTime` `14:03:05`, a `PlainDateTime` `2026-10-22T14:03:05`; a `Duration` is
 `P1Y2M3DT4H5M6.5S` with the fields as given, the subsecond fields folded into the seconds, a sign
 in front when negative, and `PT0S` when zero; a `Zone` is its identifier. The fractional second is
