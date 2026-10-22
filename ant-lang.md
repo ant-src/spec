@@ -77,11 +77,12 @@ true        false         null
 ```
 
 An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowed between digits. A
-float literal has digits on both sides of the point, an exponent, or both; `.5` and `1.` are errors.
-There are no literal suffixes: an integer literal is always an `int` and a float literal is always a
-`float64`. `1` is never a float; write `1.0`. Other numeric types are reached through a conversion,
-as in `byte(255)` or `float32(1.5)`. An integer literal that does not fit an `int` is a syntax
-error, so the most negative `int` is written `Math.minInt`.
+float literal has digits on both sides of the point, an exponent, or both; `.5`, `1.`, and `1.x` are
+errors, since a digit followed by a point always begins a float. There are no literal suffixes: an
+integer literal is always an `int` and a float literal is always a `float64`. `1` is never a float;
+write `1.0`. Other numeric types are reached through a conversion, as in `byte(255)` or
+`float32(1.5)`. An integer literal that does not fit an `int` is a syntax error, so the most
+negative `int` is written `Math.minInt`.
 
 The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, whose hexadecimal value
 must be a Unicode scalar value: at most `10FFFF` and not a surrogate. A plain string stays on one
@@ -465,7 +466,9 @@ then assign.
 ### Function types
 
 A function type lists parameter types and the return type. Parameter names are optional and only
-document intent: a call through a function value is always positional (section 6).
+document intent: a call through a function value is always positional (section 6). The return type
+extends as far as it can, so `func(): int | Meters` is a function returning `int | Meters`; for a
+union with a function type, parenthesize the function type: `(func(): int) | Meters`.
 
 ```ant
 type Predicate[T] = func(T): bool
@@ -722,6 +725,10 @@ branch disappears when the condition narrows its subject to `never`, as at the e
 chain of `is` tests (section 4, Tagged unions); an explicit `else` there cannot run and is a compile
 error.
 
+In the header of an `if`, `while`, or `for`, a record or map literal must be parenthesized, since
+its `{` would otherwise begin the body: `if p == (Point{ x: 1 }) { ... }` and
+`for e in (Map{ a: 1 }) { ... }`.
+
 ### `is`
 
 `x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record or primitive type, a
@@ -802,7 +809,9 @@ Destructuring is binding plus indexing, and it fails the way indexing does. An a
 elements than the fixed positions panics, as `xs[1]` would on a one-element array. A nested record
 destructuring that meets a non-record such as `null` panics as a field read would. The checker types
 each binding from the source, `T` for an element of `Array[T]` and `Array[T]` for the rest, and
-cannot know lengths.
+cannot know lengths. An array literal on the right is no exception: `var [n, s] = [1, "t"]` gives
+both `n` and `s` the type `int | string`, the element type of the literal; two values of two types
+want two declarations.
 
 ```ant
 var { x, y } = origin
@@ -1006,7 +1015,8 @@ parameter:
   the body assigned, because the condition was evaluated last.
 - An assignment narrows the variable to the type of the assigned expression, and where branches
   meet, the variable has the union of the branch types, so `if c == null { c = load() }` leaves `c`
-  a `Config`.
+  a `Config`. The narrowing holds even when it makes a later test dead: with `v: UserId | string`,
+  after `v = "plain"` the test `v is UserId` is a compile error, since `v` is then a `string`.
 - Otherwise a narrowing lasts until the next assignment to the variable. Inside a loop, an
   assignment anywhere in the body cancels it from the loop head on.
 
@@ -1129,6 +1139,7 @@ zero, array index out of range, lossy numeric conversion, and `unwrap` on the wr
 
 `defer` schedules a block to run when the enclosing block exits, whether by falling off the end,
 `return`, `break`, `continue`, or panic. Deferred blocks run in reverse order of registration.
+`Os.exit` ends the process without unwinding, so no deferred block runs.
 
 ```ant
 func copy(src: string, dst: string): Result[void, Error] {
@@ -1189,21 +1200,30 @@ data race is a program error. The runtime guarantees memory safety in its presen
 particular result:
 
 - A racy read of a variable, field, or element observes some value that was stored there, never a
-  mix of two or a value from nowhere.
-- A racy array or map operation observes the state before or after the concurrent mutation, or
-  panics with the ordinary index or key error, never a corrupted structure.
+  mix of two or a value from nowhere. Since every store into a slot has the slot's declared type,
+  the checker's types stay true in a racing program.
+- A racy array or map operation observes the state before or after each concurrent mutation, or
+  panics with the ordinary index error, or finds the key absent, never a corrupted structure. An
+  operation over many elements, such as `Array.map`, may see some of several racing stores and not
+  others.
 - The interpreter itself never crashes.
 
 An implementation may also detect a race and end the program with a report and exit status 1, since
-the state of a racy program is not worth continuing. The guarantee costs one word per value, so that
-a variable, field, or element store is a single machine word and cannot tear, plus one atomic header
-load per array operation and one lock per map mutation. An implementation in a language whose
+the state of a racy program is not worth continuing.
+
+*Implementation note.* The guarantee costs one word per value, so that a variable, field, or element
+store is a single machine word and cannot tear, plus an atomic header load per array operation with
+`push` and `pop` under a lock, and one lock per map operation, shared between reads, since a read
+during a resize is not safe with mutations alone locked. An implementation in a language whose
 strings or dynamic values span two words boxes them.
 
 ### Visibility
 
-Within one goroutine, effects happen in program order. Across goroutines, a write is visible to a
-read only when something orders them. These are the orderings, in the sense of Go's memory model:
+Within one goroutine, effects happen in program order. Across goroutines, a read observes the write
+that happens before it when no other write to that location is ordered between them; a read that
+nothing orders against a write may or may not see it, and observes some write that is not ordered
+after it and is not hidden by another write ordered before the read. These are the orderings, in the
+sense of Go's memory model:
 
 - The `go` expression happens before the first action of the goroutine it starts.
 - `Mutex.unlock`, and the release at the end of `withLock`, happen before every later `lock` of the
@@ -1217,8 +1237,9 @@ read only when something orders them. These are the orderings, in the sense of G
 
 `Cond` adds nothing; its mutex supplies the order. A goroutine's exit is ordered with nothing, so a
 program that needs a goroutine's result waits on a `WaitGroup`, not on the goroutine being gone. A
-data race is then exactly two accesses to one variable, field, or element from different goroutines,
-at least one of them a write, with no ordering between them.
+data race is then exactly two accesses to one variable, field, or element, or to the length of an
+array or the key set of a map, from different goroutines, at least one of them a write, with no
+ordering between them.
 
 ### Sharing results
 
@@ -1465,7 +1486,9 @@ program's output has. It is the only function the language calls implicitly, and
 template strings.
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
-  value, with `.0` added when integral, and as `NaN`, `Infinity`, or `-Infinity`.
+  value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
+  below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. The
+  non-finite values render as `NaN`, `Infinity`, and `-Infinity`.
 - A string renders as itself at the top level and quoted with escapes inside a container. `bool`,
   `null`, and `void` render as their literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, and records as

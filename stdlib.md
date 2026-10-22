@@ -3,7 +3,8 @@
 Companion to `ant-lang.md`. The core library, which every program needs, is section 11 of the
 specification. The namespaces here talk to the world outside the program, and they follow one rule:
 every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
-panics on bad input. Blocking calls block only the calling goroutine (section 9).
+panics on bad input; the one ◆ is `Json.stringify` on a value that contains itself. Blocking calls
+block only the calling goroutine (section 9).
 
 This file is a sketch of shape, not a finished API. A type a namespace declares is written through
 the namespace, `Json.Value` or `Http.Response`, since a namespace is a record like an imported
@@ -51,7 +52,7 @@ Time.monotonic(): int             // milliseconds from an arbitrary origin, for 
 ```
 Os.args(): Array[string]              // the arguments after the program path: `ant run main.ant a b` gives ["a", "b"]
 Os.env(name: string): string | null
-Os.exit(status: int): never
+Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 ```
 
 ## Json
@@ -60,7 +61,7 @@ Os.exit(status: int): never
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; ◆ cyclic value
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -70,3 +71,7 @@ an infinity. A decoder into records is a function per type: narrow the tree with
 record, and propagate errors with `try`, passing the path along so an error can say
 `$.servers[2].port`. Typed decoding through reflection is deferred; the design is in the repository
 history at commit 81525d2.
+
+`Json.stringify` renders numbers as `String.from` does, so `1e21` is `1e+21`, and `NaN` and the
+infinities, which JSON cannot carry, as `null`. A value that contains itself has no JSON form, so
+`Json.stringify` panics with `cyclic value` where `String.from` would print `...`.
