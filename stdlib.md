@@ -131,19 +131,22 @@ type RoundingMode = Ceil | Floor | Expand | Trunc | HalfCeil | HalfFloor | HalfE
 
 ```
 Time.utc: Time.Zone
-Time.zone(id: string): Result[Time.Zone, Error]     // a name of the IANA database in any case, or "+05:30"
+Time.zone(id: string): Result[Time.Zone, Error]     // a name of the IANA database in any case, or an offset
 Time.localZone(): Time.Zone                         // the host's zone
 Time.zoneId(z: Time.Zone): string                   // "Europe/Stockholm", "+05:30"
 ```
 
 `Time.zone` accepts a name of the IANA database in any letter case, including an alias such as
-`Asia/Calcutta`, and an offset `±HH:MM` or `±HH`; anything else, the empty string included, is
-`Err`. `zoneId` returns the name as the database spells it, or the offset as `±HH:MM`. Two named
-zones are equal when they name the same zone, so `Time.zone("Asia/Calcutta")` equals
-`Time.zone("Asia/Kolkata")`; two offset zones are equal when their offsets are; a named zone never
-equals an offset zone. `Time.localZone()` is the zone the host's configuration names, from the `TZ`
-environment variable first and the system's setting second; when neither names a zone of the
-database, it is the fixed offset the host reports at the moment of the call.
+`Asia/Calcutta`, and an offset `±HH:MM`, `±HHMM` or `±HH`; anything else, the empty string included,
+is `Err`. `zoneId` returns the name as the database spells it, or the offset as `±HH:MM`. Two named
+zones are equal when they are aliases of one zone in Unicode's CLDR, so `Time.zone("Asia/Calcutta")`
+equals `Time.zone("Asia/Kolkata")` and `US/Eastern` equals `America/New_York`, while
+`Europe/Stockholm` stays apart from `Europe/Berlin` although the IANA database has merged their
+rules since 1970, as Temporal's implementations have it; two offset zones are equal when their
+offsets are; a named zone never equals an offset zone. `Time.localZone()` is the zone the host's
+configuration names, from the `TZ` environment variable first and the system's setting second; when
+neither names a zone of the database, it is the fixed offset the host reports at the moment of the
+call.
 
 **Now, and the epoch.**
 
@@ -159,8 +162,10 @@ Time.epochNanos(t: Time.Instant | Time.ZonedDateTime): int       // ◆ outside 
 ```
 
 Every type holds nanoseconds, and an `Instant` spans 100 million days each way from the epoch,
-about 270,000 years, as Temporal's does; the plain types span a day more each way. `epochNanos` as
-an `int` reaches only 1677 to 2262 and panics outside, while `epochMillis` always fits.
+about 270,000 years, as Temporal's does; the plain types span a day more each way. A result beyond
+the range of its type is a ◆ wherever it arises, in `add`, `with`, `round`, `toZoned` and the
+rest, as Temporal's RangeError is. `epochNanos` as an `int` reaches only 1677 to 2262 and panics
+outside, while `epochMillis` always fits.
 
 **Construction.**
 
@@ -317,10 +322,13 @@ and drops the remainder; a `PlainTime` ignores the calendar part and wraps aroun
 `until` is the duration from `from` to `to`, negative when `to` is earlier, with its fields
 balanced up to `largestUnit`: `Day` gives days and smaller, `Month` gives months, days and
 smaller. The default is `Second` for an `Instant`, `Hour` for a `ZonedDateTime` or a `PlainTime`,
-and `Day` otherwise. Years and months are counted from `from`, with the day constrained.
-`since(t, other)` is `negate(until(t, other))`, the duration from `other` to `t` counted from
-`t`, and the two differ for calendar units because the anchor does: with `Month` as the largest
-unit, `Time.since(mar31, feb29)` is `P1M` and `Time.until(feb29, mar31)` is `P1M2D`. An `Instant`
+and `Day` otherwise. Years and months are counted from `from`: a month has passed when the
+target's day of the month reaches the day of `from`, compared as written, so January 31 until
+February 28 is `P28D` although January 31 plus a month is February 28; the rest is days from the
+constrained date, as Temporal has it. `since(t, other)` is `negate(until(t, other))`, the
+duration from `other` to `t` counted from `t`, and the two differ for calendar units because the
+anchor does: with `Month` as the largest unit, `Time.since(mar31, feb29)` is `P1M` and
+`Time.until(feb29, mar31)` is `P1M2D`. An `Instant`
 or a `PlainTime` has units up to `Hour` and a `PlainDate` units down to `Day`; another
 `largestUnit` is ◆, as is `Day` or larger between two `ZonedDateTime`s in different zones, whose
 days do not line up. Between two `ZonedDateTime`s in one zone, days are the zone's real days.
@@ -360,19 +368,22 @@ Time.roundDuration(d: Time.Duration, smallestUnit: Time.Unit | null = null,
 
 Years, months and weeks have no fixed length, so a function that must know theirs takes a
 `relativeTo` point and counts from it, and is ◆ without one; a day is 24 hours unless `relativeTo`
-is a `ZonedDateTime`, whose days have their daylight-saving hours. `addDuration` sums two
-durations without years, months or weeks, days at 24 hours, and balances the result up to the
-larger of the two largest units given, so `PT90M` plus `PT30M` is `PT120M` and `P1D` plus `PT25H`
-is `P2DT1H`. `compareDuration` orders by length. `total` is the whole duration in `unit` as a
-number with a fraction, `PT1H30M` in hours being `1.5`. `roundDuration` balances `d` so that no
-field below `largestUnit` exceeds its next unit, and rounds the result to a multiple of
-`increment` of `smallestUnit` by `mode`, dropping the smaller fields: `largestUnit` alone
-balances, `PT90M` to `Hour` being `PT1H30M`; `smallestUnit` alone rounds; `largestUnit` defaults
-to the larger of `d`'s largest nonzero unit and `smallestUnit`, and `increment` follows the rule
-of `round`. The rounding modes are Temporal's nine: `Ceil` toward positive infinity, `Floor`
-toward negative, `Expand` away from zero, `Trunc` toward zero, the four `Half` forms to the
-nearest multiple with a tie resolved as the plain form says, and `HalfEven` to the nearest with a
-tie to the even multiple; `HalfExpand`, the default, is what `Math.round` does.
+is a `ZonedDateTime`, whose days have their daylight-saving hours. A `PlainDateTime` given as
+`relativeTo` counts as its date; its time is ignored, as in Temporal. `addDuration` sums two
+durations without years, months or weeks, days at 24 hours, and balances the result up to the larger
+of the two largest units given, so `PT90M` plus `PT30M` is `PT120M` and `P1D` plus `PT25H` is
+`P2DT1H`. `compareDuration` orders by length. `total` is the whole duration in `unit` as a number
+with a fraction, `PT1H30M` in hours being `1.5`. `roundDuration` balances `d` so that no field below
+`largestUnit` exceeds its next unit, and rounds the result to a multiple of `increment` of
+`smallestUnit` by `mode`, dropping the smaller fields: `largestUnit` alone balances, `PT90M` to
+`Hour` being `PT1H30M`; `smallestUnit` alone rounds; `largestUnit` defaults to the larger of `d`'s
+largest nonzero unit and `smallestUnit`. For a time unit `increment` follows the rule of `round`;
+for a day or a calendar unit any increment is allowed when `largestUnit` is `smallestUnit`, so a
+duration rounds to a multiple of seven days or of two months, and is ◆ otherwise. The rounding modes
+are Temporal's nine: `Ceil` toward positive infinity, `Floor` toward negative, `Expand` away from
+zero, `Trunc` toward zero, the four `Half` forms to the nearest multiple with a tie resolved as the
+plain form says, and `HalfEven` to the nearest with a tie to the even multiple; `HalfExpand`, the
+default, is what `Math.round` does.
 
 Two durations are `==` when their ten fields are, as given, so `PT90M` and `PT1H30M` are not. For
 the other types `==` is the same moment for an `Instant`, the same moment and zone for a
