@@ -284,12 +284,12 @@ var v = Vec{ ...p }                        // a Vec with the fields of p
 Records, arrays, and maps are reference values: assigning or passing one shares it, and a change
 made through one name is visible through every other. `==` compares structure, never identity. Two
 records are equal when they carry the same tag and their fields are equal. Arrays compare by length
-and elements, maps by key set and values, primitives by value, and functions and sync objects by
-identity. The comparison recurses with `==` over every run-time field, including fields the static
-type does not mention, so it agrees with `String.from` and `Json.stringify`. A pair of values
-already under comparison counts as equal, so cyclic structures compare in finite time. Identity is a
-library call: `Record.same`, `Array.same`, and `Map.same` report whether two names refer to one
-value.
+and elements, maps by key set and values, primitives and time values (`stdlib.md`) by value, and
+functions and sync objects by identity. The comparison recurses with `==` over every run-time
+field, including fields the static type does not mention, so it agrees with `String.from` and
+`Json.stringify`. A pair of values already under comparison counts as equal, so cyclic structures
+compare in finite time. Identity is a library call: `Record.same`, `Array.same`, and `Map.same`
+report whether two names refer to one value.
 
 ```ant
 var p = Point{ x: 1.0, y: 2.0 }
@@ -386,7 +386,8 @@ look at. Each member has a discriminator:
 
 - the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds;
 - the word array, map, or func, type arguments not counting; or
-- the tag, for a named record or primitive type.
+- the tag, for a named record or primitive type, or for a time type of `stdlib.md`, whose values
+  carry the tag of their type as records do.
 
 A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile
 error and `Array[int | string]` is the type to write, while `int | float64` is fine. The rule
@@ -732,10 +733,11 @@ its `{` would otherwise begin the body: `if p == (Point{ x: 1 }) { ... }` and
 ### `is`
 
 `x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record or primitive type, a
-primitive kind, `null`, `Array`, `Map`, or `func`, written without type arguments, because the
-runtime has only tags and kinds to look at. An alias is not accepted. With `type Id = int | string`,
-the checker sees `Id` as the union, while the runtime would see a tag no value carries. So `x is Id`
-is a compile error that says to test the members, and a panic in an unchecked program.
+time type of `stdlib.md`, a primitive kind, `null`, `Array`, `Map`, or `func`, written without type
+arguments, because the runtime has only tags and kinds to look at. An alias is not accepted. With
+`type Id = int | string`, the checker sees `Id` as the union, while the runtime would see a tag no
+value carries. So `x is Id` is a compile error that says to test the members, and a panic in an
+unchecked program.
 
 The static type of `x` must be a union with `T` as a member, or an anonymous record type to which
 the named record type `T` is assignable. In the second case the test narrows `x` to the one
@@ -1347,10 +1349,12 @@ through it, as in `Http.Response`; none has methods or state. `Array` and `Map` 
 the two built-in container types, and `Result` and the sync types are types with functions declared
 on them (section 6); all read as `Name.function`, like a namespace. Every function takes its subject
 as the first argument so it composes with `|`. This section is the complete core library. The I/O
-namespaces `File`, `Http`, `Time`, `Os`, and `Json` are policy rather than language and live in
-`stdlib.md`.
+namespaces `File`, `Http`, `Path`, `Time`, `Os`, and `Json` are policy rather than language and
+live in `stdlib.md`.
 
-Signatures are written in Ant's own notation with bounds (section 4, Generics). A callback whose
+Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter
+may carry a default, which a call omits or names as for a declared function (section 6). A
+callback whose
 result the library ignores is typed with a type parameter, never with `void`, so any lambda fits;
 the library discards the value itself. A function marked `mutates` changes its first argument and
 returns `void` or the removed element; every other function leaves its arguments untouched and
@@ -1496,8 +1500,9 @@ template strings.
   are separated by `, `. An empty array, map, or record renders as `[]`, `Map{}`, or `Empty{}`, with
   nothing inside the brackets.
 - A named primitive renders as its constructor call, `UserId("u-1")`.
-- Functions render as `func`, a constructor and a tag as their type's name, and sync objects as
-  their namespace name.
+- Functions render as `func`, a constructor and a tag as their type's name, sync objects as
+  their namespace name, and time values as `stdlib.md` says: an RFC 9557 string, or a zone's
+  identifier.
 - A value already being rendered renders as `...`, so cyclic structures terminate.
 
 ### Iter
@@ -1527,6 +1532,7 @@ Math.ceil(x: float64): float64
 Math.round(x: float64): float64                                // half away from zero
 Math.trunc(x: float64): float64                                // toward zero; int(Math.trunc(x)) is the explicit truncating conversion
 Math.toInt(x: float64): int | null                             // int(x) without the panic: null on a fraction, out of range, NaN, or an infinity
+Math.random(): float64                                         // uniform in [0, 1); the sequence cannot be seeded
 Math.PI: float64
 Math.E: float64
 Math.minInt: int                                               // -2^63; not writable as a literal
@@ -1625,12 +1631,13 @@ Every value has a kind, fixed when the value is created:
 | record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                    |
 | tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
 | func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
-| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
+| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
 | sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic`                                                                                                                                                                                 |
+| time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
 
 Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and
-copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, and tags are
-immutable, so for them the distinction never shows.
+copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, tags, and
+time values are immutable, so for them the distinction never shows.
 
 ### Names and scopes
 
@@ -1708,14 +1715,16 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers
   are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`,
   `null`, and `void` values are equal by value; records have the same tag and `==` fields; tagged
-  primitives have the same tag and equal payloads; arrays have the same length and `==` elements in
+  primitives have the same tag and equal payloads; time values have the same tag and equal fields,
+  as `stdlib.md` lists them per type; arrays have the same length and `==` elements in
   order; maps have the same key set and `==` values per key; functions, tags, and sync objects are
   the same object. A pair of values already under comparison counts as equal (section 4). Values of
   different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
 - **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
   the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other path
-  evaluates and must be a record tag or a constructor, not an alias tag, and the test is whether `a`
-  is a record or tagged primitive carrying that tag. The result is a `bool`.
+  evaluates and must be a record tag, a time type's tag, or a constructor, not an alias tag, and the
+  test is whether `a` is a record, tagged primitive, or time value carrying that tag. The result is
+  a `bool`.
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the
   left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right
   operand must be a `bool` when it is evaluated.
@@ -1804,7 +1813,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | call                                                | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
 | record literal                                      | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |
 | array literal                                       | a spread operand is not an array                                                                                                                                                                                                                      |
-| `is`                                                | the right side is a path that does not evaluate to a record tag or a constructor                                                                                                                                                                      |
+| `is`                                                | the right side is a path that does not evaluate to a record tag, a time type's tag, or a constructor                                                                                                                                                                      |
 | `for`                                               | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned                                                                                                      |
 | destructuring                                       | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions                                                  |
 | variable                                            | no scope binds the name                                                                                                                                                                                                                               |
