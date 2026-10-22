@@ -659,7 +659,8 @@ var zs = []                               // compile error: annotate
 
 Every function parameter is annotated, except lambda parameters. A lambda needs an expected function
 type with zero or one parameter; its result type is synthesized from the body, and when the expected
-result is an unsolved type parameter, the body solves it. A function's return type is inferred from
+result mentions an unsolved type parameter, as `U` in `Array.map` or `Array[U]` in `Array.flatMap`,
+the body solves it. A function's return type is inferred from
 its body unless the function is exported or recursive. Exported functions state it so that a
 module's interface reads without its bodies. Recursion is found on demand: the checker infers a
 callee's type when it meets a call, and meeting a function whose inference is already in progress is
