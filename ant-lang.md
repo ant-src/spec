@@ -1207,11 +1207,21 @@ go { sendReport(report) }
 
 The program exits when the main goroutine returns, regardless of other goroutines.
 
+The host can end a run before that: the `ant` command on an interrupt the program did not ask for
+(`stdlib.md`, `Os.interrupt`), a Go program by cancelling the context it gave `Run`. Every
+goroutine then ends at its next call or loop iteration, a blocking call returns with the reason
+`cancelled`, and the process exits after a short grace. That is an end, not an event a program
+handles; the interrupt a program asks for is the event.
+
 ### Synchronization
 
-There are no channels. Goroutines coordinate through shared memory guarded by the sync objects in
-the standard library: `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, and `Atomic[T]`. Each is a
-reference value created by its `new` function; section 11 lists their operations.
+Goroutines coordinate through shared memory guarded by the sync objects of the standard library,
+`Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, and `Atomic[T]`; through channels, `Chan[T]`,
+which carry values from goroutine to goroutine and block the side that is ahead; and through
+contexts, `Context`, which bound a wait with a deadline or end it with a cancellation. Each is a
+reference value created by its `new` function, and section 11 lists their operations. There is no
+`select` statement: `Select.wait` is a call over clauses (section 11), and Waiting, below, shows how
+a program waits for several things.
 
 ```ant
 func fetchAll(urls: Array[string]): Array[Result[Http.Response, Error]] {
@@ -1231,6 +1241,94 @@ func fetchAll(urls: Array[string]): Array[Result[Http.Response, Error]] {
   WaitGroup.wait(wg)
   results
 }
+```
+
+### Waiting
+
+A context becomes done once: when a call cancels it, when its deadline passes, or when its parent
+is done. Every context descends from the run's, so a cancelled run ends every wait. Every blocking
+library call takes a context as its last parameter, `ctx: Context | null = null`, and gives up when
+the context is done. What giving up means follows the call's return type: a `Result` is `Err` with
+the context's reason as its message, a value-or-null is `null`, and a `void` call returns early, so
+the program asks `Context.isDone` when it needs to know. With `null` the call waits until its
+condition holds or the run is cancelled. Locks and conditions take no context.
+
+```ant
+var ctx = Context.new(Time.duration(seconds: 2))
+var reply = Chan.receive(replies, ctx) ?? return Result.err(Error{ message: "no reply" })
+```
+
+A goroutine that waits for several kinds of thing owns one channel, a mailbox, whose element type
+is a union of them, and every producer sends into it. An event loop is a loop over the mailbox with
+an `is` chain, so a transition is ordinary control flow:
+
+```ant
+type SpeechStarted = {}
+type UserMessage = { text: string, synthetic: bool }
+type Interrupt = { offsetMs: int }
+type Event = SpeechStarted | UserMessage | Interrupt
+
+func generating(s: Session, ctx: Context): void {
+  for event in Chan.values(s.events, ctx) {          // ends when ctx is done
+    if event is SpeechStarted {
+      flushRenderer(s)
+      Context.cancel(s.generation)
+    } else if event is UserMessage {
+      Array.push(s.pendingMessages, event)           // deferred to the next state
+    } else if event is Interrupt {
+      s.turn.interrupt = event
+      return
+    }
+  }
+}
+```
+
+Every event reaches whatever state is current, in arrival order across all sources, and a state
+defers what it cannot handle. The first of several things is the same shape: a goroutine per
+source, one mailbox, one receive, and a context that stops the rest.
+
+```ant
+type Line = { text: string }
+type Timeout = {}
+
+func lineOrTimeout(input: File.Handle, ms: int): Line | Timeout {
+  var events: Chan[Line | Timeout] = Chan.new()
+  var ctx = Context.new()
+  go {
+    var got = Result.unwrapOr(File.readLine(input, ctx), null)
+    if got != null { Chan.send(events, Line{ text: got }, ctx) }
+  }
+  go {
+    Time.sleep(ms, ctx)
+    Chan.send(events, Timeout{}, ctx)
+  }
+  var event = Chan.receive(events) ?? Timeout{}
+  Context.cancel(ctx)
+  event
+}
+```
+
+A worker pool is a channel of jobs that each worker drains with `Chan.values`, a channel of
+results, and a `WaitGroup` that says when to close it. A future is a channel of capacity one. A
+ticker is a loop of `Time.sleep` with a context. A goroutine that should stop checks
+`Context.isDone` between steps and passes the context into its waits; one that ignores its context
+runs until the run ends.
+
+A wait on channels that exist already, that another goroutine reads too, or that a later state will
+read, is `Select.wait`: a clause per channel, each with the function to run when it is chosen, and
+nothing taken from any channel until the choice is made (section 11). A clause's function returns
+from itself, so what the loop around the wait does next goes through the result, and the clauses
+agree on that result's type through an annotation:
+
+```ant
+type Continue = {}
+type Stop = {}
+
+var clauses: Array[Select.Case[Continue | Stop]] = [
+  Select.receive(lines, { if x == null { Stop{} } else { print(x); Continue{} } }),
+  Select.receive(ticks, { flush(); Continue{} }),
+]
+while Select.wait(clauses, ctx) is Continue {}
 ```
 
 ### Data races
@@ -1274,6 +1372,10 @@ sense of Go's memory model:
   returns.
 - All operations on all `Atomic` objects form one total order, and a `store` happens before every
   `load` that observes it.
+- A send on a channel happens before the receive that takes its value, and a close happens before
+  a receive that returns `null` because of it; a clause of `Select.wait` is a send or a receive.
+- `Context.cancel`, and the passing of a deadline, happen before the return of every wait the
+  context ends.
 
 `Cond` adds nothing; its mutex supplies the order. A goroutine's exit is ordered with nothing, so a
 program that needs a goroutine's result waits on a `WaitGroup`, not on the goroutine being gone. A
@@ -1387,8 +1489,8 @@ through it, as in `Http.Response`; none has methods or state. `Array` and `Map` 
 the two built-in container types, and `Result` and the sync types are types with functions declared
 on them (section 6); all read as `Name.function`, like a namespace. Every function takes its subject
 as the first argument so it composes with `|`. This section is the complete core library. The I/O
-namespaces `File`, `Http`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto` are
-policy rather than language and live in `stdlib.md`.
+namespaces `File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and
+`Crypto` are policy rather than language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter
 may carry a default, which a call omits or names as for a declared function (section 6). A
@@ -1753,7 +1855,9 @@ names the alias in a type and its functions in an expression. `Record` is a name
 
 The sync objects of section 9. Each is a prelude type with its functions declared on it (section 6),
 so `Mutex` is the type in an annotation and `Mutex.new()` creates one; objects compare by identity.
-The `with` forms acquire, run the function, and release even if it panics.
+The `with` forms acquire, run the function, and release even if it panics. A `ctx` parameter is the
+context of section 9, Waiting: the call gives up when the context is done. `Select` is a namespace,
+since a type carries no types (section 6): it declares `Select.Case` and the functions over clauses.
 
 ```
 Mutex.new(): Mutex
@@ -1772,7 +1876,7 @@ RwMutex.withWrite[T](m: RwMutex, f: func(): T): T
 WaitGroup.new(): WaitGroup
 WaitGroup.add(wg: WaitGroup, n: int): void                     // ◆ counter would go negative
 WaitGroup.done(wg: WaitGroup): void                            // ◆ counter already zero
-WaitGroup.wait(wg: WaitGroup): void                            // blocks until the counter is zero
+WaitGroup.wait(wg: WaitGroup, ctx: Context | null = null): void   // blocks until the counter is zero, or ctx is done
 
 Once.new(): Once
 Once.do[T](once: Once, f: func(): T): void                     // runs f the first time only and discards its value; later calls wait for it
@@ -1789,7 +1893,52 @@ Atomic.load[T](a: Atomic[T]): T
 Atomic.store[T](a: Atomic[T], v: T): void
 Atomic.add[T: Number](a: Atomic[T], d: T): T                   // ◆ overflow; returns the new value
 Atomic.compareAndSwap[T](a: Atomic[T], expected: T, v: T): bool   // compares with ==
+
+Context.new(timeout: Time.Duration | null = null, parent: Context | null = null): Context
+                                                               // a child of parent, or of the run; ◆ a timeout with years, months or weeks, or not positive
+Context.cancel(ctx: Context): void                             // done now, with the reason "cancelled"; nothing when done already
+Context.isDone(ctx: Context): bool
+Context.reason(ctx: Context): string | null                    // null while running; "cancelled", "timeout", "interrupt", or the parent's reason
+Context.deadline(ctx: Context): Time.Instant | null            // the earliest deadline of ctx and its parents
+Context.wait(ctx: Context): void                               // blocks until done
+
+Chan.new[T](capacity: int = 0): Chan[T]                        // ◆ capacity < 0; 0 is a rendezvous
+Chan.send[T](c: Chan[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; ◆ closed
+Chan.receive[T](c: Chan[T], ctx: Context | null = null): T | null  // blocks; null when closed and drained, or when ctx ends first
+Chan.close[T](c: Chan[T]): void                                // ◆ closed already
+Chan.isClosed[T](c: Chan[T]): bool
+Chan.length[T](c: Chan[T]): int                                // values buffered now
+Chan.values[T](c: Chan[T], ctx: Context | null = null): Seq[T] // every value until closed, or until ctx ends
+
+type Select.Case[R]                                            // opaque: one clause, compared by identity
+
+Select.receive[T, R](c: Chan[T], f: func(T | null): R): Select.Case[R]   // ready when c holds a value or is closed; f gets the value, or null
+Select.send[T, R](c: Chan[T], v: T, f: func(): R): Select.Case[R]        // ready when c can take v; ◆ closed, when chosen
+Select.otherwise[R](f: func(): R): Select.Case[R]                        // ready at once; chosen when no other clause is ready
+Select.wait[R](cases: Array[Select.Case[R]], ctx: Context | null = null): R | null
+                                                               // runs one ready clause and returns its result; null when ctx ends first
+                                                               // ◆ no cases, or two otherwise clauses
 ```
+
+A context's timeout converts as `Http.request`'s does, days at 24 hours and the smaller units
+exact, but a calendar unit or a duration that is not positive is a ◆, since `Context.new` is
+computation. A child of a done parent is done at once with the parent's reason. `Context.wait` is
+how a main goroutine waits for the interrupt while a server runs.
+
+An unbuffered channel hands a value over directly: `send` returns when a receiver has taken it. A
+buffered one holds `capacity` values and blocks a sender beyond that. Closing lets receivers drain
+what is buffered and then get `null`; a later `send` is a ◆, since a value with no receiver is the
+sender's bug. `Chan.new` fixes `T` from nothing, so a declaration annotates:
+`var jobs: Chan[Job] = Chan.new()`. `Chan.receive` conflates a `null` value with the end of the
+channel when `T` includes `null`, as `Map.get` and `Array.pop` do; a program with such a `T` wraps
+the value, and `Context.isDone(ctx)` tells a cancellation from a close.
+
+`Select.wait` takes nothing until a clause is chosen: a value stays in its channel until the
+moment it is taken, so a channel that another goroutine reads, or that a later state will read,
+is not drained. Among several ready clauses one is chosen at random, so no source starves. With an
+`otherwise` clause the call never blocks. The clauses hide each channel's element type inside
+their function, so channels of different types mix in one wait, and `R` is what the functions
+return; a wait whose clauses return `void` has the type `void | null`, which a statement ignores.
 
 ## 12. Dynamic semantics
 
@@ -1813,7 +1962,7 @@ Every value has a kind, fixed when the value is created:
 | tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
 | func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
 | tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
-| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic`                                                                                                                                                                                 |
+| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Chan`, or `Context`, or a `Select.Case`                                                                                                                                          |
 | time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
 | regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
 

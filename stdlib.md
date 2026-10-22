@@ -11,13 +11,16 @@ in its comment. Blocking calls block only the calling goroutine (section 9).
 A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`,
 since a namespace is a record like an imported module and the bare name would collide with it. A
 parameter with a default may be omitted or named at the call, as for a declared function
-(section 6, Calling). The namespaces are smaller than the Go packages behind them; a function is
-added when a program needs it, and what is here is complete as written.
+(section 6, Calling). A function that blocks takes a context as its last parameter,
+`ctx: Context | null = null`, and when the context is done gives up with `Err` and the context's
+reason as the message, as section 9 (Waiting) has it. The namespaces are smaller than the Go
+packages behind them; a function is added when a program needs it, and what is here is complete
+as written.
 
 ## File
 
 ```
-type Handle                                                // opaque: an open file, or a standard stream
+type Handle                                                // opaque: an open file, a standard stream, or a connection
 type Info = { name: string, size: int, isDir: bool, modified: Time.Instant }
 
 File.read(path: string): Result[string, Error]
@@ -37,12 +40,12 @@ File.walk(dir: string): Result[Array[string], Error]       // every file below d
 File.open(path: string): Result[File.Handle, Error]        // for reading
 File.create(path: string): Result[File.Handle, Error]      // for writing; truncates
 File.append(path: string): Result[File.Handle, Error]      // for writing at the end; creates
-File.readLine(f: File.Handle): Result[string | null, Error]   // null at end of file
-File.readAll(f: File.Handle): Result[string, Error]        // the rest of the file
+File.readLine(f: File.Handle, ctx: Context | null = null): Result[string | null, Error]   // null at end of file
+File.readAll(f: File.Handle, ctx: Context | null = null): Result[string, Error]           // the rest of the file
 File.writeLine(f: File.Handle, line: string): Result[void, Error]
 File.writeText(f: File.Handle, text: string): Result[void, Error]   // writeLine without the newline
 File.flush(f: File.Handle): Result[void, Error]            // writes out what is buffered
-File.pipe(src: File.Handle, dst: File.Handle): Result[void, Error]  // copies the rest of src to dst
+File.pipe(src: File.Handle, dst: File.Handle, ctx: Context | null = null): Result[void, Error]   // copies the rest of src to dst
 File.close(f: File.Handle): void                           // flushes; nothing on a standard stream
 ```
 
@@ -51,24 +54,35 @@ does not follow symbolic links, lists files and not directories, and returns the
 order. `modified` is the time of the last write. `remove` refuses a directory with entries;
 `removeAll` is the recursive form, named so the dangerous one is the longer name.
 
+A handle is also a connection from `Net`, and the reads and writes are the same. A context
+interrupts a read of a connection, a pipe or a terminal, which are the handles that wait; a read
+of a regular file never waits, so there the context is looked at only before the read begins. A
+write to a connection is flushed as a write to a standard stream is, since the other end is
+waiting for it; `File.flush` is for files.
+
 ## Http
 
 ```
 type Response = { status: int, headers: Map[string, string], body: string }
+type Request = { method: string, path: string, query: string, headers: Map[string, string],
+                 body: string, remote: string }
 
 Http.request(method: string, url: string, body: string = "", headers: Map[string, string] = Map{},
-             timeout: Time.Duration | null = null): Result[Http.Response, Error]
-Http.get(url: string, headers: Map[string, string] = Map{},
-         timeout: Time.Duration | null = null): Result[Http.Response, Error]      // request("GET", url, "", headers, timeout)
+             timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
+Http.get(url: string, headers: Map[string, string] = Map{}, timeout: Time.Duration | null = null,
+         ctx: Context | null = null): Result[Http.Response, Error]                // request("GET", url, "", headers, timeout, ctx)
 Http.post(url: string, body: string, headers: Map[string, string] = Map{},
-          timeout: Time.Duration | null = null): Result[Http.Response, Error]     // request("POST", url, body, headers, timeout)
+          timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
+                                                                                  // request("POST", url, body, headers, timeout, ctx)
+Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Response,
+           ctx: Context | null = null): Result[void, Error]                       // ◆ a response status outside 100 to 599, in the handler's goroutine
 ```
 
 `request` sends one request with `method` as given, `GET`, `PUT`, `DELETE`, or any other token,
 `body` as its body, and `headers` as its headers, and reads the whole response. A response of any
 status is `Ok` with that `status`; `Err` is a failure to get one: a malformed `url`, no connection,
-or the timeout. The response's headers hold one string per name, a repeated header joined with
-`, `. `get` and `post` are `request` with the method filled in.
+the timeout, or the context. The response's headers hold one string per name, a repeated header
+joined with `, `. `get` and `post` are `request` with the method filled in.
 
 `timeout` bounds the whole call, from connecting to the end of the body, and when it passes the
 result is `Err` with the message `timeout`. The duration is taken as `Time.total` takes one without
@@ -77,7 +91,52 @@ weeks have no fixed length, so a duration with any of them is `Err` before anyth
 or negative duration is `Err` too, since a request that has already timed out is a mistake. A
 duration beyond what the host can wait, about 292 years, is taken as that. `null` sets no deadline
 of its own; a run the host cancels ends the call regardless. These are `Err` and not ◆ because
-`Http` is I/O and follows the rule above.
+`Http` is I/O and follows the rule above. `ctx` bounds the call as well, and when both are given
+the earlier wins: a one-off bound is a `timeout`, a bound shared with other work is a context.
+
+`serve` answers every request that arrives on `l` by calling `handler` on a goroutine of its own,
+as section 9's goroutines, and returns `Ok` once `ctx` is done and the requests in flight have
+finished, waiting at most five seconds for them before it closes their connections; with `null` it
+serves until the run is cancelled. It is `Err` when the listener is closed under it. A handler's
+panic is reported as a goroutine's panic is, and the client gets status 500 with an empty body; a
+response whose status is outside 100 to 599 is a ◆ in the handler's goroutine, which takes the same
+path. The `Http.Response` is sent as given, with `Content-Length` from the body. In the `Request`,
+`path` is decoded and `query` is raw, for `Url.parseQuery`; the headers hold one string per name,
+a repeated header joined with `, `; `remote` is `ip:port`. Bodies are read whole, as the client
+reads them. Taking a listener rather than an address is what lets a program know its port, run the
+server on a goroutine, and talk to it:
+
+```ant
+func handle(req: Http.Request): Http.Response {
+  if req.path == "/health" { Http.Response{ status: 200, headers: Map{}, body: "ok" } }
+  else { Http.Response{ status: 404, headers: Map{}, body: `no ${req.path}` } }
+}
+
+func main(): void {
+  var listener = Result.unwrap(Net.listen(":8080"))
+  print(`listening on ${Net.address(listener)}`)
+  var stop = Os.interrupt()
+  var served = Http.serve(listener, handle, stop)
+  print(`stopped: ${Context.reason(stop) ?? "?"}`)
+}
+```
+
+## Net
+
+```
+type Listener                                                    // opaque: a listening TCP socket
+
+Net.listen(addr: string): Result[Net.Listener, Error]            // "host:port"; ":0" takes any free port
+Net.address(l: Net.Listener): string                             // the address it listens on, "127.0.0.1:50321"
+Net.accept(l: Net.Listener, ctx: Context | null = null): Result[File.Handle, Error]   // the next connection; Err when closed, or with ctx's reason
+Net.close(l: Net.Listener): void                                 // pending and later accepts return Err; nothing twice
+Net.dial(addr: string, ctx: Context | null = null): Result[File.Handle, Error]        // a connection to "host:port"
+Net.peer(f: File.Handle): string | null                          // the other end of a connection, "ip:port"; null for a file or a stream
+```
+
+A connection is a `File.Handle`, so `File.readLine`, `readAll`, `writeLine`, `writeText`, `pipe`
+and `close` need nothing new, and a line protocol is a loop over `readLine`. A write to a
+connection is flushed, as `File` says. TCP only: there is no TLS, UDP or Unix socket.
 
 ## Path
 
@@ -172,7 +231,7 @@ call.
 ```
 Time.now(): Time.Instant
 Time.nowIn(z: Time.Zone): Time.ZonedDateTime
-Time.sleep(ms: int): void                           // blocks the calling goroutine
+Time.sleep(ms: int, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done
 Time.monotonic(): int                               // milliseconds from an arbitrary origin, for measuring
 Time.fromEpochMillis(ms: int): Time.Instant         // ◆ outside the range
 Time.fromEpochNanos(ns: int): Time.Instant
@@ -420,10 +479,12 @@ Os.environ(): Map[string, string]     // every variable
 Os.cwd(): Result[string, Error]       // the working directory
 Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 Os.exec(program: string, args: Array[string] = [], dir: string | null = null,
-        env: Map[string, string] | null = null, stdin: string = ""): Result[Os.Output, Error]
+        env: Map[string, string] | null = null, stdin: string = "",
+        ctx: Context | null = null): Result[Os.Output, Error]
 Os.stdin(): File.Handle               // the program's standard input
 Os.stdout(): File.Handle              // its standard output, which print writes to as well
 Os.stderr(): File.Handle              // its standard error
+Os.interrupt(): Context               // done when the process is interrupted; the same context at every call
 ```
 
 `Os.exec` starts `program` with `args` as its arguments and no shell between: `args` arrive as
@@ -433,8 +494,15 @@ child's whole environment, so a program that adds one variable starts from `Os.e
 `stdin` is what the child reads. Both outputs are captured whole and taken as text, as `File.read`
 takes a file. The call blocks the calling goroutine until the child has exited, and returns `Err`
 only when the child could not be started or run to its end: the program is not found, `dir` does
-not exist, the host cancelled the run. A nonzero exit is `Ok` with its `status`; a child ended by
-a signal has status `-1`. When the host cancels the run, the child is killed.
+not exist, the host cancelled the run, `ctx` is done. A nonzero exit is `Ok` with its `status`; a
+child ended by a signal has status `-1`. When the host cancels the run, or `ctx` is done, the
+child is killed, and in the second case the result is `Err` with the context's reason.
+
+An interrupt is Ctrl-C, SIGINT, and SIGTERM where the host has it. A program that has not called
+`Os.interrupt()` is ended by the first one, as `ant-lang.md` section 9 says of the host ending a
+run. A program that has called it receives the first one instead: the context is done with the
+reason `interrupt`, the program's waits end, and the program goes on, to drain a server or write
+what it has, and exits when it is ready. A second interrupt ends the run.
 
 The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.stdin())`,
 `File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new.
