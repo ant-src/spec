@@ -73,6 +73,7 @@ ordinary identifiers bound by the prelude, not keywords.
 3.14        1e9           2.5e-3                // floats
 "hello"     "line\nbreak" "\u{1F600}"           // strings
 `total: ${count} items`                         // template strings
+/^\d{4}-\d{2}$/   /\bant\b/i                    // regular expressions
 true        false         null
 ```
 
@@ -90,6 +91,42 @@ line; a template string may span lines. A template string interpolates any expre
 is rendered with `String.from`, which is defined for every type (section 11). Braces nest inside
 `${...}`, so a lambda or a record literal can appear there. There are no raw strings and no
 character literals.
+
+A regular expression literal is a pattern between slashes with optional flags after the closing
+slash, as in JavaScript. The pattern is RE2 syntax, which section 11 (Regex) describes, and it is
+checked when the source is parsed, so `/(/` is a syntax error in `ant check` and `ant run` alike. A
+backslash inside the literal belongs to the pattern, so `\d` is a digit class and needs no doubling;
+`\/` is a `/` and does not end the literal, nor does a `/` inside a character class `[...]`. The
+literal stays on one line. `//` and `/*` begin comments, so an empty pattern and a pattern that
+starts with `*` cannot be written as literals; an empty pattern is `Regex.compile("")`. The flags
+are `i`, `m`, and `s`, each at most once, in any order: `i` ignores case, `m` makes `^` and `$`
+match at line ends, and `s` lets `.` match a line break. JavaScript's other flags are syntax errors
+whose message names the Ant way: `g` is `Regex.findAll` or `Regex.replace`, `y` is a `^` anchor on
+a `String.slice`, and `u`, `v`, and `d` are how Ant already behaves. The literal evaluates to a
+`Regex.Pattern`.
+
+`/` begins a regular expression unless the last token before it, skipping line breaks, is an
+operand: an identifier, a literal of any kind, `true`, `false`, `null`, `void`, `)`, `]`, or `}`.
+After an operand, `/` is division and `/=` is the compound assignment. `return`, `break`, and
+`continue` can end a line (see Line endings) but are not operands, so `return /x/` returns a
+pattern. When there is no previous token, at the start of a file or of a `${...}` interpolation,
+`/` begins a pattern. The rule reads one token back, so the grammar keeps its one token of
+lookahead, and no program written before the literal existed changes meaning: every `/` that begins
+a pattern follows a token after which division was a syntax error.
+
+```ant
+var r = (total
+  / count)                        // division: the last token before / is an identifier
+var ok = Regex.test(/^ant$/i, s)  // a pattern: the last token is (
+x /= 2                            // an assignment
+```
+
+RE2 has no lookahead, lookbehind, or backreferences, so a JavaScript pattern that uses `(?=`,
+`(?!`, `(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct. JavaScript's
+`\u0041` is a syntax error whose message names `\x{0041}`. `(?<name>...)` names a group as in
+JavaScript. A few patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
+`\v` or the Unicode spaces, and `.` excludes only `\n`, where JavaScript also excludes `\r`, U+2028,
+and U+2029. `\d`, `\w`, and `\b` are ASCII in both.
 
 ### Line endings
 
@@ -284,12 +321,12 @@ var v = Vec{ ...p }                        // a Vec with the fields of p
 Records, arrays, and maps are reference values: assigning or passing one shares it, and a change
 made through one name is visible through every other. `==` compares structure, never identity. Two
 records are equal when they carry the same tag and their fields are equal. Arrays compare by length
-and elements, maps by key set and values, primitives and time values (`stdlib.md`) by value, and
-functions and sync objects by identity. The comparison recurses with `==` over every run-time
-field, including fields the static type does not mention, so it agrees with `String.from` and
-`Json.stringify`. A pair of values already under comparison counts as equal, so cyclic structures
-compare in finite time. Identity is a library call: `Record.same`, `Array.same`, and `Map.same`
-report whether two names refer to one value.
+and elements, maps by key set and values, primitives, time values (`stdlib.md`), and regular
+expression patterns (section 11) by value, and functions and sync objects by identity. The
+comparison recurses with `==` over every run-time field, including fields the static type does
+not mention, so it agrees with `String.from` and `Json.stringify`. A pair of values already under
+comparison counts as equal, so cyclic structures compare in finite time. Identity is a library
+call: `Record.same`, `Array.same`, and `Map.same` report whether two names refer to one value.
 
 ```ant
 var p = Point{ x: 1.0, y: 2.0 }
@@ -386,8 +423,8 @@ look at. Each member has a discriminator:
 
 - the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds;
 - the word array, map, or func, type arguments not counting; or
-- the tag, for a named record or primitive type, or for a time type of `stdlib.md`, whose values
-  carry the tag of their type as records do.
+- the tag, for a named record or primitive type, for a time type of `stdlib.md`, or for
+  `Regex.Pattern`, whose values carry the tag of their type as records do.
 
 A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile
 error and `Array[int | string]` is the type to write, while `int | float64` is fine. The rule
@@ -654,7 +691,7 @@ From tightest to loosest binding:
 | -------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | postfix        | `a.b` `a?.b` `a[i]` `f(x)`   |                                                                                                                          |
 | prefix         | `-a` `!a` `try a`            |                                                                                                                          |
-| multiplicative | `*` `/` `%`                  | integer `/` truncates toward zero; `%` is the truncated remainder with the dividend's sign, for floats too               |
+| multiplicative | `*` `/` `%`                  | integer `/` truncates toward zero; `%` is the truncated remainder with the dividend's sign, for floats too; a `/` that does not follow an operand begins a regular expression literal (section 2) |
 | additive       | `+` `-`                      | `+` also concatenates strings                                                                                            |
 | comparison     | `<` `<=` `>` `>=` `is`       | numbers and strings; `is` tests a union member                                                                           |
 | equality       | `==` `!=`                    | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4) |
@@ -733,11 +770,11 @@ its `{` would otherwise begin the body: `if p == (Point{ x: 1 }) { ... }` and
 ### `is`
 
 `x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record or primitive type, a
-time type of `stdlib.md`, a primitive kind, `null`, `Array`, `Map`, or `func`, written without type
-arguments, because the runtime has only tags and kinds to look at. An alias is not accepted. With
-`type Id = int | string`, the checker sees `Id` as the union, while the runtime would see a tag no
-value carries. So `x is Id` is a compile error that says to test the members, and a panic in an
-unchecked program.
+time type of `stdlib.md`, `Regex.Pattern`, a primitive kind, `null`, `Array`, `Map`, or `func`,
+written without type arguments, because the runtime has only tags and kinds to look at. An alias
+is not accepted. With `type Id = int | string`, the checker sees `Id` as the union, while the
+runtime would see a tag no value carries. So `x is Id` is a compile error that says to test the
+members, and a panic in an unchecked program.
 
 The static type of `x` must be a union with `T` as a member, or an anonymous record type to which
 the named record type `T` is assignable. In the second case the test narrows `x` to the one
@@ -1349,8 +1386,8 @@ through it, as in `Http.Response`; none has methods or state. `Array` and `Map` 
 the two built-in container types, and `Result` and the sync types are types with functions declared
 on them (section 6); all read as `Name.function`, like a namespace. Every function takes its subject
 as the first argument so it composes with `|`. This section is the complete core library. The I/O
-namespaces `File`, `Http`, `Path`, `Time`, `Os`, and `Json` are policy rather than language and
-live in `stdlib.md`.
+namespaces `File`, `Http`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto` are
+policy rather than language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter
 may carry a default, which a call omits or names as for a declared function (section 6). A
@@ -1399,22 +1436,40 @@ the length, and ranges are half-open: `from` inclusive, `to` exclusive.
 Array.length[T](xs: Array[T]): int
 Array.isEmpty[T](xs: Array[T]): bool
 Array.get[T](xs: Array[T], i: int): T | null
+Array.first[T](xs: Array[T]): T | null                         // null when empty
+Array.last[T](xs: Array[T]): T | null
 Array.push[T](xs: Array[T], v: T): void                        // mutates
 Array.pop[T](xs: Array[T]): T | null                           // mutates; null when empty
+Array.insert[T](xs: Array[T], i: int, v: T): void              // mutates; v becomes element i; ◆ i outside 0 ..= length
+Array.removeAt[T](xs: Array[T], i: int): T                     // mutates; the removed element; ◆ i out of range
 Array.slice[T](xs: Array[T], from: int, to: int): Array[T]     // ◆ from > to, or either out of 0 ..= length
 Array.concat[T](xs: Array[T], ys: Array[T]): Array[T]
 Array.map[T, U](xs: Array[T], f: func(T): U): Array[U]
+Array.flatMap[T, U](xs: Array[T], f: func(T): Array[U]): Array[U]   // the arrays f returns, concatenated
 Array.filter[T](xs: Array[T], f: func(T): bool): Array[T]
 Array.reduce[T, A](xs: Array[T], init: A, f: func(A, T): A): A
-Array.find[T](xs: Array[T], f: func(T): bool): T | null
+Array.find[T](xs: Array[T], f: func(T): bool): T | null        // the first element f accepts
+Array.findIndex[T](xs: Array[T], f: func(T): bool): int | null
+Array.findLast[T](xs: Array[T], f: func(T): bool): T | null    // the last element f accepts
+Array.findLastIndex[T](xs: Array[T], f: func(T): bool): int | null
 Array.some[T](xs: Array[T], f: func(T): bool): bool
 Array.every[T](xs: Array[T], f: func(T): bool): bool
+Array.countWhere[T](xs: Array[T], f: func(T): bool): int       // how many elements f accepts
 Array.contains[T](xs: Array[T], v: T): bool                    // by ==
 Array.indexOf[T](xs: Array[T], v: T): int | null               // first index, by ==
+Array.lastIndexOf[T](xs: Array[T], v: T): int | null           // last index, by ==
+Array.min[T: Ordered](xs: Array[T]): T | null                  // null when empty; NaN when any element is NaN
+Array.max[T: Ordered](xs: Array[T]): T | null
+Array.minBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first element with the least key
+Array.maxBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first with the greatest
 Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending, stable
 Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]
 Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b
 Array.reverse[T](xs: Array[T]): Array[T]
+Array.unique[T](xs: Array[T]): Array[T]                        // the first of each == value, in order
+Array.uniqueBy[T, K](xs: Array[T], key: func(T): K): Array[T]  // the first of each == key, in order
+Array.chunk[T](xs: Array[T], n: int): Array[Array[T]]          // n elements each, the last fewer; ◆ n < 1
+Array.groupBy[T, K](xs: Array[T], key: func(T): K): Map[K, Array[T]]   // keys in first-seen order, elements in order
 Array.entries[T](xs: Array[T]): Array[Indexed[T]]
 Array.range(from: int, to: int): Array[int]                    // empty when to <= from
 Array.filled[T](n: int, v: T): Array[T]                        // ◆ n < 0; the same v in every slot
@@ -1425,7 +1480,11 @@ Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 
 `Array.sum` returns `null` on an empty array rather than zero because the interpreter never knows
 `T` and so cannot produce the zero of the right kind (section 4, Checking and running). Write
-`Array.sum(xs) ?? 0.0`.
+`Array.sum(xs) ?? 0.0`. `Array.min` and `Array.max` return `null` on an empty array for the same
+reason. `minBy` and `maxBy` scan from the left and replace the element they hold only when a key
+is strictly less, or greater, than its key by `<`, so of equal keys the first wins and a `NaN` key
+never replaces one. `Array.chunk([1, 2, 3, 4, 5], 2)` is `[[1, 2], [3, 4], [5]]`, and
+`Array.chunk([], 2)` is `[]`.
 
 ### Map
 
@@ -1460,6 +1519,8 @@ and slices count code points, `for` iterates them (section 5), `String.toCodePoi
 integers, and `String.toBytes` gives the bytes.
 
 ```
+type Cut = { before: string, after: string }                   // the two sides of String.cut
+
 String.length(s: string): int
 String.isEmpty(s: string): bool
 String.slice(s: string, from: int, to: int): string            // ◆ as Array.slice
@@ -1468,22 +1529,55 @@ String.split(s: string, sep: string): Array[string]            // ◆ sep is emp
 String.join(parts: Array[string], sep: string): string
 String.repeat(s: string, n: int): string                       // ◆ n < 0
 String.trim(s: string): string                                 // Unicode white space at both ends
+String.trimStart(s: string): string                            // at the start only
+String.trimEnd(s: string): string                              // at the end only
+String.trimPrefix(s: string, prefix: string): string           // prefix removed once, when present
+String.trimSuffix(s: string, suffix: string): string
+String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; ◆ pad is empty
+String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; ◆ pad is empty
 String.contains(s: string, t: string): bool
 String.startsWith(s: string, t: string): bool
 String.endsWith(s: string, t: string): bool
 String.indexOf(s: string, t: string): int | null               // first code point index
+String.lastIndexOf(s: string, t: string): int | null           // last code point index
+String.count(s: string, t: string): int                        // non-overlapping occurrences; ◆ t is empty
 String.replace(s: string, old: string, new: string): string    // every occurrence; ◆ old is empty
+String.replaceFirst(s: string, old: string, new: string): string   // the first occurrence only; ◆ old is empty
+String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; ◆ sep is empty
+String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
+String.lines(s: string): Array[string]                         // split at \n, a \r before it dropped; no empty final line
 String.toUpper(s: string): string
 String.toLower(s: string): string
+String.isDigit(s: string): bool                                // every code point is a decimal digit; false on ""
+String.isLetter(s: string): bool                               // every code point is a letter; false on ""
+String.isSpace(s: string): bool                                // every code point is white space; false on ""
+String.isUpper(s: string): bool                                // every code point is an upper-case letter; false on ""
+String.isLower(s: string): bool                                // every code point is a lower-case letter; false on ""
 String.chars(s: string): Array[string]                         // one code point each
 String.toBytes(s: string): Array[byte]                         // UTF-8
 String.fromBytes(bytes: Array[byte]): string | null            // null on invalid UTF-8
 String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
 String.fromCodePoints(points: Array[int]): string | null       // null when a value is not a scalar value
-String.toInt(s: string): int | null                            // decimal, optional sign; null otherwise
+String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; ◆ base outside 2 ..= 36
 String.toFloat(s: string): float64 | null
+String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; ◆ base outside 2 ..= 36
+String.fromFloat(x: float64, digits: int): string              // fixed point with digits decimals, rounded half to even; ◆ digits < 0
 String.from[T](value: T): string
 ```
+
+The padding of `padStart` and `padEnd` is `pad` repeated and cut to the code points `s` lacks, so
+`String.padStart("7", 4, "ab")` is `"aba7"`, and a string already at or beyond `width` comes back
+unchanged. `String.lines` splits the text `File.read` gives at every `\n`, drops a `\r` just before
+one, and omits the piece after the last `\n` when it is empty: `"a\r\nb\n"` gives `["a", "b"]`,
+`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is
+`String.Cut{ before: "k", after: "v=w" }`. The class tests take a string because Ant has no
+character type: `for c in s` yields one-code-point strings, so `String.isDigit(c)` tests a
+character, and `String.isDigit(s)` tests that a whole field is digits. The letters of a base above
+ten are `a` to `z`, which `toInt` accepts in either case. `fromInt` writes an unsigned value as the
+number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` of `NaN` or an
+infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
+`String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a
+format string would give; there is no format string.
 
 `String.from` renders any value. `print` and template strings use it, so this is the format a
 program's output has. It is the only function the language calls implicitly, and only inside
@@ -1503,7 +1597,64 @@ template strings.
 - Functions render as `func`, a constructor and a tag as their type's name, sync objects as
   their namespace name, and time values as `stdlib.md` says: an RFC 9557 string, or a zone's
   identifier.
+- A regular expression pattern renders as a literal that reads back to it, `/a\/b/i`, as the Regex
+  section says.
 - A value already being rendered renders as `...`, so cyclic structures terminate.
+
+### Regex
+
+Regular expressions. A pattern in the source is a literal, `/.../flags` (section 2); a pattern from
+data goes through `Regex.compile`, which returns a `Result`. Both build a `Regex.Pattern`, which is
+opaque, immutable, and compared by value, so it serves as a map key. The syntax is RE2: Perl's
+classes, repetition, alternation, and groups, including the named `(?<name>...)` and the flag groups
+`(?i)`, `(?m)`, and `(?s)`, without lookahead, lookbehind, or backreferences, so that a match takes
+time linear in the input. `\d`, `\w`, `\s`, and `\b` are ASCII; the Unicode classes are `\pL` and
+`\p{Greek}`.
+
+```
+type Pattern                                                   // a compiled expression, from a literal or Regex.compile
+type Match = { text: string, start: int, end: int, groups: Array[string | null], named: Map[string, string | null] }
+
+Regex.compile(source: string, flags: string = ""): Result[Regex.Pattern, Error]   // Err on bad syntax or flags
+Regex.test(p: Regex.Pattern, s: string): bool
+Regex.find(p: Regex.Pattern, s: string): Regex.Match | null    // the leftmost match
+Regex.findAll(p: Regex.Pattern, s: string): Array[Regex.Match] // every match, left to right, without overlap
+Regex.replace(p: Regex.Pattern, s: string, replacement: string): string   // every match; $1 and ${name} expand
+Regex.replaceFirst(p: Regex.Pattern, s: string, replacement: string): string   // the first match only, likewise
+Regex.replaceWith(p: Regex.Pattern, s: string, f: func(Regex.Match): string): string   // every match, by f
+Regex.split(p: Regex.Pattern, s: string): Array[string]        // the pieces between the matches
+Regex.escape(s: string): string                                // s with every metacharacter escaped, to match it literally
+Regex.source(p: Regex.Pattern): string                         // the normalized source
+Regex.flags(p: Regex.Pattern): string                          // "", or some of i, m, s in that order
+```
+
+A pattern is its source and its flags. `Regex.compile` takes the flags as a string of the same
+letters a literal takes, in any order, and is `Err` on any other letter or a repeated one. The
+source is normalized: a `\/` loses its backslash, since RE2 reads `\/` and `/` alike, and the flags
+are sorted. Two patterns are `==` when their normalized sources and flags are, so `/a/i == /a/i`,
+`/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`, and `Regex.compile("a/b") == /a\/b/` all
+hold, and `Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as a literal that reads back to it:
+every `/` of the source written `\/`, a line break written `\n` or `\r`, and an empty source as
+`/(?:)/`, as JavaScript renders it. `Json.stringify` writes that rendering as a JSON string, and
+`Json.parse` gives it back as a string.
+
+A `Match` is one match of the whole pattern: `text` is the matched text, `start` and `end` are its
+code point indices into `s`, so `String.slice(s, m.start, m.end)` is `m.text`, `groups[0]` is the
+whole match and `groups[n]` the `n`th group, `null` when the group took no part, and `named` has
+an entry for each named group, in the pattern's order, `null` likewise. `findAll` takes successive
+matches from the left without overlap, and skips an empty match that abuts the match before it.
+`split` returns the pieces of `s` between the matches, so a pattern that never matches gives
+`[s]`; with an empty `s` it gives `[""]`.
+
+In `replacement`, `$n` and `${n}` expand to group `n`, `${name}` to a named group, `$$` to one `$`,
+and a group that took no part to `""`. A name after `$` is taken as long as it can be: `$1x` is
+`${1x}`, which is no group and so expands to `""`; write `${1}x`. A plain string does not
+interpolate `$`, so `"$1"` needs no escape. `replaceWith` calls `f` with each `Match` in order and
+puts its result in the match's place, as written, with no expansion.
+
+`Regex` is a namespace that declares two types, like `Time`, and not a type with functions, like
+`Mutex`, so the annotation is `Regex.Pattern`. `p is Regex.Pattern` tests a value for the kind, as
+`t is Time.Instant` does (section 5).
 
 ### Iter
 
@@ -1532,9 +1683,29 @@ Math.ceil(x: float64): float64
 Math.round(x: float64): float64                                // half away from zero
 Math.trunc(x: float64): float64                                // toward zero; int(Math.trunc(x)) is the explicit truncating conversion
 Math.toInt(x: float64): int | null                             // int(x) without the panic: null on a fraction, out of range, NaN, or an infinity
+Math.log(x: float64): float64                                  // natural logarithm
+Math.log2(x: float64): float64
+Math.log10(x: float64): float64
+Math.exp(x: float64): float64                                  // e to the power x
+Math.sin(x: float64): float64                                  // radians, as are the five below
+Math.cos(x: float64): float64
+Math.tan(x: float64): float64
+Math.asin(x: float64): float64
+Math.acos(x: float64): float64
+Math.atan(x: float64): float64
+Math.atan2(y: float64, x: float64): float64                    // the angle of the point (x, y), in -PI ..= PI
+Math.hypot(x: float64, y: float64): float64                    // the square root of x² + y², without overflow in between
+Math.cbrt(x: float64): float64                                 // cube root
+Math.isNaN(x: float64): bool
+Math.isFinite(x: float64): bool                                // neither NaN nor an infinity
+Math.clamp[T: Ordered](x: T, lo: T, hi: T): T                  // x held within lo ..= hi; ◆ lo > hi
 Math.random(): float64                                         // uniform in [0, 1); the sequence cannot be seeded
+Math.randomInt(from: int, to: int): int                        // uniform, from inclusive, to exclusive; the same sequence; ◆ to <= from
 Math.PI: float64
 Math.E: float64
+Math.NaN: float64
+Math.Infinity: float64                                         // positive; -Math.Infinity is the other
+Math.maxFloat64: float64                                       // the largest finite float64
 Math.minInt: int                                               // -2^63; not writable as a literal
 Math.maxInt: int
 
@@ -1544,11 +1715,20 @@ Bits.xor[T: Integer](a: T, b: T): T
 Bits.not[T: Integer](a: T): T
 Bits.shiftLeft[T: Integer](a: T, n: int): T                    // ◆ n < 0 or n >= width
 Bits.shiftRight[T: Integer](a: T, n: int): T                   // arithmetic for signed, logical for unsigned; ◆ as above
+Bits.rotateLeft[T: Integer](a: T, n: int): T                   // by n mod the width, so n may exceed it; ◆ n < 0
+Bits.rotateRight[T: Integer](a: T, n: int): T                  // ◆ likewise
 Bits.popCount[T: Integer](a: T): int
+Bits.leadingZeros[T: Integer](a: T): int                       // at the type's width, of the two's complement bits; the width for 0
+Bits.trailingZeros[T: Integer](a: T): int                      // likewise
 Bits.wrapAdd[T: Integer](a: T, b: T): T                        // two's complement, never panics
 Bits.wrapSub[T: Integer](a: T, b: T): T
 Bits.wrapMul[T: Integer](a: T, b: T): T
 ```
+
+The functions over `float64` follow IEEE 754 and never panic: `Math.log(0.0)` is `-Infinity`,
+`Math.log(-1.0)` and `Math.sqrt(-1.0)` are `NaN`, and `Math.clamp(x, lo, hi)` with a `NaN` `x` is
+`NaN`. The rotations pair with the shifts and panic on a negative count as they do, but a count at
+or beyond the width is taken modulo the width, since a rotation by the width is the identity.
 
 ### Result and Record
 
@@ -1631,13 +1811,14 @@ Every value has a kind, fixed when the value is created:
 | record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                    |
 | tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
 | func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
-| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
+| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
 | sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, or `Atomic`                                                                                                                                                                                 |
 | time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
+| regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
 
 Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and
-copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, tags, and
-time values are immutable, so for them the distinction never shows.
+copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, tags, time
+values, and patterns are immutable, so for them the distinction never shows.
 
 ### Names and scopes
 
@@ -1661,7 +1842,8 @@ readable.
 Operands evaluate left to right (section 5). Below, "must be" means the operation panics otherwise.
 
 - **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string
-  evaluates each `${...}` in order and renders it with `String.from`.
+  evaluates each `${...}` in order and renders it with `String.from`. A regular expression literal
+  yields the pattern built from it when its module was loaded, the same value at every evaluation.
 - **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag.
   Entries evaluate in order; a spread copies every field of a value that must be a record; a later
   entry replaces an earlier one with the same name. Every name must be one the tag lists, and every
@@ -1716,15 +1898,16 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`,
   `null`, and `void` values are equal by value; records have the same tag and `==` fields; tagged
   primitives have the same tag and equal payloads; time values have the same tag and equal fields,
-  as `stdlib.md` lists them per type; arrays have the same length and `==` elements in
-  order; maps have the same key set and `==` values per key; functions, tags, and sync objects are
-  the same object. A pair of values already under comparison counts as equal (section 4). Values of
-  different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
+  as `stdlib.md` lists them per type; patterns have the same normalized source and flags; arrays
+  have the same length and `==` elements in order; maps have the same key set and `==` values per
+  key; functions, tags, and sync objects are the same object. A pair of values already under
+  comparison counts as equal (section 4). Values of different kinds are unequal, so `x == null` is
+  simply `false` for a non-null `x`.
 - **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
   the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other path
-  evaluates and must be a record tag, a time type's tag, or a constructor, not an alias tag, and the
-  test is whether `a` is a record, tagged primitive, or time value carrying that tag. The result is
-  a `bool`.
+  evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a constructor, not an
+  alias tag, and the test is whether `a` is a record, tagged primitive, time value, or pattern
+  carrying that tag. The result is a `bool`.
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the
   left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right
   operand must be a `bool` when it is evaluated.
@@ -1813,7 +1996,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | call                                                | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
 | record literal                                      | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |
 | array literal                                       | a spread operand is not an array                                                                                                                                                                                                                      |
-| `is`                                                | the right side is a path that does not evaluate to a record tag, a time type's tag, or a constructor                                                                                                                                                                      |
+| `is`                                                | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                     |
 | `for`                                               | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned                                                                                                      |
 | destructuring                                       | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions                                                  |
 | variable                                            | no scope binds the name                                                                                                                                                                                                                               |

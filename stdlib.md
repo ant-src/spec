@@ -3,10 +3,10 @@
 Companion to `ant-lang.md`. The core library, which every program needs, is section 11 of the
 specification. The namespaces here talk to the world outside the program, and they follow one rule:
 every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
-panics on bad input, with two exceptions. `Json.stringify` panics on a value that contains itself,
-and `Time`, which is computation rather than I/O, panics where the core library would, on a field
-that cannot be, as `int8(300)` does; each such case is marked ◆ in its comment. Blocking calls
-block only the calling goroutine (section 9).
+panics on bad input, with these exceptions. `Json.stringify` panics on a value that contains
+itself, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O, panic where the
+core library would, on an argument that cannot be, as `int8(300)` does; each such case is marked ◆
+in its comment. Blocking calls block only the calling goroutine (section 9).
 
 A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`,
 since a namespace is a record like an imported module and the bare name would collide with it. A
@@ -56,9 +56,28 @@ order. `modified` is the time of the last write. `remove` refuses a directory wi
 ```
 type Response = { status: int, headers: Map[string, string], body: string }
 
-Http.get(url: string): Result[Http.Response, Error]
-Http.post(url: string, body: string, headers: Map[string, string]): Result[Http.Response, Error]
+Http.request(method: string, url: string, body: string = "", headers: Map[string, string] = Map{},
+             timeout: Time.Duration | null = null): Result[Http.Response, Error]
+Http.get(url: string, headers: Map[string, string] = Map{},
+         timeout: Time.Duration | null = null): Result[Http.Response, Error]      // request("GET", url, "", headers, timeout)
+Http.post(url: string, body: string, headers: Map[string, string] = Map{},
+          timeout: Time.Duration | null = null): Result[Http.Response, Error]     // request("POST", url, body, headers, timeout)
 ```
+
+`request` sends one request with `method` as given, `GET`, `PUT`, `DELETE`, or any other token,
+`body` as its body, and `headers` as its headers, and reads the whole response. A response of any
+status is `Ok` with that `status`; `Err` is a failure to get one: a malformed `url`, no connection,
+or the timeout. The response's headers hold one string per name, a repeated header joined with
+`, `. `get` and `post` are `request` with the method filled in.
+
+`timeout` bounds the whole call, from connecting to the end of the body, and when it passes the
+result is `Err` with the message `timeout`. The duration is taken as `Time.total` takes one without
+a `relativeTo`: hours and smaller units are exact and a day is 24 hours, while years, months, and
+weeks have no fixed length, so a duration with any of them is `Err` before anything is sent. A zero
+or negative duration is `Err` too, since a request that has already timed out is a mistake. A
+duration beyond what the host can wait, about 292 years, is taken as that. `null` sets no deadline
+of its own; a run the host cancels ends the call regardless. These are `Err` and not ◆ because
+`Http` is I/O and follows the rule above.
 
 ## Path
 
@@ -444,3 +463,92 @@ history at commit 81525d2.
 `Json.stringify` renders numbers as `String.from` does, so `1e21` is `1e+21`, and `NaN` and the
 infinities, which JSON cannot carry, as `null`. A value that contains itself has no JSON form, so
 `Json.stringify` panics with `cyclic value` where `String.from` would print `...`.
+
+## Csv
+
+```
+Csv.parse(text: string, sep: string = ","): Result[Array[Array[string]], Error]   // rows of fields, as many per row as written; ◆ sep is not a separator
+Csv.stringify(rows: Array[Array[string]], sep: string = ","): string             // a line per row, ending in \n; ◆ likewise
+```
+
+The format is RFC 4180 with the separator as given. A row ends at `\n` or `\r\n`; a field that
+holds the separator, a quote, or a line break is quoted, and a quote inside a quoted field is
+doubled. `parse` keeps every row as written, with its own number of fields, a quoted field across
+lines included, trims nothing, drops an empty line, and is `Err` on a quote inside an unquoted
+field or a quoted field that never closes, naming the line. `stringify` quotes a field when it
+holds the separator, a quote, or a line break, or begins with white space, and ends every row with
+`\n`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
+the program, not of the data, so another value is ◆ in both functions, checked before any row is
+read or written. With a separator, `stringify` cannot fail, since it writes to a string, so it
+returns a `string`.
+
+## Encoding
+
+```
+Encoding.toBase64(bytes: Array[byte], url: bool = false): string                // the standard alphabet, padded; url: the URL-safe one
+Encoding.fromBase64(s: string, url: bool = false): Result[Array[byte], Error]    // padding present or absent; Err on another character
+Encoding.toHex(bytes: Array[byte]): string                                      // two lower-case digits per byte
+Encoding.fromHex(s: string): Result[Array[byte], Error]                         // either case; Err on an odd length or another character
+```
+
+Bytes go in and text comes out, with `String.toBytes` and `String.fromBytes` between them and
+strings, so the hex digest of a string is `Crypto.sha256(String.toBytes(s)) | Encoding.toHex()`.
+`toBase64` writes RFC 4648's standard alphabet with `+` and `/`, or with `url` the URL-safe one
+with `-` and `_`, padded with `=` either way. `fromBase64` reads the alphabet `url` names, with the
+padding present or absent, and ignores `\r` and `\n`; any other character, or a length the
+alphabet cannot have produced, is `Err`.
+
+## Url
+
+```
+type Parts = { scheme: string, opaque: string, user: string, host: string, port: string,
+               path: string, query: string, fragment: string }
+
+Url.parse(s: string): Result[Url.Parts, Error]                   // an absolute or a relative reference; absent parts are ""
+Url.stringify(parts: Url.Parts): string                          // the reference the parts make
+Url.escape(s: string): string                                    // for one query key or value: %XX, a space as +
+Url.unescape(s: string): Result[string, Error]                   // the reverse; Err on a bad %XX
+Url.parseQuery(query: string): Result[Map[string, Array[string]], Error]   // keys in order of first appearance
+Url.stringifyQuery(params: Map[string, Array[string]]): string             // k=v joined with &, in the map's order
+```
+
+`Parts` divides a reference as RFC 3986 does. `scheme` is the scheme in lower case, without its
+colon. `opaque` is what follows `scheme:` when it is not `//`: `mailto:alice@example.com` parses
+with `scheme` `mailto`, `opaque` `alice@example.com`, and an empty `path`, and without `opaque`
+that reference would lose its content. `user` is the userinfo as written, a password included.
+`host` and `port` are the two halves of the authority, `port` empty when there is none. `path` is
+decoded, `%20` read as a space; `query` is the raw text after `?`, without it, so `parseQuery`
+can read it; `fragment` is decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`
+or a space in the host. `stringify` assembles the parts, escaping what needs it, so a program
+changes a URL by parsing it, replacing a field, and writing it back.
+
+`escape` makes a string safe as one key or value of a query: every character but the unreserved
+ones becomes `%XX`, and a space becomes `+`. `parseQuery` reads `k=v&k=v`, each key and value
+decoded as `unescape` does, with a key's values in order and a repeated key such as `tag=a&tag=b`
+kept as `Map{ "tag": ["a", "b"] }`; a key without `=` has the value `""`. `stringifyQuery` writes
+the map back in its order, each key and value escaped, so the two round-trip, and a request that
+is signed over its query has a known order. A one-value query is `Map{ "q": ["ant"] }`.
+
+## Crypto
+
+```
+Crypto.sha256(bytes: Array[byte]): Array[byte]              // 32 bytes
+Crypto.sha512(bytes: Array[byte]): Array[byte]              // 64 bytes
+Crypto.sha1(bytes: Array[byte]): Array[byte]                // 20 bytes; not collision resistant; for formats that still use it
+Crypto.md5(bytes: Array[byte]): Array[byte]                 // 16 bytes; likewise
+Crypto.hmacSha1(key: Array[byte], message: Array[byte]): Array[byte]     // 20 bytes
+Crypto.hmacSha256(key: Array[byte], message: Array[byte]): Array[byte]   // 32 bytes
+Crypto.hmacSha512(key: Array[byte], message: Array[byte]): Array[byte]   // 64 bytes
+Crypto.equal(a: Array[byte], b: Array[byte]): bool          // in time that depends on the lengths only
+Crypto.randomBytes(n: int): Array[byte]                     // from the host's secure source; ◆ n < 0
+Crypto.uuid(): string                                       // a random UUID, version 4, lower case with hyphens
+```
+
+Digests, message authentication, and random bytes: what a program needs to check a webhook, sign
+a request, or make a token. Encryption, signatures with keys, and key exchange are left out. A
+digest is bytes, so a hex digest is `Crypto.sha256(String.toBytes(s)) | Encoding.toHex()`. `sha1`
+and `md5` are broken against collisions and are here for the formats that still use them, as git
+and TOTP do. `equal` compares two arrays in time that depends on their lengths and not on their
+contents, for a received signature against a computed one; arrays of different lengths are
+unequal. `randomBytes` and `uuid` read the operating system's source of randomness, which does not
+fail, and are not seeded by anything a program can see.
