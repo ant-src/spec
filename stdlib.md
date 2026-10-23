@@ -57,8 +57,13 @@ order. `modified` is the time of the last write. `remove` refuses a directory wi
 A handle is also a connection from `Net`, and the reads and writes are the same. A context
 interrupts a read of a connection, a pipe or a terminal, which are the handles that wait; a read
 of a regular file never waits, so there the context is looked at only before the read begins. A
-write to a connection is flushed as a write to a standard stream is, since the other end is
-waiting for it; `File.flush` is for files.
+read the context ended loses nothing: what it had consumed is kept for the next read of the
+handle, which stays open, so a line that arrives late is read whole by the read that comes next.
+One goroutine may read a handle while another writes it; a second reader waits for the first and
+gives up on its own context; and `File.close` from any goroutine ends a read or a write in
+progress with an `Err`. A write to a connection is flushed as a write to a standard stream is,
+since the other end is waiting for it, and `File.pipe` flushes what it copied even when its
+context ended it; `File.flush` is for files.
 
 ## Http
 
