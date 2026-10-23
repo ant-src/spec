@@ -5,6 +5,7 @@ goroutine-style concurrency.
 
 - [ant-lang.md](ant-lang.md) — the language specification
 - [stdlib.md](stdlib.md) — the I/O standard library
+- [fmt.md](fmt.md) — `ant fmt`, the source formatter
 
 ## License
 
