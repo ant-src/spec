@@ -122,9 +122,11 @@ x /= 2                            // an assignment
 ```
 
 RE2 has no lookahead, lookbehind, or backreferences, so a JavaScript pattern that uses `(?=`,
-`(?!`, `(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct. JavaScript's
+`(?!`, `(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct; `\1` through
+`\9` are the backreferences, while `\10` and up are octal escapes, as RE2 reads them. JavaScript's
 `\u0041` is a syntax error whose message names `\x{0041}`. `(?<name>...)` names a group as in
-JavaScript. A few patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
+JavaScript. Inside `\Q...\E`, where RE2 takes every character as itself, `\/` is two characters,
+while the normalization of section 11 takes it for `/`; write `/` there. A few patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
 `\v` or the Unicode spaces, and `.` excludes only `\n`, where JavaScript also excludes `\r`, U+2028,
 and U+2029. `\d`, `\w`, and `\b` are ASCII in both.
 
@@ -1767,13 +1769,15 @@ Regex.flags(p: Regex.Pattern): string                          // "", or some of
 
 A pattern is its source and its flags. `Regex.compile` takes the flags as a string of the same
 letters a literal takes, in any order, and is `Err` on any other letter or a repeated one. The
-source is normalized: a `\/` loses its backslash, since RE2 reads `\/` and `/` alike, and the flags
+source is normalized: a `\/` loses its backslash, since RE2 reads `\/` and `/` alike, a line break
+becomes `\n` or `\r` and an empty source becomes `(?:)`, which RE2 reads the same, and the flags
 are sorted. Two patterns are `==` when their normalized sources and flags are, so `/a/i == /a/i`,
-`/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`, and `Regex.compile("a/b") == /a\/b/` all
-hold, and `Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as a literal that reads back to it:
-every `/` of the source written `\/`, a line break written `\n` or `\r`, and an empty source as
-`/(?:)/`, as JavaScript renders it. `Json.stringify` writes that rendering as a JSON string, and
-`Json.parse` gives it back as a string.
+`/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`, `Regex.compile("a/b") == /a\/b/`,
+`Regex.compile("a\nb") == /a\nb/` and `Regex.compile("") == /(?:)/` all hold, and
+`Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as a literal that reads back to it: every `/`
+of the normalized source written `\/`, so `/(?:)/` for the empty pattern, as JavaScript renders
+it. `Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a
+string.
 
 A `Match` is one match of the whole pattern: `text` is the matched text, `start` and `end` are its
 code point indices into `s`, so `String.slice(s, m.start, m.end)` is `m.text`, `groups[0]` is the
@@ -1781,7 +1785,9 @@ whole match and `groups[n]` the `n`th group, `null` when the group took no part,
 an entry for each named group, in the pattern's order, `null` likewise. `findAll` takes successive
 matches from the left without overlap, and skips an empty match that abuts the match before it.
 `split` returns the pieces of `s` between the matches, so a pattern that never matches gives
-`[s]`; with an empty `s` it gives `[""]`.
+`[s]`; with an empty `s` it gives `[""]`, whatever the pattern. An empty match at the start or at
+the end of `s` adds no empty piece, as JavaScript's `split` has it, so `Regex.split(/a*/, "baaab")`
+is `["b", "b"]`.
 
 In `replacement`, `$n` and `${n}` expand to group `n`, `${name}` to a named group, `$$` to one `$`,
 and a group that took no part to `""`. A name after `$` is taken as long as it can be: `$1x` is
@@ -1835,7 +1841,7 @@ Math.hypot(x: float64, y: float64): float64                    // the square roo
 Math.cbrt(x: float64): float64                                 // cube root
 Math.isNaN(x: float64): bool
 Math.isFinite(x: float64): bool                                // neither NaN nor an infinity
-Math.clamp[T: Ordered](x: T, lo: T, hi: T): T                  // x held within lo ..= hi; ◆ lo > hi
+Math.clamp[T: Ordered](x: T, lo: T, hi: T): T                  // x held within lo ..= hi; ◆ lo > hi, or a NaN bound
 Math.random(): float64                                         // uniform in [0, 1); the sequence cannot be seeded
 Math.randomInt(from: int, to: int): int                        // uniform, from inclusive, to exclusive; the same sequence; ◆ to <= from
 Math.PI: float64

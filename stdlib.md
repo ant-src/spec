@@ -242,7 +242,7 @@ call.
 ```
 Time.now(): Time.Instant
 Time.nowIn(z: Time.Zone): Time.ZonedDateTime
-Time.sleep(ms: int, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done
+Time.sleep(ms: int, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done; a negative count sleeps nothing
 Time.monotonic(): int                               // milliseconds from an arbitrary origin, for measuring
 Time.fromEpochMillis(ms: int): Time.Instant         // ◆ outside the range
 Time.fromEpochNanos(ns: int): Time.Instant
@@ -507,7 +507,8 @@ takes a file. The call blocks the calling goroutine until the child has exited, 
 only when the child could not be started or run to its end: the program is not found, `dir` does
 not exist, the host cancelled the run, `ctx` is done. A nonzero exit is `Ok` with its `status`; a
 child ended by a signal has status `-1`. When the host cancels the run, or `ctx` is done, the
-child is killed, and in the second case the result is `Err` with the context's reason.
+child is killed, the child itself and not what it started, and in the second case the result is
+`Err` with the context's reason.
 
 An interrupt is Ctrl-C, SIGINT, and SIGTERM where the host has it. A program that has not called
 `Os.interrupt()` is ended by the first one, as `ant-lang.md` section 9 says of the host ending a
@@ -556,7 +557,8 @@ Csv.stringify(rows: Array[Array[string]], sep: string = ","): string            
 The format is RFC 4180 with the separator as given. A row ends at `\n` or `\r\n`; a field that
 holds the separator, a quote, or a line break is quoted, and a quote inside a quoted field is
 doubled. `parse` keeps every row as written, with its own number of fields, a quoted field across
-lines included, trims nothing, drops an empty line, and is `Err` on a quote inside an unquoted
+lines included, trims nothing, reads a line break inside a quoted field as `\n` whichever it was,
+drops an empty line, and is `Err` on a quote inside an unquoted
 field or a quoted field that never closes, naming the line. `stringify` quotes a field when it
 holds the separator, a quote, or a line break, or begins with white space, and ends every row with
 `\n`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
@@ -601,8 +603,9 @@ that reference would lose its content. `user` is the userinfo as written, a pass
 `host` and `port` are the two halves of the authority, `port` empty when there is none. `path` is
 decoded, `%20` read as a space; `query` is the raw text after `?`, without it, so `parseQuery`
 can read it; `fragment` is decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`
-or a space in the host. `stringify` assembles the parts, escaping what needs it, so a program
-changes a URL by parsing it, replacing a field, and writing it back.
+or a space in the host. `stringify` assembles the parts, escaping what needs it in every part but
+`query`, which is raw and written as it is, so a program changes a URL by parsing it, replacing a
+field, and writing it back.
 
 `escape` makes a string safe as one key or value of a query: every character but the unreserved
 ones becomes `%XX`, and a space becomes `+`. `parseQuery` reads `k=v&k=v`, each key and value
