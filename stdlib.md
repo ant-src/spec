@@ -243,12 +243,20 @@ call.
 Time.now(): Time.Instant
 Time.nowIn(z: Time.Zone): Time.ZonedDateTime
 Time.sleep(ms: int, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done; a negative count sleeps nothing
+Time.ticker(ms: int, ctx: Context | null = null): Chan[Time.Instant]   // the time, every ms; ◆ ms <= 0
 Time.monotonic(): int                               // milliseconds from an arbitrary origin, for measuring
 Time.fromEpochMillis(ms: int): Time.Instant         // ◆ outside the range
 Time.fromEpochNanos(ns: int): Time.Instant
 Time.epochMillis(t: Time.Instant | Time.ZonedDateTime): int      // rounded down
 Time.epochNanos(t: Time.Instant | Time.ZonedDateTime): int       // ◆ outside 1677-09-21 to 2262-04-11
 ```
+
+`ticker` is Go's ticker: a channel that receives the time every `ms` milliseconds, counted from
+the call, so a slow reader does not shift the beat. It holds one tick; a tick that finds it full is
+dropped, so a reader that falls behind gets one tick and not a burst. It stops when `ctx` is done,
+or when the run ends without one, and is never closed, so a receive or a `select` clause on it
+waits for the next tick or for the context. A ticker is a `select` clause like any channel:
+`var at = Chan.receive(ticks) { ... }`.
 
 Every type holds nanoseconds, and an `Instant` spans 100 million days each way from the epoch,
 about 270,000 years, as Temporal's does; the plain types span a day more each way. A result beyond

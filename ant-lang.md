@@ -1365,7 +1365,7 @@ func lineOrTimeout(input: File.Handle, ms: int): Line | Timeout {
 
 A worker pool is a channel of jobs that each worker drains with `Chan.values`, a channel of
 results, and a `WaitGroup` that says when to close it. A future is a channel of capacity one. A
-ticker is a loop of `Time.sleep` with a context. A goroutine that should stop checks
+ticker is `Time.ticker` (`stdlib.md`), a channel that a `select` reads beside the others. A goroutine that should stop checks
 `Context.isDone` between steps and passes the context into its waits; one that ignores its context
 runs until the run ends.
 
