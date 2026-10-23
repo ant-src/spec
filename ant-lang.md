@@ -845,8 +845,8 @@ A `select` waits for the first of several things, with a block for each:
 
 ```ant
 select {
-  var line = Chan.receive(lines) { print(line ?? "closed") }
-  Chan.send(out, batch) { batch = [] }
+  var line = Channel.receive(lines) { print(line ?? "closed") }
+  Channel.send(out, batch) { batch = [] }
   Time.sleep(Time.duration(seconds: 1)) { flush() }
   Context.wait(ctx) { return }
   else { idle += 1 }
@@ -854,8 +854,8 @@ select {
 ```
 
 A clause is a head and a block, one clause per line. A head is one of five blocking calls of
-section 11 and `stdlib.md`, written as the call would be and not performed: `Chan.receive(c)`,
-`Chan.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
+section 11 and `stdlib.md`, written as the call would be and not performed: `Channel.receive(c)`,
+`Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
 before a head binds the call's result in the block: a receive binds `T | null`, `null` when the
 channel is closed, a send binds `bool`, and a binding on a head that returns `void` is a compile
 error. A head takes no context, since the context is its own clause, and a head given one is a
@@ -871,7 +871,7 @@ passed. When several can proceed at once, one is chosen at random, so no source 
 `select` without `else` whose heads can never proceed waits until the run is cancelled, as any
 wait does. A closed channel's receive is always ready, so a loop that keeps one in its `select`
 spins until the block leaves the loop on `null`. A send chosen on a closed channel panics, as
-`Chan.send` does (section 12).
+`Channel.send` does (section 12).
 
 A `select` is an expression: its blocks are checked against the expected type, or it has the
 union of their types with `never` dropped, as an `if`. A block's `return`, `break`, and
@@ -880,7 +880,7 @@ a bound variable is a local of its block and narrows there.
 
 ```ant
 var event: Event = select {
-  var line = Chan.receive(lines) { if line == null { Closed{} } else { Line{ text: line } } }
+  var line = Channel.receive(lines) { if line == null { Closed{} } else { Line{ text: line } } }
   Time.sleep(Time.duration(seconds: 1)) { Timeout{} }
 }
 ```
@@ -1268,7 +1268,7 @@ handles; the interrupt a program asks for is the event.
 ### Synchronization
 
 Goroutines coordinate through shared memory guarded by the sync objects of the standard library,
-`Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, and `Atomic[T]`; through channels, `Chan[T]`,
+`Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, and `Atomic[T]`; through channels, `Channel[T]`,
 which carry values from goroutine to goroutine and block the side that is ahead; and through
 contexts, `Context`, which bound a wait with a deadline or end it with a cancellation. Each is a
 reference value created by its `new` function, and section 11 lists their operations. A `select`
@@ -1307,7 +1307,7 @@ condition holds or the run is cancelled. Locks and conditions take no context.
 
 ```ant
 var ctx = Context.new(Time.duration(seconds: 2))
-var reply = Chan.receive(replies, ctx) ?? return Result.err(Error{ message: "no reply" })
+var reply = Channel.receive(replies, ctx) ?? return Result.err(Error{ message: "no reply" })
 ```
 
 A goroutine that waits on several channels writes a `select` (section 5) in a loop, one clause
@@ -1318,14 +1318,14 @@ func generating(s: Session, ctx: Context): void {
   while true {
     select {
       Context.wait(ctx) { return }
-      Chan.receive(s.speechStarted) {
+      Channel.receive(s.speechStarted) {
         flushRenderer(s)
         Context.cancel(s.generation)
       }
-      var message = Chan.receive(s.userMessages) {
+      var message = Channel.receive(s.userMessages) {
         if message != null { Array.push(s.pendingMessages, message) }   // deferred to the next state
       }
-      var interrupt = Chan.receive(s.interrupts) {
+      var interrupt = Channel.receive(s.interrupts) {
         if interrupt != null { s.turn.interrupt = interrupt }
         return
       }
@@ -1345,23 +1345,23 @@ type Line = { text: string }
 type Timeout = {}
 
 func lineOrTimeout(input: File.Handle, wait: Time.Duration): Line | Timeout {
-  var events: Chan[Line | Timeout] = Chan.new()
+  var events: Channel[Line | Timeout] = Channel.new()
   var ctx = Context.new()
   go {
     var got = Result.unwrapOr(File.readLine(input, ctx), null)
-    if got != null { Chan.send(events, Line{ text: got }, ctx) }
+    if got != null { Channel.send(events, Line{ text: got }, ctx) }
   }
   go {
     Time.sleep(wait, ctx)
-    Chan.send(events, Timeout{}, ctx)
+    Channel.send(events, Timeout{}, ctx)
   }
-  var event = Chan.receive(events) ?? Timeout{}
+  var event = Channel.receive(events) ?? Timeout{}
   Context.cancel(ctx)
   event
 }
 ```
 
-A worker pool is a channel of jobs that each worker drains with `Chan.values`, a channel of
+A worker pool is a channel of jobs that each worker drains with `Channel.values`, a channel of
 results, and a `WaitGroup` that says when to close it. A future is a channel of capacity one. A
 ticker is `Time.ticker` (`stdlib.md`), a channel that a `select` reads beside the others. A goroutine that should stop checks
 `Context.isDone` between steps and passes the context into its waits; one that ignores its context
@@ -1942,13 +1942,13 @@ Context.reason(ctx: Context): string | null                    // null while run
 Context.deadline(ctx: Context): Time.Instant | null            // the earliest deadline of ctx and its parents
 Context.wait(ctx: Context): void                               // blocks until done
 
-Chan.new[T](capacity: int = 0): Chan[T]                        // 0 is a rendezvous; panics if capacity < 0 or is above 2^31 − 1
-Chan.send[T](c: Chan[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; panics if c is closed
-Chan.receive[T](c: Chan[T], ctx: Context | null = null): T | null  // blocks; null when closed and drained, or when ctx ends first
-Chan.close[T](c: Chan[T]): void                                // panics if c is closed already
-Chan.isClosed[T](c: Chan[T]): bool
-Chan.length[T](c: Chan[T]): int                                // values buffered now
-Chan.values[T](c: Chan[T], ctx: Context | null = null): Seq[T] // every value until closed, or until ctx ends
+Channel.new[T](capacity: int = 0): Channel[T]                            // 0 is a rendezvous; panics if capacity < 0 or is above 2^31 − 1
+Channel.send[T](c: Channel[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; panics if c is closed
+Channel.receive[T](c: Channel[T], ctx: Context | null = null): T | null  // blocks; null when closed and drained, or when ctx ends first
+Channel.close[T](c: Channel[T]): void                                    // panics if c is closed already
+Channel.isClosed[T](c: Channel[T]): bool
+Channel.length[T](c: Channel[T]): int                                    // values buffered now
+Channel.values[T](c: Channel[T], ctx: Context | null = null): Seq[T]     // every value until closed, or until ctx ends
 ```
 
 A context's timeout converts as `Http.request`'s does, days at 24 hours and the smaller units
@@ -1959,8 +1959,8 @@ how a main goroutine waits for the interrupt while a server runs.
 An unbuffered channel hands a value over directly: `send` returns when a receiver has taken it. A
 buffered one holds `capacity` values and blocks a sender beyond that. Closing lets receivers drain
 what is buffered and then get `null`; a later `send` panics, since a value with no receiver is the
-sender's bug. `Chan.new` fixes `T` from nothing, so a declaration annotates:
-`var jobs: Chan[Job] = Chan.new()`. `Chan.receive` conflates a `null` value with the end of the
+sender's bug. `Channel.new` fixes `T` from nothing, so a declaration annotates: `var jobs:
+Channel[Job] = Channel.new()`. `Channel.receive` conflates a `null` value with the end of the
 channel when `T` includes `null`, as `Map.get` and `Array.pop` do; a program with such a `T` wraps
 the value, and `Context.isDone(ctx)` tells a cancellation from a close. A wait on several channels
 at once, or on a channel and a context, a group or a timer, is a `select` (section 5), which takes
@@ -1988,7 +1988,7 @@ Every value has a kind, fixed when the value is created:
 | tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
 | func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
 | tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
-| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Chan`, or `Context`                                                                                                                                                              |
+| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, or `Context`                                                                                                                                                              |
 | time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
 | regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
 
@@ -2189,7 +2189,7 @@ can only panic in the ways the last column lists, which depend on values known a
 | `var`                                             |                                                                                                                                                                                                                                                       | read before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                  |
 | `panic`                                           |                                                                                                                                                                                                                                                       | always                                                                                                                                           |
 | any call                                          |                                                                                                                                                                                                                                                       | the goroutine's call depth exceeds the runtime's limit                                                                                           |
-| a count                                           |                                                                                                                                                                                                                                                       | above 2^31 − 1 in `String.repeat`, `String.padStart`, `String.padEnd`, `Crypto.randomBytes` or `Chan.new`, which size what the runtime must hold |
+| a count                                           |                                                                                                                                                                                                                                                       | above 2^31 − 1 in `String.repeat`, `String.padStart`, `String.padEnd`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold |
 | `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |                                                                                                                                                  |
 | `select`                                          |                                                                                                                                                                                                                                                       | a send clause is chosen on a closed channel                                                                                                      |
 | `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                 | never                                                                                                                                            |

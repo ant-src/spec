@@ -243,7 +243,7 @@ call.
 Time.now(): Time.Instant
 Time.nowIn(z: Time.Zone): Time.ZonedDateTime
 Time.sleep(d: Time.Duration, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done; panics on years, months or weeks
-Time.ticker(d: Time.Duration, ctx: Context | null = null): Chan[Time.Instant]   // the time, every d; panics if d is zero or negative or has years, months or weeks
+Time.ticker(d: Time.Duration, ctx: Context | null = null): Channel[Time.Instant]   // the time, every d; panics if d is zero or negative or has years, months or weeks
 Time.monotonic(): int                               // milliseconds from an arbitrary origin, for measuring
 Time.fromEpochMillis(ms: int): Time.Instant         // panics on a value outside the range
 Time.fromEpochNanos(ns: int): Time.Instant
@@ -262,7 +262,7 @@ reading that a program subtracts, not a span it passes.
 dropped, so a reader that falls behind gets one tick and not a burst. It stops when `ctx` is done,
 or when the run ends without one, and is never closed, so a receive or a `select` clause on it
 waits for the next tick or for the context. A ticker is a `select` clause like any channel:
-`var at = Chan.receive(ticks) { ... }`.
+`var at = Channel.receive(ticks) { ... }`.
 
 Every type holds nanoseconds, and an `Instant` spans 100 million days each way from the epoch,
 about 270,000 years, as Temporal's does; the plain types span a day more each way. A result beyond
