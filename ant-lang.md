@@ -872,8 +872,8 @@ take the value, when its context is done, when its group's counter is zero, or w
 passed. When several can proceed at once, one is chosen at random, so no source starves. A
 `select` without `else` whose heads can never proceed waits until the run is cancelled, as any
 wait does. A closed channel's receive is always ready, so a loop that keeps one in its `select`
-spins until the block leaves the loop on `null`. A send chosen on a closed channel is a ◆, as
-`Chan.send` is (section 12).
+spins until the block leaves the loop on `null`. A send chosen on a closed channel panics, as
+`Chan.send` does (section 12).
 
 A `select` is an expression: its blocks are checked against the expected type, or it has the
 union of their types with `never` dropped, as an `if`. A block's `return`, `break`, and
@@ -1536,8 +1536,9 @@ callback whose
 result the library ignores is typed with a type parameter, never with `void`, so any lambda fits;
 the library discards the value itself. A function marked `mutates` changes its first argument and
 returns `void` or the removed element; every other function leaves its arguments untouched and
-returns a new value. A function marked ◆ has a value-dependent panic, named in its comment; every
-function also panics when an argument has a kind it does not take (section 12).
+returns a new value. A function that can panic on a particular value says so in its comment, as
+in "panics if n < 0" or "panics on overflow". Every function also panics when an argument has a
+kind it does not take (section 12).
 
 ### Prelude
 
@@ -1557,7 +1558,7 @@ type Ordered = Number | string
 
 print[T](value: T): void                         // String.from(value) and a newline to standard output
 panic(message: string): never
-int8[T: Number](x: T): int8                      // ◆ out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
+int8[T: Number](x: T): int8                      // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
 string(x): string                                // x is a string or a named primitive over string: the payload
 bool(x): bool                                    // likewise
 ```
@@ -1581,9 +1582,9 @@ Array.first[T](xs: Array[T]): T | null                         // null when empt
 Array.last[T](xs: Array[T]): T | null
 Array.push[T](xs: Array[T], v: T): void                        // mutates
 Array.pop[T](xs: Array[T]): T | null                           // mutates; null when empty
-Array.insert[T](xs: Array[T], i: int, v: T): void              // mutates; v becomes element i; ◆ i outside 0 ..= length
-Array.removeAt[T](xs: Array[T], i: int): T                     // mutates; the removed element; ◆ i out of range
-Array.slice[T](xs: Array[T], from: int, to: int): Array[T]     // ◆ from > to, or either out of 0 ..= length
+Array.insert[T](xs: Array[T], i: int, v: T): void              // mutates; v becomes element i; panics if i is outside 0 ..= length
+Array.removeAt[T](xs: Array[T], i: int): T                     // mutates; the removed element; panics if i is out of range
+Array.slice[T](xs: Array[T], from: int, to: int): Array[T]     // panics if from > to, or if either is outside 0 ..= length
 Array.concat[T](xs: Array[T], ys: Array[T]): Array[T]
 Array.map[T, U](xs: Array[T], f: func(T): U): Array[U]
 Array.flatMap[T, U](xs: Array[T], f: func(T): Array[U]): Array[U]   // the arrays f returns, concatenated
@@ -1609,13 +1610,13 @@ Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 put
 Array.reverse[T](xs: Array[T]): Array[T]
 Array.unique[T](xs: Array[T]): Array[T]                        // the first of each == value, in order
 Array.uniqueBy[T, K](xs: Array[T], key: func(T): K): Array[T]  // the first of each == key, in order
-Array.chunk[T](xs: Array[T], n: int): Array[Array[T]]          // n elements each, the last fewer; ◆ n < 1
+Array.chunk[T](xs: Array[T], n: int): Array[Array[T]]          // n elements each, the last fewer; panics if n < 1
 Array.groupBy[T, K](xs: Array[T], key: func(T): K): Map[K, Array[T]]   // keys in first-seen order, elements in order
 Array.entries[T](xs: Array[T]): Array[Indexed[T]]
 Array.range(from: int, to: int): Array[int]                    // empty when to <= from
-Array.filled[T](n: int, v: T): Array[T]                        // ◆ n < 0; the same v in every slot
+Array.filled[T](n: int, v: T): Array[T]                        // the same v in every slot; panics if n < 0
 Array.flatten[T](xs: Array[Array[T]]): Array[T]
-Array.sum[T: Number](xs: Array[T]): T | null                   // ◆ overflow; null when empty
+Array.sum[T: Number](xs: Array[T]): T | null                   // null when empty; panics on overflow
 Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 ```
 
@@ -1664,27 +1665,27 @@ type Cut = { before: string, after: string }                   // the two sides 
 
 String.length(s: string): int
 String.isEmpty(s: string): bool
-String.slice(s: string, from: int, to: int): string            // ◆ as Array.slice
+String.slice(s: string, from: int, to: int): string            // panics as Array.slice does
 String.concat(parts: Array[string]): string
-String.split(s: string, sep: string): Array[string]            // ◆ sep is empty
+String.split(s: string, sep: string): Array[string]            // panics if sep is empty
 String.join(parts: Array[string], sep: string): string
-String.repeat(s: string, n: int): string                       // ◆ n < 0, n above 2^31 − 1
+String.repeat(s: string, n: int): string                       // panics if n < 0 or n is above 2^31 − 1
 String.trim(s: string): string                                 // Unicode white space at both ends
 String.trimStart(s: string): string                            // at the start only
 String.trimEnd(s: string): string                              // at the end only
 String.trimPrefix(s: string, prefix: string): string           // prefix removed once, when present
 String.trimSuffix(s: string, suffix: string): string
-String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; ◆ pad is empty, width above 2^31 − 1
-String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; ◆ pad is empty, width above 2^31 − 1
+String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; panics if pad is empty or width is above 2^31 − 1
+String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; panics as padStart does
 String.contains(s: string, t: string): bool
 String.startsWith(s: string, t: string): bool
 String.endsWith(s: string, t: string): bool
 String.indexOf(s: string, t: string): int | null               // first code point index
 String.lastIndexOf(s: string, t: string): int | null           // last code point index
-String.count(s: string, t: string): int                        // non-overlapping occurrences; ◆ t is empty
-String.replace(s: string, old: string, new: string): string    // every occurrence; ◆ old is empty
-String.replaceFirst(s: string, old: string, new: string): string   // the first occurrence only; ◆ old is empty
-String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; ◆ sep is empty
+String.count(s: string, t: string): int                        // non-overlapping occurrences; panics if t is empty
+String.replace(s: string, old: string, new: string): string    // every occurrence; panics if old is empty
+String.replaceFirst(s: string, old: string, new: string): string   // the first occurrence only; panics if old is empty
+String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; panics if sep is empty
 String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
 String.lines(s: string): Array[string]                         // split at \n, a \r before it dropped; no empty final line
 String.toUpper(s: string): string
@@ -1699,10 +1700,10 @@ String.toBytes(s: string): Array[byte]                         // UTF-8
 String.fromBytes(bytes: Array[byte]): string | null            // null on invalid UTF-8
 String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
 String.fromCodePoints(points: Array[int]): string | null       // null when a value is not a scalar value
-String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; ◆ base outside 2 ..= 36
+String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
 String.toFloat(s: string): float64 | null
-String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; ◆ base outside 2 ..= 36
-String.fromFloat(x: float64, digits: int): string              // fixed point with digits decimals, rounded half to even; ◆ digits < 0
+String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; panics if base is outside 2 ..= 36
+String.fromFloat(x: float64, digits: int): string              // fixed point with digits decimals, rounded half to even; panics if digits < 0
 String.from[T](value: T): string
 ```
 
@@ -1811,14 +1812,14 @@ Iter.range(from: int, to: int): Seq[int]                       // from inclusive
 Iter.fromArray[T](xs: Array[T]): Seq[T]
 Iter.map[T, U](s: Seq[T], f: func(T): U): Seq[U]
 Iter.filter[T](s: Seq[T], f: func(T): bool): Seq[T]
-Iter.take[T](s: Seq[T], n: int): Seq[T]                        // ◆ n < 0
+Iter.take[T](s: Seq[T], n: int): Seq[T]                        // panics if n < 0
 Iter.toArray[T](s: Seq[T]): Array[T]
 ```
 
 ### Math and Bits
 
 ```
-Math.abs[T: Number](x: T): T                                   // ◆ the most negative integer
+Math.abs[T: Number](x: T): T                                   // panics on the most negative integer, whose absolute value does not fit
 Math.min[T: Ordered](a: T, b: T): T
 Math.max[T: Ordered](a: T, b: T): T
 Math.pow(x: float64, y: float64): float64
@@ -1843,9 +1844,9 @@ Math.hypot(x: float64, y: float64): float64                    // the square roo
 Math.cbrt(x: float64): float64                                 // cube root
 Math.isNaN(x: float64): bool
 Math.isFinite(x: float64): bool                                // neither NaN nor an infinity
-Math.clamp[T: Ordered](x: T, lo: T, hi: T): T                  // x held within lo ..= hi; ◆ lo > hi, or a NaN bound
+Math.clamp[T: Ordered](x: T, lo: T, hi: T): T                  // x held within lo ..= hi; panics if lo > hi or a bound is NaN
 Math.random(): float64                                         // uniform in [0, 1); the sequence cannot be seeded
-Math.randomInt(from: int, to: int): int                        // uniform, from inclusive, to exclusive; the same sequence; ◆ to <= from
+Math.randomInt(from: int, to: int): int                        // uniform, from inclusive, to exclusive; the same sequence; panics if to <= from
 Math.PI: float64
 Math.E: float64
 Math.NaN: float64
@@ -1858,10 +1859,10 @@ Bits.and[T: Integer](a: T, b: T): T
 Bits.or[T: Integer](a: T, b: T): T
 Bits.xor[T: Integer](a: T, b: T): T
 Bits.not[T: Integer](a: T): T
-Bits.shiftLeft[T: Integer](a: T, n: int): T                    // ◆ n < 0 or n >= width
-Bits.shiftRight[T: Integer](a: T, n: int): T                   // arithmetic for signed, logical for unsigned; ◆ as above
-Bits.rotateLeft[T: Integer](a: T, n: int): T                   // by n mod the width, so n may exceed it; ◆ n < 0
-Bits.rotateRight[T: Integer](a: T, n: int): T                  // ◆ likewise
+Bits.shiftLeft[T: Integer](a: T, n: int): T                    // panics if n < 0 or n >= width
+Bits.shiftRight[T: Integer](a: T, n: int): T                   // arithmetic for signed, logical for unsigned; panics as shiftLeft does
+Bits.rotateLeft[T: Integer](a: T, n: int): T                   // by n mod the width, so n may exceed it; panics if n < 0
+Bits.rotateRight[T: Integer](a: T, n: int): T                  // panics if n < 0
 Bits.popCount[T: Integer](a: T): int
 Bits.leadingZeros[T: Integer](a: T): int                       // at the type's width, of the two's complement bits; the width for 0
 Bits.trailingZeros[T: Integer](a: T): int                      // likewise
@@ -1883,7 +1884,7 @@ Result.err[T, E](error: E): Result[T, E]
 Result.isOk[T, E](r: Result[T, E]): bool
 Result.map[T, U, E](r: Result[T, E], f: func(T): U): Result[U, E]
 Result.mapErr[T, E, F](r: Result[T, E], f: func(E): F): Result[T, F]
-Result.unwrap[T, E](r: Result[T, E]): T                        // ◆ r is an Err
+Result.unwrap[T, E](r: Result[T, E]): T                        // panics if r is an Err
 Result.unwrapOr[T, E](r: Result[T, E], fallback: T): T
 Result.all[T, E](rs: Array[Result[T, E]]): Result[Array[T], E]   // the first Err, or Ok of every value
 
@@ -1903,20 +1904,20 @@ context of section 9, Waiting: the call gives up when the context is done.
 ```
 Mutex.new(): Mutex
 Mutex.lock(m: Mutex): void                                     // blocks
-Mutex.unlock(m: Mutex): void                                   // ◆ not locked
+Mutex.unlock(m: Mutex): void                                   // panics if m is not locked
 Mutex.withLock[T](m: Mutex, f: func(): T): T
 
 RwMutex.new(): RwMutex
 RwMutex.readLock(m: RwMutex): void
-RwMutex.readUnlock(m: RwMutex): void                           // ◆ not read-locked
+RwMutex.readUnlock(m: RwMutex): void                           // panics if m is not read-locked
 RwMutex.writeLock(m: RwMutex): void
-RwMutex.writeUnlock(m: RwMutex): void                          // ◆ not write-locked
+RwMutex.writeUnlock(m: RwMutex): void                          // panics if m is not write-locked
 RwMutex.withRead[T](m: RwMutex, f: func(): T): T
 RwMutex.withWrite[T](m: RwMutex, f: func(): T): T
 
 WaitGroup.new(): WaitGroup
-WaitGroup.add(wg: WaitGroup, n: int): void                     // ◆ counter would go negative, or past the largest int
-WaitGroup.done(wg: WaitGroup): void                            // ◆ counter already zero
+WaitGroup.add(wg: WaitGroup, n: int): void                     // panics if the counter would go negative or past the largest int
+WaitGroup.done(wg: WaitGroup): void                            // panics if the counter is already zero
 WaitGroup.wait(wg: WaitGroup, ctx: Context | null = null): void   // blocks until the counter is zero, or ctx is done
 
 Once.new(): Once
@@ -1925,41 +1926,41 @@ Once.value[T](f: func(): T): func(): T                         // the returned f
                                                                // for both: if f panics, the once is complete and every call, waiting or later, panics with the same message
 
 Cond.new(m: Mutex): Cond
-Cond.wait(c: Cond): void                                       // ◆ m not locked; releases m, waits, reacquires
+Cond.wait(c: Cond): void                                       // releases m, waits, reacquires; panics if m is not locked
 Cond.signal(c: Cond): void
 Cond.broadcast(c: Cond): void
 
 Atomic.new[T](v: T): Atomic[T]
 Atomic.load[T](a: Atomic[T]): T
 Atomic.store[T](a: Atomic[T], v: T): void
-Atomic.add[T: Number](a: Atomic[T], d: T): T                   // ◆ overflow; returns the new value
+Atomic.add[T: Number](a: Atomic[T], d: T): T                   // returns the new value; panics on overflow
 Atomic.compareAndSwap[T](a: Atomic[T], expected: T, v: T): bool   // compares with ==
 
 Context.new(timeout: Time.Duration | null = null, parent: Context | null = null): Context
-                                                               // a child of parent, or of the run; ◆ a timeout with years, months or weeks, or not positive
+                                                               // a child of parent, or of the run; panics if the timeout has years, months or weeks, or is not positive
 Context.cancel(ctx: Context): void                             // done now, with the reason "cancelled"; nothing when done already
 Context.isDone(ctx: Context): bool
 Context.reason(ctx: Context): string | null                    // null while running; "cancelled", "timeout", "interrupt", or the parent's reason
 Context.deadline(ctx: Context): Time.Instant | null            // the earliest deadline of ctx and its parents
 Context.wait(ctx: Context): void                               // blocks until done
 
-Chan.new[T](capacity: int = 0): Chan[T]                        // ◆ capacity < 0 or above 2^31 − 1; 0 is a rendezvous
-Chan.send[T](c: Chan[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; ◆ closed
+Chan.new[T](capacity: int = 0): Chan[T]                        // 0 is a rendezvous; panics if capacity < 0 or is above 2^31 − 1
+Chan.send[T](c: Chan[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; panics if c is closed
 Chan.receive[T](c: Chan[T], ctx: Context | null = null): T | null  // blocks; null when closed and drained, or when ctx ends first
-Chan.close[T](c: Chan[T]): void                                // ◆ closed already
+Chan.close[T](c: Chan[T]): void                                // panics if c is closed already
 Chan.isClosed[T](c: Chan[T]): bool
 Chan.length[T](c: Chan[T]): int                                // values buffered now
 Chan.values[T](c: Chan[T], ctx: Context | null = null): Seq[T] // every value until closed, or until ctx ends
 ```
 
 A context's timeout converts as `Http.request`'s does, days at 24 hours and the smaller units
-exact, but a calendar unit or a duration that is not positive is a ◆, since `Context.new` is
+exact, but a calendar unit or a duration that is not positive makes it panic, since `Context.new` is
 computation. A child of a done parent is done at once with the parent's reason. `Context.wait` is
 how a main goroutine waits for the interrupt while a server runs.
 
 An unbuffered channel hands a value over directly: `send` returns when a receiver has taken it. A
 buffered one holds `capacity` values and blocks a sender beyond that. Closing lets receivers drain
-what is buffered and then get `null`; a later `send` is a ◆, since a value with no receiver is the
+what is buffered and then get `null`; a later `send` panics, since a value with no receiver is the
 sender's bug. `Chan.new` fixes `T` from nothing, so a declaration annotates:
 `var jobs: Chan[Job] = Chan.new()`. `Chan.receive` conflates a `null` value with the end of the
 channel when `T` includes `null`, as `Map.get` and `Array.pop` do; a program with such a `T` wraps
@@ -2164,36 +2165,36 @@ with a report. The program ends when `main` returns, whatever other goroutines a
 
 ### Runtime panics
 
-The complete list. The checker rules out every kind and arity row. The value-dependent rows, marked
-◆, can occur in a checked program.
+The complete list. The checker rules out every panic in the middle column, so a checked program
+can only panic in the ways the last column lists, which depend on values known at run time.
 
-| Operation                                           | Panics when                                                                                                                                                                                                                                           |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `+ - * / %`, `< <= > >=`, unary `-`                 | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                      |
-| `!`, `&&`, `\|\|`, `if`, `while`                    | an operand or condition is not a `bool`                                                                                                                                                                                                               |
-| ◆ integer `+ - *`, compound assignment, `Array.sum` | the result does not fit the kind                                                                                                                                                                                                                      |
-| ◆ integer `/`, `%`                                  | the divisor is zero                                                                                                                                                                                                                                   |
-| ◆ `Bits.shiftLeft`, `Bits.shiftRight`               | the count is negative or not below the operand's width                                                                                                                                                                                                |
-| ◆ numeric conversion                                | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                                                    |
-| `string`, `bool`                                    | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                   |
-| `a.b`, `a.b = v`                                    | `a` is not a record, or has no field `b`                                                                                                                                                                                                              |
-| `a[i]`, `a[i] = v`                                  | `a` is neither an array nor a map; ◆ `a` is an array and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                  |
-| call                                                | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |
-| record literal                                      | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |
-| array literal                                       | a spread operand is not an array                                                                                                                                                                                                                      |
-| `is`                                                | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                     |
-| `for`                                               | the operand is not an array, a map, a string, or a function; ◆ a sequence calls `yield` after it returned `false` or after the sequence returned                                                                                                      |
-| destructuring                                       | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array; ◆ the array has fewer elements than the fixed positions                                                  |
-| variable                                            | no scope binds the name                                                                                                                                                                                                                               |
-| `_`                                                 | read                                                                                                                                                                                                                                                  |
-| library function                                    | an argument has a kind the function does not take; ◆ the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                       |
-| ◆ `var`                                             | read before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                                                                                                                       |
-| ◆ `panic`                                           | always                                                                                                                                                                                                                                                |
-| ◆ any call                                          | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                                                |
-| ◆ a count                                           | above 2^31 − 1 in `String.repeat`, `String.padStart`, `String.padEnd`, `Crypto.randomBytes` or `Chan.new`, which size what the runtime must hold                                                                                                      |
-| `try`                                               | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |
-| ◆ `select`                                          | a send clause is chosen on a closed channel                                                                                                                                                                                                           |
-| `??`, `?.`, `==`, `!=`                              | never                                                                                                                                                                                                                                                 |
+| Operation                                         | Panics when (ruled out by the checker)                                                                                                                                                                                                                | Panics when (possible in a checked program)                                                                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `+ - * / %`, `< <= > >=`, unary `-`               | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                      |                                                                                                                                                  |
+| `!`, `&&`, `\|\|`, `if`, `while`                  | an operand or condition is not a `bool`                                                                                                                                                                                                               |                                                                                                                                                  |
+| integer `+ - *`, compound assignment, `Array.sum` |                                                                                                                                                                                                                                                       | the result does not fit the kind                                                                                                                 |
+| integer `/`, `%`                                  |                                                                                                                                                                                                                                                       | the divisor is zero                                                                                                                              |
+| `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                       | the count is negative or not below the operand's width                                                                                           |
+| numeric conversion                                |                                                                                                                                                                                                                                                       | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                               |
+| `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                   |                                                                                                                                                  |
+| `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                              |                                                                                                                                                  |
+| `a[i]`, `a[i] = v`                                | `a` is neither an array nor a map                                                                                                                                                                                                                     | `a` is an array and `i` is not an `int` from `0` up to but excluding the length                                                                  |
+| call                                              | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |                                                                                                                                                  |
+| record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |                                                                                                                                                  |
+| array literal                                     | a spread operand is not an array                                                                                                                                                                                                                      |                                                                                                                                                  |
+| `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                 |                                                                                                                                                  |
+| `for`                                             | the operand is not an array, a map, a string, or a function                                                                                                                                                                                           | a sequence calls `yield` after it returned `false` or after the sequence returned                                                                |
+| destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                           | the array has fewer elements than the fixed positions                                                                                            |
+| variable                                          | no scope binds the name                                                                                                                                                                                                                               |                                                                                                                                                  |
+| `_`                                               | read                                                                                                                                                                                                                                                  |                                                                                                                                                  |
+| library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                     | the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                       |
+| `var`                                             |                                                                                                                                                                                                                                                       | read before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                  |
+| `panic`                                           |                                                                                                                                                                                                                                                       | always                                                                                                                                           |
+| any call                                          |                                                                                                                                                                                                                                                       | the goroutine's call depth exceeds the runtime's limit                                                                                           |
+| a count                                           |                                                                                                                                                                                                                                                       | above 2^31 − 1 in `String.repeat`, `String.padStart`, `String.padEnd`, `Crypto.randomBytes` or `Chan.new`, which size what the runtime must hold |
+| `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |                                                                                                                                                  |
+| `select`                                          |                                                                                                                                                                                                                                                       | a send clause is chosen on a closed channel                                                                                                      |
+| `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                 | never                                                                                                                                            |
 
 ## 13. Example
 

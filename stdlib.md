@@ -5,8 +5,8 @@ specification. The namespaces here talk to the world outside the program, and th
 every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
 panics on bad input, with these exceptions. `Json.stringify` panics on a value that contains
 itself, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O, panic where the
-core library would, on an argument that cannot be, as `int8(300)` does; each such case is marked ◆
-in its comment. Blocking calls block only the calling goroutine (section 9).
+core library would, on an argument that cannot be, as `int8(300)` does. The comment of each such
+function says when it panics. Blocking calls block only the calling goroutine (section 9).
 
 A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`,
 since a namespace is a record like an imported module and the bare name would collide with it. A
@@ -80,7 +80,7 @@ Http.post(url: string, body: string, headers: Map[string, string] = Map{},
           timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
                                                                                   // request("POST", url, body, headers, timeout, ctx)
 Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Response,
-           ctx: Context | null = null): Result[void, Error]                       // ◆ a response status outside 200 to 599, in the handler's goroutine
+           ctx: Context | null = null): Result[void, Error]                       // panics on a response status outside 200 to 599, in the handler's goroutine
 ```
 
 `request` sends one request with `method` as given, `GET`, `PUT`, `DELETE`, or any other token,
@@ -97,7 +97,7 @@ a `relativeTo`: hours and smaller units are exact and a day is 24 hours, while y
 weeks have no fixed length, so a duration with any of them is `Err` before anything is sent. A zero
 or negative duration is `Err` too, since a request that has already timed out is a mistake. A
 duration beyond what the host can wait, about 292 years, is taken as that. `null` sets no deadline
-of its own; a run the host cancels ends the call regardless. These are `Err` and not ◆ because
+of its own; a run the host cancels ends the call regardless. These are `Err` and not panics because
 `Http` is I/O and follows the rule above. `ctx` bounds the call as well, and when both are given
 the earlier wins: a one-off bound is a `timeout`, a bound shared with other work is a context.
 
@@ -106,7 +106,7 @@ as section 9's goroutines, and returns `Ok` once `ctx` is done and the requests 
 finished, waiting at most five seconds for them before it closes their connections; with `null` it
 serves until the run is cancelled. The listener is closed once `serve` returns. It is `Err` when
 the listener is closed under it. A handler's panic is reported as a goroutine's panic is, and the
-client gets status 500 with an empty body; a response whose status is outside 200 to 599 is a ◆ in
+client gets status 500 with an empty body; a response whose status is outside 200 to 599 is a panic in
 the handler's goroutine, which takes the same path, since a status below 200 is an interim
 response and cannot be sent as the final one. The `Http.Response` is sent as given, with
 `Content-Length` from the body. In the `Request`, `path` is decoded and `query` is raw, for
@@ -170,7 +170,7 @@ Dates and times follow JavaScript's Temporal: exact time and wall-clock time are
 a zone is named and carried, calendar arithmetic and exact arithmetic are different operations,
 and nothing assumes UTC or the machine's zone. The seven types are opaque, immutable, always valid,
 and compared by value. Unlike the other namespaces, `Time` is computation and panics where the core
-library would: a field that cannot be is a ◆ like `int8(300)`, while text from the world goes
+library would: a field that cannot be panics, as `int8(300)` does, while text from the world goes
 through the `parse` functions, which return `Result`.
 
 - `Instant` is a moment on the time line: nanoseconds since the Unix epoch, with no zone and no
@@ -242,18 +242,18 @@ call.
 ```
 Time.now(): Time.Instant
 Time.nowIn(z: Time.Zone): Time.ZonedDateTime
-Time.sleep(d: Time.Duration, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done; ◆ years, months or weeks
-Time.ticker(d: Time.Duration, ctx: Context | null = null): Chan[Time.Instant]   // the time, every d; ◆ d zero or negative, years, months or weeks
+Time.sleep(d: Time.Duration, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done; panics on years, months or weeks
+Time.ticker(d: Time.Duration, ctx: Context | null = null): Chan[Time.Instant]   // the time, every d; panics if d is zero or negative or has years, months or weeks
 Time.monotonic(): int                               // milliseconds from an arbitrary origin, for measuring
-Time.fromEpochMillis(ms: int): Time.Instant         // ◆ outside the range
+Time.fromEpochMillis(ms: int): Time.Instant         // panics on a value outside the range
 Time.fromEpochNanos(ns: int): Time.Instant
 Time.epochMillis(t: Time.Instant | Time.ZonedDateTime): int      // rounded down
-Time.epochNanos(t: Time.Instant | Time.ZonedDateTime): int       // ◆ outside 1677-09-21 to 2262-04-11
+Time.epochNanos(t: Time.Instant | Time.ZonedDateTime): int       // panics on a time outside 1677-09-21 to 2262-04-11
 ```
 
 `sleep` and `ticker` take a span as `Context.new` and `Http.request` do, so every wait in the
 library is a `Time.Duration`: hours and smaller units are exact and a day is 24 hours, while years,
-months, and weeks have no fixed length and are a ◆ here, since `Time` is computation, as they are
+months, and weeks have no fixed length and make it panic here, since `Time` is computation, as they are
 in `Context.new`. A span beyond what the host can wait, about 292 years, is taken as that. A zero
 or negative sleep returns at once. `Time.monotonic` stays an `int` of milliseconds, since it is a
 reading that a program subtracts, not a span it passes.
@@ -266,20 +266,20 @@ waits for the next tick or for the context. A ticker is a `select` clause like a
 
 Every type holds nanoseconds, and an `Instant` spans 100 million days each way from the epoch,
 about 270,000 years, as Temporal's does; the plain types span a day more each way. A result beyond
-the range of its type is a ◆ wherever it arises, in `add`, `with`, `round`, `toZoned` and the
+the range of its type panics wherever it arises, in `add`, `with`, `round`, `toZoned` and the
 rest, as Temporal's RangeError is. `epochNanos` as an `int` reaches only 1677 to 2262 and panics
 outside, while `epochMillis` always fits.
 
 **Construction.**
 
 ```
-Time.plainDate(year: int, month: int, day: int): Time.PlainDate                 // ◆ no such date
+Time.plainDate(year: int, month: int, day: int): Time.PlainDate                 // panics if there is no such date
 Time.plainTime(hour: int = 0, minute: int = 0, second: int = 0, millisecond: int = 0,
-               microsecond: int = 0, nanosecond: int = 0): Time.PlainTime      // ◆ out of range
+               microsecond: int = 0, nanosecond: int = 0): Time.PlainTime      // panics if a field is out of range
 Time.plainDateTime(date: Time.PlainDate, time: Time.PlainTime): Time.PlainDateTime
 Time.duration(years: int = 0, months: int = 0, weeks: int = 0, days: int = 0, hours: int = 0,
               minutes: int = 0, seconds: int = 0, milliseconds: int = 0, microseconds: int = 0,
-              nanoseconds: int = 0): Time.Duration           // ◆ mixed signs, or out of range
+              nanoseconds: int = 0): Time.Duration           // panics on mixed signs, or if out of range
 ```
 
 A constructor rejects what it cannot build: `Time.plainDate(2026, 13, 1)` and
@@ -383,13 +383,13 @@ Time.with[T: Time.Wall](t: T, year: int | null = null, month: int | null = null,
                         second: int | null = null, millisecond: int | null = null,
                         microsecond: int | null = null, nanosecond: int | null = null,
                         disambiguation: Time.Disambiguation = Time.Compatible{}): T
-                                                    // ◆ a field the type lacks
+                                                    // panics on a field the type lacks
 ```
 
 `with` returns `t` with the named fields replaced and the rest kept, and constrains the result:
 `month: 13` is December and `day: 31` in April is April 30, as Temporal's `overflow: "constrain"`
 has it. A `PlainDate` takes the three date fields and a `PlainTime` the six time fields; another
-field is ◆. On a `ZonedDateTime` the new wall-clock time is placed in the zone with the value's
+field panics. On a `ZonedDateTime` the new wall-clock time is placed in the zone with the value's
 own offset when the zone has that offset at the new time, and by `disambiguation` otherwise, so
 `Time.with(t, day: 3)` from November 2 in New York keeps `-04:00` and from November 4 keeps
 `-05:00`, each a valid offset for the repeated hour of November 3; the plain types ignore
@@ -398,15 +398,15 @@ own offset when the zone has that offset at the new time, and by `disambiguation
 **Arithmetic.**
 
 ```
-Time.add[T: Time.Point](t: T, d: Time.Duration): T       // ◆ years, months, weeks or days on an Instant
+Time.add[T: Time.Point](t: T, d: Time.Duration): T       // panics on years, months, weeks or days on an Instant
 Time.subtract[T: Time.Point](t: T, d: Time.Duration): T  // add(t, negate(d))
 Time.until[T: Time.Point](from: T, to: T, largestUnit: Time.Unit | null = null): Time.Duration
-                                                         // ◆ a unit the type lacks; Day or larger across zones
+                                                         // panics on a unit the type lacks, or Day or larger across zones
 Time.since[T: Time.Point](t: T, other: T, largestUnit: Time.Unit | null = null): Time.Duration
-                                                         // negate(until(t, other)); ◆ as until
+                                                         // negate(until(t, other)); panics as until does
 Time.round[T: Time.Instant | Time.Timed](t: T, smallestUnit: Time.Unit, increment: int = 1,
                                          mode: Time.RoundingMode = Time.HalfExpand{}): T
-                                                         // ◆ Year, Month or Week; Day on an Instant or a
+                                                         // panics on Year, Month or Week; on Day for an Instant or a
                                                          // PlainTime; an increment that does not fit
 Time.compare[T: Time.Point](a: T, b: T): int             // -1, 0 or 1
 ```
@@ -418,7 +418,7 @@ part after. On a `ZonedDateTime` the wall-clock result of the calendar part is p
 by `Compatible` before the exact part is added, so a day added to 01:00 on the Saturday before a
 change in New York is 01:00 on the Sunday with the new offset, and an hour added is the next hour
 of the time line, whatever the clock shows. An `Instant` has no calendar, so a duration with
-years, months, weeks or days is ◆. A `PlainDate` takes the exact part as whole days of 24 hours
+years, months, weeks or days panics. A `PlainDate` takes the exact part as whole days of 24 hours
 and drops the remainder; a `PlainTime` ignores the calendar part and wraps around the clock; a
 `PlainDateTime` takes everything with days of 24 hours.
 
@@ -433,7 +433,7 @@ duration from `other` to `t` counted from `t`, and the two differ for calendar u
 anchor does: with `Month` as the largest unit, `Time.since(mar31, feb29)` is `P1M` and
 `Time.until(feb29, mar31)` is `P1M2D`. An `Instant`
 or a `PlainTime` has units up to `Hour` and a `PlainDate` units down to `Day`; another
-`largestUnit` is ◆, as is `Day` or larger between two `ZonedDateTime`s in different zones, whose
+`largestUnit` panics, as does `Day` or larger between two `ZonedDateTime`s in different zones, whose
 days do not line up. Between two `ZonedDateTime`s in one zone, days are the zone's real days.
 
 `round` rounds to a multiple of `increment` of `smallestUnit` by `mode`, the number rounded
@@ -457,20 +457,20 @@ Time.part(d: Time.Duration, unit: Time.Unit): int   // the field as given
 Time.sign(d: Time.Duration): int                    // -1, 0 or 1
 Time.negate(d: Time.Duration): Time.Duration
 Time.abs(d: Time.Duration): Time.Duration
-Time.addDuration(a: Time.Duration, b: Time.Duration): Time.Duration     // ◆ years, months or weeks in either
+Time.addDuration(a: Time.Duration, b: Time.Duration): Time.Duration     // panics on years, months or weeks in either
 Time.compareDuration(a: Time.Duration, b: Time.Duration, relativeTo: Time.Dated | null = null): int
-                                                    // ◆ years, months or weeks without relativeTo
+                                                    // panics on years, months or weeks without relativeTo
 Time.total(d: Time.Duration, unit: Time.Unit, relativeTo: Time.Dated | null = null): float64
-                                                    // ◆ years, months or weeks, in d or as unit, without relativeTo
+                                                    // panics on years, months or weeks, in d or as unit, without relativeTo
 Time.roundDuration(d: Time.Duration, smallestUnit: Time.Unit | null = null,
                    largestUnit: Time.Unit | null = null, increment: int = 1,
                    mode: Time.RoundingMode = Time.HalfExpand{},
                    relativeTo: Time.Dated | null = null): Time.Duration
-                                                    // ◆ no unit given; years, months or weeks without relativeTo
+                                                    // panics if no unit is given, or on years, months or weeks without relativeTo
 ```
 
 Years, months and weeks have no fixed length, so a function that must know theirs takes a
-`relativeTo` point and counts from it, and is ◆ without one; a day is 24 hours unless `relativeTo`
+`relativeTo` point and counts from it, and panics without one; a day is 24 hours unless `relativeTo`
 is a `ZonedDateTime`, whose days have their daylight-saving hours. A `PlainDateTime` given as
 `relativeTo` counts as its date; its time is ignored, as in Temporal. `addDuration` sums two
 durations without years, months or weeks, days at 24 hours, and balances the result up to the larger
@@ -482,7 +482,7 @@ with a fraction, `PT1H30M` in hours being `1.5`. `roundDuration` balances `d` so
 `Hour` being `PT1H30M`; `smallestUnit` alone rounds; `largestUnit` defaults to the larger of `d`'s
 largest nonzero unit and `smallestUnit`. For a time unit `increment` follows the rule of `round`;
 for a day or a calendar unit any increment is allowed when `largestUnit` is `smallestUnit`, so a
-duration rounds to a multiple of seven days or of two months, and is ◆ otherwise. The rounding modes
+duration rounds to a multiple of seven days or of two months, and panics otherwise. The rounding modes
 are Temporal's nine: `Ceil` toward positive infinity, `Floor` toward negative, `Expand` away from
 zero, `Trunc` toward zero, the four `Half` forms to the nearest multiple with a tie resolved as the
 plain form says, and `HalfEven` to the nearest with a tie to the even multiple; `HalfExpand`, the
@@ -546,7 +546,7 @@ a read of standard input flushes it first, so a prompt is seen before the progra
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a time value as its string; ◆ cyclic value
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a time value as its string; panics on a cyclic value
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -564,8 +564,8 @@ infinities, which JSON cannot carry, as `null`. A value that contains itself has
 ## Csv
 
 ```
-Csv.parse(text: string, sep: string = ","): Result[Array[Array[string]], Error]   // rows of fields, as many per row as written; ◆ sep is not a separator
-Csv.stringify(rows: Array[Array[string]], sep: string = ","): string             // a line per row, ending in \n; ◆ likewise
+Csv.parse(text: string, sep: string = ","): Result[Array[Array[string]], Error]   // rows of fields, as many per row as written; panics if sep is not a separator
+Csv.stringify(rows: Array[Array[string]], sep: string = ","): string             // a line per row, ending in \n; panics if sep is not a separator
 ```
 
 The format is RFC 4180 with the separator as given. A row ends at `\n` or `\r\n`; a field that
@@ -576,7 +576,7 @@ drops an empty line, and is `Err` on a quote inside an unquoted
 field or a quoted field that never closes, naming the line. `stringify` quotes a field when it
 holds the separator, a quote, or a line break, or begins with white space, and ends every row with
 `\n`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
-the program, not of the data, so another value is ◆ in both functions, checked before any row is
+the program, not of the data, so another value panics in both functions, checked before any row is
 read or written. With a separator, `stringify` cannot fail, since it writes to a string, so it
 returns a `string`.
 
@@ -639,7 +639,7 @@ Crypto.hmacSha1(key: Array[byte], message: Array[byte]): Array[byte]     // 20 b
 Crypto.hmacSha256(key: Array[byte], message: Array[byte]): Array[byte]   // 32 bytes
 Crypto.hmacSha512(key: Array[byte], message: Array[byte]): Array[byte]   // 64 bytes
 Crypto.equal(a: Array[byte], b: Array[byte]): bool          // in time that depends on the lengths only
-Crypto.randomBytes(n: int): Array[byte]                     // from the host's secure source; ◆ n < 0, n above 2^31 − 1
+Crypto.randomBytes(n: int): Array[byte]                     // from the host's secure source; panics if n < 0 or n is above 2^31 − 1
 Crypto.uuid(): string                                       // a random UUID, version 4, lower case with hyphens
 ```
 
