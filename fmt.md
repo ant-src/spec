@@ -122,6 +122,12 @@ line of a broken block becomes two lines. A semicolon at the end of a line, and 
 such as `;;`, are removed; a semicolon followed only by a comment is at the end of its line, so
 `a; // c` becomes `a // c`.
 
+One semicolon is kept: the one before a statement that starts with a regular expression literal.
+After `;` a `/` begins a pattern, but after a line break it follows the operand at the end of the
+line before, skipping the break, and reads as division (section 2, Literals). So `f(); /x/` in a
+broken block becomes `f();` and `/x/` on the next line, and `f();` at the end of a line before
+`/x/` keeps its semicolon.
+
 ```ant
 // before
 func counter(): func(): int {
@@ -248,6 +254,7 @@ applies wins.
 | a non-empty flat block's or flat brace list's `{` or `}` and its contents | one     | `{ x * 2 }`, `Point{ x: 1.0 }`   |
 | an opening bracket and what follows it                                    | none    | `f(a)`, `[1, 2]`, `(a + b)`      |
 | what precedes a closing bracket and it                                    | none    | `f(a)`, `xs[i]`, `Map{}`         |
+| an integer literal and `.`                                                | one     | `0 .x`, since `0.x` reads as a float |
 | a token and `,` `;` `:` `.` `?.`                                          | none    | `a, b`, `x: int`, `p.x`, `a?.b`  |
 | `,` `;` `:` and the next token                                            | one     | `f(a, b)`, `{ a; b }`            |
 | `.` `?.` `...` and the next token                                         | none    | `p.x`, `[head, ...tail]`         |
@@ -260,8 +267,10 @@ applies wins.
 | a keyword and the next token, and the next token and a keyword            | one     | `try f()`, `return x`, `for x in xs` |
 | any other pair, such as a header and its `{`                              | one     | `if ready {`, `func f() {`       |
 
-A `-` is prefix when the token before it is not an operand, by the same rule that tells a regular
-expression from a division (section 2, Literals). The `{` of a record type is not a literal's, so
+A `-` is prefix when it starts a statement or the token before it is not an operand, by the
+same rule that tells a regular expression from a division (section 2, Literals). Inside a list,
+where the parser ignores line breaks, a `-` at the start of a line after an operand still
+subtracts. The `{` of a record type is not a literal's, so
 it takes the spacing of the token before it: `type P = { x: int }`, `Array[{ x: int }]`.
 
 ### 4.8 Comments
@@ -271,26 +280,37 @@ block or list, or, when it is the last thing before a closing bracket, one level
 bracket. A run of such comments moves together. Only the first line of a block comment is
 reindented; its other lines are kept as written, trailing spaces removed.
 
-A comment after code on the same line is a trailing comment. It keeps the column the author wrote
-it at, so that a column of aligned comments stays aligned, as long as at least one space then
-separates it from the code. When the code has grown past that column, one space separates them.
-Columns are counted in Unicode code points, not bytes, so non-ASCII text in a string does not shift
-the alignment; a tab before a trailing comment counts as one column.
+A comment after code on the same line is a trailing comment. Trailing comments on consecutive
+lines of the same indentation form a run, and the comments of a run start in one column: one space
+after the longest code in the run. A trailing comment with no neighbour is one space after its
+code. The author's spacing before a trailing comment is not kept, so the layout depends only on
+the code and reformatting never leaves a column ragged. A blank line, a line without a trailing
+comment, or a change of indentation ends a run, which is how a long line is kept from pushing the
+others right. Columns are counted in Unicode code points, not bytes, so non-ASCII text in a string
+does not shift the alignment. A trailing block comment that spans lines is one space after its
+code and takes no part in a run.
 
 ```ant
 // before
 var xs = [3, 1, 2]
-Array.length( xs )                  // => 3
-Array.reverse(xs)                   // => [2, 1, 3]
+Array.length( xs )  // => 3
+Array.reverse(xs)      // => [2, 1, 3]
+Array.sum(xs) // => 6
+
+var long = Array.map(xs, { x * 1000 })      // a lone comment
 
 // after
 var xs = [3, 1, 2]
-Array.length(xs)                    // => 3
-Array.reverse(xs)                   // => [2, 1, 3]
+Array.length(xs)  // => 3
+Array.reverse(xs) // => [2, 1, 3]
+Array.sum(xs)     // => 6
+
+var long = Array.map(xs, { x * 1000 }) // a lone comment
 ```
 
-A block comment between two tokens of a line, as in `f(a, /* b */ c)`, takes the spacing of the
-token after it on its left and one space on its right. Apart from trailing whitespace and line
+A block comment between two tokens of a line, as in `f(a, /* b */ c)`, has one space on each
+side, except directly after an opening bracket, where it takes the bracket's own spacing:
+`f(/* b */ c)`, `{ /* b */ c }`. Apart from trailing whitespace and line
 endings (4.1), the text of a comment, including any space after `//`, is never changed, so the
 corpus's `// expect`, `// =>`, and `// ERR:` markers keep their meaning.
 
@@ -319,7 +339,7 @@ says.
 - It does not wrap long lines or join short ones; line breaks are the author's (section 3).
 - It does not sort imports, declarations, or record fields.
 - It does not remove redundant parentheses, simplify expressions, or rename anything.
-- It does not align anything except by keeping the columns of trailing comments.
+- It does not align anything except runs of trailing comments (4.8).
 - It does not format Ant code in Markdown files.
 - It has no options beyond `--check`, no configuration file, and no way to turn it off for part of a
   file. There is no diff output; `--check` names the files and `git diff` after a run shows the
