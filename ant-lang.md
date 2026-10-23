@@ -849,7 +849,7 @@ A `select` waits for the first of several things, with a block for each:
 select {
   var line = Chan.receive(lines) { print(line ?? "closed") }
   Chan.send(out, batch) { batch = [] }
-  Time.sleep(1000) { flush() }
+  Time.sleep(Time.duration(seconds: 1)) { flush() }
   Context.wait(ctx) { return }
   else { idle += 1 }
 }
@@ -857,7 +857,7 @@ select {
 
 A clause is a head and a block, one clause per line. A head is one of five blocking calls of
 section 11 and `stdlib.md`, written as the call would be and not performed: `Chan.receive(c)`,
-`Chan.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(ms)`. `var x =`
+`Chan.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
 before a head binds the call's result in the block: a receive binds `T | null`, `null` when the
 channel is closed, a send binds `bool`, and a binding on a head that returns `void` is a compile
 error. A head takes no context, since the context is its own clause, and a head given one is a
@@ -883,7 +883,7 @@ a bound variable is a local of its block and narrows there.
 ```ant
 var event: Event = select {
   var line = Chan.receive(lines) { if line == null { Closed{} } else { Line{ text: line } } }
-  Time.sleep(1000) { Timeout{} }
+  Time.sleep(Time.duration(seconds: 1)) { Timeout{} }
 }
 ```
 
@@ -1346,7 +1346,7 @@ receive, and a context that stops the rest.
 type Line = { text: string }
 type Timeout = {}
 
-func lineOrTimeout(input: File.Handle, ms: int): Line | Timeout {
+func lineOrTimeout(input: File.Handle, wait: Time.Duration): Line | Timeout {
   var events: Chan[Line | Timeout] = Chan.new()
   var ctx = Context.new()
   go {
@@ -1354,7 +1354,7 @@ func lineOrTimeout(input: File.Handle, ms: int): Line | Timeout {
     if got != null { Chan.send(events, Line{ text: got }, ctx) }
   }
   go {
-    Time.sleep(ms, ctx)
+    Time.sleep(wait, ctx)
     Chan.send(events, Timeout{}, ctx)
   }
   var event = Chan.receive(events) ?? Timeout{}

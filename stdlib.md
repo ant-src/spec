@@ -242,8 +242,8 @@ call.
 ```
 Time.now(): Time.Instant
 Time.nowIn(z: Time.Zone): Time.ZonedDateTime
-Time.sleep(ms: int, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done; a negative count sleeps nothing
-Time.ticker(ms: int, ctx: Context | null = null): Chan[Time.Instant]   // the time, every ms; ◆ ms <= 0
+Time.sleep(d: Time.Duration, ctx: Context | null = null): void   // blocks the calling goroutine; returns early when ctx is done; ◆ years, months or weeks
+Time.ticker(d: Time.Duration, ctx: Context | null = null): Chan[Time.Instant]   // the time, every d; ◆ d zero or negative, years, months or weeks
 Time.monotonic(): int                               // milliseconds from an arbitrary origin, for measuring
 Time.fromEpochMillis(ms: int): Time.Instant         // ◆ outside the range
 Time.fromEpochNanos(ns: int): Time.Instant
@@ -251,8 +251,14 @@ Time.epochMillis(t: Time.Instant | Time.ZonedDateTime): int      // rounded down
 Time.epochNanos(t: Time.Instant | Time.ZonedDateTime): int       // ◆ outside 1677-09-21 to 2262-04-11
 ```
 
-`ticker` is Go's ticker: a channel that receives the time every `ms` milliseconds, counted from
-the call, so a slow reader does not shift the beat. It holds one tick; a tick that finds it full is
+`sleep` and `ticker` take a span as `Context.new` and `Http.request` do, so every wait in the
+library is a `Time.Duration`: hours and smaller units are exact and a day is 24 hours, while years,
+months, and weeks have no fixed length and are a ◆ here, since `Time` is computation, as they are
+in `Context.new`. A span beyond what the host can wait, about 292 years, is taken as that. A zero
+or negative sleep returns at once. `Time.monotonic` stays an `int` of milliseconds, since it is a
+reading that a program subtracts, not a span it passes.
+
+`ticker` is Go's ticker: a channel that receives the time every `d`, counted from the call, so a slow reader does not shift the beat. It holds one tick; a tick that finds it full is
 dropped, so a reader that falls behind gets one tick and not a burst. It stops when `ctx` is done,
 or when the run ends without one, and is never closed, so a receive or a `select` clause on it
 waits for the next tick or for the context. A ticker is a `select` clause like any channel:
