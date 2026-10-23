@@ -61,7 +61,7 @@ keyword or reserved word is a plain name. So `event.type`, `{ type: string }`, a
 JavaScript. The shorthands `Map{ type }` and `var { type } = event` would read or bind a variable
 named `type`, which cannot exist, so they are errors; write `var { type: kind } = event`.
 
-`Array`, `Map`, `Result`, `never`, `print`, `panic`, and the other standard library names are
+`Array`, `Map`, `Set`, `Result`, `never`, `print`, `panic`, and the other standard library names are
 ordinary identifiers bound by the prelude, not keywords.
 
 ### Literals
@@ -318,15 +318,16 @@ var moved = Point{ ...p, x: 0.0 }
 var v = Vec{ ...p }                        // a Vec with the fields of p
 ```
 
-Records, arrays, and maps are reference values: assigning or passing one shares it, and a change
-made through one name is visible through every other. `==` compares structure, never identity. Two
-records are equal when they carry the same tag and their fields are equal. Arrays compare by length
-and elements, maps by key set and values, primitives, time values (`stdlib.md`), and regular
-expression patterns (section 11) by value, and functions and sync objects by identity. The
-comparison recurses with `==` over every run-time field, including fields the static type does
-not mention, so it agrees with `String.from` and `Json.stringify`. A pair of values already under
-comparison counts as equal, so cyclic structures compare in finite time. Identity is a library
-call: `Record.same`, `Array.same`, and `Map.same` report whether two names refer to one value.
+Records, arrays, maps, and sets are reference values: assigning or passing one shares it, and a
+change made through one name is visible through every other. `==` compares structure, never
+identity. Two records are equal when they carry the same tag and their fields are equal. Arrays
+compare by length and elements, maps by key set and values, sets by members, primitives, time values
+(`stdlib.md`), and regular expression patterns (section 11) by value, and functions and sync objects
+by identity. The comparison recurses with `==` over every run-time field, including fields the
+static type does not mention, so it agrees with `String.from` and `Json.stringify`. A pair of values
+already under comparison counts as equal, so cyclic structures compare in finite time. Identity is a
+library call: `Record.same`, `Array.same`, `Map.same`, and `Set.same` report whether two names refer
+to one value.
 
 ```ant
 var p = Point{ x: 1.0, y: 2.0 }
@@ -377,7 +378,7 @@ static types over one tag, and a union of the two is rejected, since they share 
 `Err[E]` stay records rather than taking this form, because a tag over an arbitrary payload needs a
 field to get the payload out, and a record with one field is exactly that.
 
-### Arrays and maps
+### Arrays, maps, and sets
 
 ```ant
 var xs: Array[int] = [1, 2, 3]
@@ -385,6 +386,8 @@ var more = [...xs, 4]                       // spread copies elements
 var ages = Map{ ada: 36, linus: 54 }        // Map[string, int]
 var keyed = Map{ (name): 1, 7: "seven" }    // computed and non-string keys
 var empty: Map[string, int] = Map{}
+var tags = Set.of(["red", "blue"])          // Set[string]
+var seen: Set[int] = Set.of([])
 ```
 
 Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name
@@ -400,6 +403,13 @@ rendering visit entries in the order their keys were first inserted. Replacing a
 entry's position; a key removed and inserted again goes to the end. A key is hashed when it is
 inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the
 entry may become unreachable. Section 11 covers the operations.
+
+`Set[T]` holds each `==` value at most once, and is otherwise a map without values: members compare
+the way keys do, so a record or an array can be one, it keeps insertion order, and a member is
+hashed when it is added, so mutating it afterwards is the same program error. A set has no literal
+and no indexing. `Set.of` builds one from an array, `Set.has` asks for a member, and `for` visits the
+members in order. Two sets are `==` when they have the same members, in any order, as two maps are
+when they have the same entries.
 
 ### Unions
 
@@ -422,7 +432,7 @@ The members of a union must be distinguishable at run time, because `is` has onl
 look at. Each member has a discriminator:
 
 - the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds;
-- the word array, map, or func, type arguments not counting; or
+- the word array, map, set, or func, type arguments not counting; or
 - the tag, for a named record or primitive type, for a time type of `stdlib.md`, or for
   `Regex.Pattern`, whose values carry the tag of their type as records do.
 
@@ -549,11 +559,11 @@ func choose(a: Number, b: Number): Number {
 }
 ```
 
-Without a bound, `T` is opaque; `==` and `Map` keys still work, because they work on every type. A
-bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`, `x is string`
-narrows `x` to `string`. Bounds are the way to accept any array whose elements have a given field,
-since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing
-changes at run time; the interpreter never sees a bound.
+Without a bound, `T` is opaque; `==`, `Map` keys, and `Set` members still work, because they work on
+every type. A bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`,
+`x is string` narrows `x` to `string`. Bounds are the way to accept any array whose elements have a
+given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string
+}]`. Nothing changes at run time; the interpreter never sees a bound.
 
 ```ant
 func max[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
@@ -582,7 +592,7 @@ means:
   interchangeable with its body: `type Id = int | string` is the union written out, and
   `type Shape = Circle | Rect` likewise.
 
-A type may refer to itself through a record, array, map, or function type, so
+A type may refer to itself through a record, array, map, set, or function type, so
 `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of
 plain aliases, is a compile error.
 
@@ -615,10 +625,10 @@ A value of type `S` can be used where `T` is expected when one of these holds:
   with `_ = ...`, which is an assignment and therefore `void`.
 
 There is no top type: no `any` or `unknown` that every value is assignable to, and no union that
-could serve as one, since arrays, maps, and records have one discriminator each. A function that
-accepts every type is generic, `func show[T](v: T)`, and data whose type is not known statically is
-a union written out, such as `Json.Value` in the library, narrowed with `is`. `never` is the bottom
-type and is assignable to everything.
+could serve as one, since arrays, maps, sets, and records have one discriminator each. A function
+that accepts every type is generic, `func show[T](v: T)`, and data whose type is not known
+statically is a union written out, such as `Json.Value` in the library, narrowed with `is`. `never`
+is the bottom type and is assignable to everything.
 
 Widening a container is therefore always by construction, which also makes the copy visible:
 
@@ -773,9 +783,9 @@ its `{` would otherwise begin the body: `if p == (Point{ x: 1 }) { ... }` and
 ### `is`
 
 `x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record or primitive type, a
-time type of `stdlib.md`, `Regex.Pattern`, a primitive kind, `null`, `Array`, `Map`, or `func`,
-written without type arguments, because the runtime has only tags and kinds to look at. An alias
-is not accepted. With `type Id = int | string`, the checker sees `Id` as the union, while the
+time type of `stdlib.md`, `Regex.Pattern`, a primitive kind, `null`, `Array`, `Map`, `Set`, or
+`func`, written without type arguments, because the runtime has only tags and kinds to look at. An
+alias is not accepted. With `type Id = int | string`, the checker sees `Id` as the union, while the
 runtime would see a tag no value carries. So `x is Id` is a compile error that says to test the
 members, and a panic in an unchecked program.
 
@@ -795,12 +805,12 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 ### Loops
 
-`for` iterates over an array, a map, a string, or a sequence function; over a string it yields each
-code point as a one-character string. Each iteration binds a fresh variable, so a closure created in
-the body keeps that iteration's value. `while` repeats while a condition holds. Both have type
-`void`, except that a `while` whose condition is the literal `true` and whose body contains no
-`break` has type `never`, since only `return` or a panic can leave it. `break` and `continue` work
-as in JavaScript, without labels.
+`for` iterates over an array, a map, a set, a string, or a sequence function; over a map it yields
+each `Entry`, over a set each member, and over a string each code point as a one-character string.
+Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's
+value. `while` repeats while a condition holds. Both have type `void`, except that a `while` whose
+condition is the literal `true` and whose body contains no `break` has type `never`, since only
+`return` or a panic can leave it. `break` and `continue` work as in JavaScript, without labels.
 
 ```ant
 for user in users {
@@ -1376,8 +1386,8 @@ particular result:
 - A racy read of a variable, field, or element observes some value that was stored there, never a
   mix of two or a value from nowhere. Since every store into a slot has the slot's declared type,
   the checker's types stay true in a racing program.
-- A racy array or map operation observes the state before or after each concurrent mutation, or
-  panics with the ordinary index error, or finds the key absent, never a corrupted structure. An
+- A racy array, map, or set operation observes the state before or after each concurrent mutation,
+  or panics with the ordinary index error, or finds the key absent, never a corrupted structure. An
   operation over many elements, such as `Array.map`, may see some of several racing stores and not
   others.
 - The interpreter itself never crashes.
@@ -1387,8 +1397,8 @@ the state of a racy program is not worth continuing.
 
 *Implementation note.* The guarantee costs one word per value, so that a variable, field, or element
 store is a single machine word and cannot tear, plus an atomic header load per array operation with
-`push` and `pop` under a lock, and one lock per map operation, shared between reads, since a read
-during a resize is not safe with mutations alone locked. An implementation in a language whose
+`push` and `pop` under a lock, and one lock per map or set operation, shared between reads, since a
+read during a resize is not safe with mutations alone locked. An implementation in a language whose
 strings or dynamic values span two words boxes them.
 
 ### Visibility
@@ -1416,8 +1426,8 @@ sense of Go's memory model:
 `Cond` adds nothing; its mutex supplies the order. A goroutine's exit is ordered with nothing, so a
 program that needs a goroutine's result waits on a `WaitGroup`, not on the goroutine being gone. A
 data race is then exactly two accesses to one variable, field, or element, or to the length of an
-array or the key set of a map, from different goroutines, at least one of them a write, with no
-ordering between them.
+array, the key set of a map, or the members of a set, from different goroutines, at least one of
+them a write, with no ordering between them.
 
 ### Sharing results
 
@@ -1521,22 +1531,21 @@ could not be loaded because of a syntax error, an import cycle, or a missing mod
 
 The standard library is a set of namespaces in the prelude. Each is a plain record of functions and
 types, exactly like an imported module (section 10), so a type a namespace declares is written
-through it, as in `Http.Response`; none has methods or state. `Array` and `Map` are the functions of
-the two built-in container types, and `Result` and the sync types are types with functions declared
-on them (section 6); all read as `Name.function`, like a namespace. Every function takes its subject
-as the first argument so it composes with `|`. This section is the complete core library. The I/O
-namespaces `File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and
-`Crypto` are policy rather than language and live in `stdlib.md`.
+through it, as in `Http.Response`; none has methods or state. `Array`, `Map`, and `Set` are the
+functions of the three built-in container types, and `Result` and the sync types are types with
+functions declared on them (section 6); all read as `Name.function`, like a namespace. Every
+function takes its subject as the first argument so it composes with `|`. This section is the
+complete core library. The I/O namespaces `File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`,
+`Csv`, `Encoding`, `Url`, and `Crypto` are policy rather than language and live in `stdlib.md`.
 
-Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter
-may carry a default, which a call omits or names as for a declared function (section 6). A
-callback whose
-result the library ignores is typed with a type parameter, never with `void`, so any lambda fits;
-the library discards the value itself. A function marked `mutates` changes its first argument and
-returns `void` or the removed element; every other function leaves its arguments untouched and
-returns a new value. A function that can panic on a particular value says so in its comment, as
-in "panics if n < 0" or "panics on overflow". Every function also panics when an argument has a
-kind it does not take (section 12).
+Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
+carry a default, which a call omits or names as for a declared function (section 6). A callback
+whose result the library ignores is typed with a type parameter, never with `void`, so any lambda
+fits; the library discards the value itself. A function marked `mutates` changes its first argument
+and returns `void`, the removed element, or whether it changed anything; every other function leaves
+its arguments untouched and returns a new value. A function that can panic on a particular value
+says so in its comment, as in "panics if n < 0" or "panics on overflow". Every function also panics
+when an argument has a kind it does not take (section 12).
 
 ### Prelude
 
@@ -1651,6 +1660,39 @@ Map.merge[K, V](m: Map[K, V], n: Map[K, V]): Map[K, V]         // entries of n w
 Map.same[K, V](m: Map[K, V], n: Map[K, V]): bool               // identity
 ```
 
+### Set
+
+`Set[T]` is a hash set keyed by `==` that keeps insertion order (section 4). Adding a member that
+is already there changes nothing, so it keeps its position; a member removed and added again goes
+to the end. A function that builds a set from others keeps the order of its first argument. There
+is no literal and no `Set.new`: the empty set is `Set.of([])`, whose element type comes from the
+expected type, as for `[]`.
+
+```
+Set.of[T](xs: Array[T]): Set[T]                                // the first of each == value, in order
+Set.size[T](s: Set[T]): int
+Set.isEmpty[T](s: Set[T]): bool
+Set.has[T](s: Set[T], x: T): bool
+Set.add[T](s: Set[T], x: T): bool                              // mutates; true when x was not a member
+Set.remove[T](s: Set[T], x: T): bool                           // mutates; true when x was a member
+Set.values[T](s: Set[T]): Array[T]                             // insertion order
+Set.union[T](a: Set[T], b: Set[T]): Set[T]                     // the members of a, then those of b that a lacks
+Set.intersect[T](a: Set[T], b: Set[T]): Set[T]                 // the members of a that b has
+Set.difference[T](a: Set[T], b: Set[T]): Set[T]                // the members of a that b lacks
+Set.isSubset[T](a: Set[T], b: Set[T]): bool                    // every member of a is a member of b
+Set.same[T](a: Set[T], b: Set[T]): bool                        // identity
+```
+
+`Set.add` and `Set.remove` say whether they changed the set, so a loop that keeps the first of
+each value needs no separate test:
+
+```ant
+var seen: Set[string] = Set.of([])
+for line in lines {
+  if Set.add(seen, line) { print(line) }
+}
+```
+
 ### String
 
 A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear,
@@ -1729,10 +1771,11 @@ template strings.
   non-finite values render as `NaN`, `Infinity`, and `-Infinity`.
 - A string renders as itself at the top level and quoted with escapes inside a container. `bool`,
   `null`, and `void` render as their literals.
-- Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, and records as
-  `Point{ x: 1.0, y: 2.0 }` with the name of their tag and the fields in declaration order. Entries
-  are separated by `, `. An empty array, map, or record renders as `[]`, `Map{}`, or `Empty{}`, with
-  nothing inside the brackets.
+- Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
+  call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
+  their tag and the fields in declaration order. Entries are separated by `, `. An empty array, map,
+  set, or record renders as `[]`, `Map{}`, `Set.of([])`, or `Empty{}`, with nothing inside the
+  brackets.
 - A named primitive renders as its constructor call, `UserId("u-1")`.
 - Functions render as `func`, a constructor and a tag as their type's name, sync objects as
   their namespace name, and time values as `stdlib.md` says: an RFC 9557 string, or a zone's
@@ -1984,6 +2027,7 @@ Every value has a kind, fixed when the value is created:
 | `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                |
 | array                            | a growable sequence of values                                                                                                                                                                                                                  |
 | map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                           |
+| set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                      |
 | record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                    |
 | tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
 | func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
@@ -1992,9 +2036,9 @@ Every value has a kind, fixed when the value is created:
 | time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
 | regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
 
-Arrays, maps, records, functions, and sync objects are references: a variable holds a reference, and
-copying the variable copies the reference. Numbers, booleans, strings, `null`, `void`, tags, time
-values, and patterns are immutable, so for them the distinction never shows.
+Arrays, maps, sets, records, functions, and sync objects are references: a variable holds a
+reference, and copying the variable copies the reference. Numbers, booleans, strings, `null`,
+`void`, tags, time values, and patterns are immutable, so for them the distinction never shows.
 
 ### Names and scopes
 
@@ -2076,13 +2120,13 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   primitives have the same tag and equal payloads; time values have the same tag and equal fields,
   as `stdlib.md` lists them per type; patterns have the same normalized source and flags; arrays
   have the same length and `==` elements in order; maps have the same key set and `==` values per
-  key; functions, tags, and sync objects are the same object. A pair of values already under
-  comparison counts as equal (section 4). Values of different kinds are unequal, so `x == null` is
-  simply `false` for a non-null `x`.
+  key; sets have the same members; functions, tags, and sync objects are the same object. A pair of
+  values already under comparison counts as equal (section 4). Values of different kinds are
+  unequal, so `x == null` is simply `false` for a non-null `x`.
 - **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
-  the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other path
-  evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a constructor, not an
-  alias tag, and the test is whether `a` is a record, tagged primitive, time value, or pattern
+  `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other
+  path evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a constructor, not
+  an alias tag, and the test is whether `a` is a record, tagged primitive, time value, or pattern
   carrying that tag. The result is a `bool`.
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the
   left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right
@@ -2116,18 +2160,19 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   the heads that can proceed is performed, chosen at random among them, its result is bound when
   the clause binds, and its block is evaluated; the value is the block's. A send performed on a
   closed channel panics.
-- **`for x in e`.** `e` must be an array, a map, a string, or a function. Over an array it iterates
-  by index from zero while the index is below the current length, so elements appended during the
-  loop are visited and removed ones are not. Over a map it visits the entries as `Entry` records in
-  insertion order, reading the map as it goes, like an array. An entry inserted during the loop is
-  visited, an entry removed before the loop reaches it is not, and no entry is visited twice. A key
-  removed and inserted again is a new entry at the end. Over a string it yields each code point as a
-  one-character string. Over a function it calls the function with a fresh `yield` function; each
-  call of `yield` with one argument binds `x`, runs the body, and returns `true`, or `false` when
-  the body ended with `break`. Calling `yield` again after it returned `false`, or after the
-  sequence function has returned, panics; a `return` or a panic in the body propagates through the
-  sequence function like any other call. A destructuring on the left reads the named fields of each
-  element, which must be a record with those fields. The value is `void`.
+- **`for x in e`.** `e` must be an array, a map, a set, a string, or a function. Over an array it
+  iterates by index from zero while the index is below the current length, so elements appended
+  during the loop are visited and removed ones are not. Over a map it visits the entries as `Entry`
+  records in insertion order, reading the map as it goes, like an array. An entry inserted during
+  the loop is visited, an entry removed before the loop reaches it is not, and no entry is visited
+  twice. A key removed and inserted again is a new entry at the end. Over a set it visits the
+  members the same way. Over a string it yields each code point as a one-character string. Over a
+  function it calls the function with a fresh `yield` function; each call of `yield` with one
+  argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with
+  `break`. Calling `yield` again after it returned `false`, or after the sequence function has
+  returned, panics; a `return` or a panic in the body propagates through the sequence function like
+  any other call. A destructuring on the left reads the named fields of each element, which must be
+  a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function
   body, lambda, `go` block, or `defer` block, running the deferred blocks of every block they exit.
 - **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body,
@@ -2181,7 +2226,7 @@ can only panic in the ways the last column lists, which depend on values known a
 | record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |                                                                                                                                                  |
 | array literal                                     | a spread operand is not an array                                                                                                                                                                                                                      |                                                                                                                                                  |
 | `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                 |                                                                                                                                                  |
-| `for`                                             | the operand is not an array, a map, a string, or a function                                                                                                                                                                                           | a sequence calls `yield` after it returned `false` or after the sequence returned                                                                |
+| `for`                                             | the operand is not an array, a map, a set, a string, or a function                                                                                                                                                                                    | a sequence calls `yield` after it returned `false` or after the sequence returned                                                                |
 | destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                           | the array has fewer elements than the fixed positions                                                                                            |
 | variable                                          | no scope binds the name                                                                                                                                                                                                                               |                                                                                                                                                  |
 | `_`                                               | read                                                                                                                                                                                                                                                  |                                                                                                                                                  |

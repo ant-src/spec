@@ -546,7 +546,7 @@ a read of standard input flushes it first, so a prompt is seen before the progra
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a time value as its string; panics on a cyclic value
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
