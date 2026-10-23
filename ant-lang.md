@@ -6,8 +6,6 @@ Ant is a general-purpose, garbage-collected language with JavaScript-like syntax
 expression-oriented control flow, and goroutine-style concurrency. This document describes the
 language as a programmer sees it, not the compiler or the runtime.
 
-The name "Ant" is a placeholder.
-
 ## 1. Principles
 
 - **One obvious way.** When two constructs would do the same job, the language keeps one.
