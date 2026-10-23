@@ -311,8 +311,10 @@ var long = Array.map(xs, { x * 1000 }) // a lone comment
 A block comment between two tokens of a line, as in `f(a, /* b */ c)`, has one space on each
 side, except directly after an opening bracket, where it takes the bracket's own spacing:
 `f(/* b */ c)`, `{ /* b */ c }`. Apart from trailing whitespace and line
-endings (4.1), the text of a comment, including any space after `//`, is never changed, so the
-corpus's `// expect`, `// =>`, and `// ERR:` markers keep their meaning.
+endings (4.1), the text of a comment, including any space after `//`, is never changed, so
+markers that tools read from comments, such as the corpus's `// expect`, `// =>`, and `// ERR:`,
+keep their meaning, provided none depends on trailing whitespace. An `// out:` line therefore
+cannot expect output that ends in a space; a test program whose output would trims it.
 
 ### 4.9 Template strings
 
