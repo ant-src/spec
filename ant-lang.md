@@ -1664,14 +1664,14 @@ String.slice(s: string, from: int, to: int): string            // ◆ as Array.s
 String.concat(parts: Array[string]): string
 String.split(s: string, sep: string): Array[string]            // ◆ sep is empty
 String.join(parts: Array[string], sep: string): string
-String.repeat(s: string, n: int): string                       // ◆ n < 0
+String.repeat(s: string, n: int): string                       // ◆ n < 0, n above 2^31 − 1
 String.trim(s: string): string                                 // Unicode white space at both ends
 String.trimStart(s: string): string                            // at the start only
 String.trimEnd(s: string): string                              // at the end only
 String.trimPrefix(s: string, prefix: string): string           // prefix removed once, when present
 String.trimSuffix(s: string, suffix: string): string
-String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; ◆ pad is empty
-String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; ◆ pad is empty
+String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; ◆ pad is empty, width above 2^31 − 1
+String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; ◆ pad is empty, width above 2^31 − 1
 String.contains(s: string, t: string): bool
 String.startsWith(s: string, t: string): bool
 String.endsWith(s: string, t: string): bool
@@ -1907,7 +1907,7 @@ RwMutex.withRead[T](m: RwMutex, f: func(): T): T
 RwMutex.withWrite[T](m: RwMutex, f: func(): T): T
 
 WaitGroup.new(): WaitGroup
-WaitGroup.add(wg: WaitGroup, n: int): void                     // ◆ counter would go negative
+WaitGroup.add(wg: WaitGroup, n: int): void                     // ◆ counter would go negative, or past the largest int
 WaitGroup.done(wg: WaitGroup): void                            // ◆ counter already zero
 WaitGroup.wait(wg: WaitGroup, ctx: Context | null = null): void   // blocks until the counter is zero, or ctx is done
 
@@ -1935,7 +1935,7 @@ Context.reason(ctx: Context): string | null                    // null while run
 Context.deadline(ctx: Context): Time.Instant | null            // the earliest deadline of ctx and its parents
 Context.wait(ctx: Context): void                               // blocks until done
 
-Chan.new[T](capacity: int = 0): Chan[T]                        // ◆ capacity < 0; 0 is a rendezvous
+Chan.new[T](capacity: int = 0): Chan[T]                        // ◆ capacity < 0 or above 2^31 − 1; 0 is a rendezvous
 Chan.send[T](c: Chan[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; ◆ closed
 Chan.receive[T](c: Chan[T], ctx: Context | null = null): T | null  // blocks; null when closed and drained, or when ctx ends first
 Chan.close[T](c: Chan[T]): void                                // ◆ closed already
@@ -2182,6 +2182,7 @@ The complete list. The checker rules out every kind and arity row. The value-dep
 | ◆ `var`                                             | read before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                                                                                                                       |
 | ◆ `panic`                                           | always                                                                                                                                                                                                                                                |
 | ◆ any call                                          | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                                                |
+| ◆ a count                                           | above 2^31 − 1 in `String.repeat`, `String.padStart`, `String.padEnd`, `Crypto.randomBytes` or `Chan.new`, which size what the runtime must hold                                                                                                      |
 | `try`                                               | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |
 | ◆ `select`                                          | a send clause is chosen on a closed channel                                                                                                                                                                                                           |
 | `??`, `?.`, `==`, `!=`                              | never                                                                                                                                                                                                                                                 |

@@ -507,7 +507,10 @@ An interrupt is Ctrl-C, SIGINT, and SIGTERM where the host has it. A program tha
 `Os.interrupt()` is ended by the first one, as `ant-lang.md` section 9 says of the host ending a
 run. A program that has called it receives the first one instead: the context is done with the
 reason `interrupt`, the program's waits end, and the program goes on, to drain a server or write
-what it has, and exits when it is ready. A second interrupt ends the run.
+what it has, and exits when it is ready. A second interrupt ends the run, and so does the first
+after the program cancelled the context itself, since the interrupt it asked for has then been
+handled. The `ant` command exits with status 130 when an interrupt ends the run and prints
+nothing, as a shell does for a process a signal ended.
 
 The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.stdin())`,
 `File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new.
@@ -613,7 +616,7 @@ Crypto.hmacSha1(key: Array[byte], message: Array[byte]): Array[byte]     // 20 b
 Crypto.hmacSha256(key: Array[byte], message: Array[byte]): Array[byte]   // 32 bytes
 Crypto.hmacSha512(key: Array[byte], message: Array[byte]): Array[byte]   // 64 bytes
 Crypto.equal(a: Array[byte], b: Array[byte]): bool          // in time that depends on the lengths only
-Crypto.randomBytes(n: int): Array[byte]                     // from the host's secure source; ◆ n < 0
+Crypto.randomBytes(n: int): Array[byte]                     // from the host's secure source; ◆ n < 0, n above 2^31 − 1
 Crypto.uuid(): string                                       // a random UUID, version 4, lower case with hyphens
 ```
 
