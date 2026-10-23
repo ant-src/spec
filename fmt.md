@@ -16,22 +16,27 @@ ant fmt --check <path>...   list the files that are not formatted, and change no
 ant fmt -                   read standard input, write the formatted source to standard output
 ```
 
-A path is a `.ant` file or a directory. A directory is walked recursively for files ending in
-`.ant`, in lexical order, skipping any entry whose name starts with `.`; symbolic links are not
-followed. A file named on the command line is formatted whatever its extension. `ant fmt` with no
-path is a usage error, so that nothing is rewritten by accident; the current directory is
-`ant fmt .`.
+A path is a file or a directory. A file named on the command line is formatted whatever its
+extension. A directory is walked recursively for files ending in `.ant`, in lexical order, skipping
+any entry whose name starts with `.`; symbolic links met in the walk are not followed. A symbolic
+link named on the command line is formatted through: the file it points to is rewritten and the
+link stays a link. `ant fmt` with no path is a usage error, so that nothing is rewritten by
+accident; the current directory is `ant fmt .`.
 
 `ant fmt` reads only the files it is given. It does not follow imports, and it does not run the
 checker: a file with type errors is formatted like any other. A file must parse as a module
-(section 10), the same as `ant run` and `ant check` require. A file that does not parse is left
-untouched, and its error is reported as those commands report it, `path:line:col: message`, with
-`<stdin>` as the path for standard input. The remaining files are still formatted.
+(section 10), the same as `ant run` and `ant check` require, so a file with top-level statements is
+a syntax error here too. A file that does not parse is left untouched, and its error is reported as
+those commands report it, `path:line:col: message`, with `<stdin>` as the path for standard input.
+The remaining files are still formatted.
 
 In place, a file is written only when its formatted contents differ from what is on disk, and the
 new contents replace the old in one step, so an interrupted run leaves either the old file or the
-new one. With `--check`, each file whose contents would change is printed to standard output, one
-path per line, as it was named or found.
+new one. With `--check`, nothing is written, and each file whose contents would change is printed
+to standard output, one path per line, as it was named or found. `ant fmt --check -` reads standard
+input and prints `<stdin>` if it is not formatted.
+
+`ant check` does not look at layout. Continuous integration runs `ant fmt --check` beside it.
 
 | Exit status | When                                                                              |
 | ----------- | --------------------------------------------------------------------------------- |
@@ -45,10 +50,13 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 
 - **Meaning.** The formatted file has the same tokens as the original, in the same order, with the
   same spelling, except for the layout tokens this document names: newlines, semicolons that end a
-  statement, and trailing commas. It therefore parses to the same tree, and `ant run` and
-  `ant check` behave exactly as they did, error positions aside.
-- **Comments.** Every comment is kept, in order, with its text. Only the whitespace before it and
-  the indentation of its first line change.
+  statement, and trailing commas. A template string counts as its text pieces and the tokens of
+  its interpolations, so spacing inside `${...}` may change and nothing else in it does. It
+  therefore parses to the same tree, and `ant run` and `ant check` behave exactly as they did,
+  error positions aside.
+- **Comments.** Every comment is kept, in order, with its text. Only the whitespace before it, the
+  indentation of its first line, the spaces and tabs at the end of each of its lines, and its `\r\n`
+  line endings change (4.1).
 - **Idempotence.** Formatting a formatted file changes nothing.
 - **Locality.** The layout of a line depends only on its own tokens, the brackets it is inside, and
   the author's line breaks around it. Editing one function never reformats another.
@@ -65,9 +73,9 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
   Imports in particular are never sorted, since their order is the order modules are initialized
   (section 10).
 - **Spelling.** Identifiers, number literals (`0xFF`, `1_000`, `1e9`), string literals and their
-  escapes, regular expression literals and their flags, and template strings are printed exactly
-  as written. A template string is printed verbatim from its opening backtick to its closing one,
-  interpolations included.
+  escapes, regular expression literals and their flags, and the text of template strings are
+  printed exactly as written. Inside a template, only the code between `${` and `}` is formatted
+  (4.9).
 - **Parentheses.** Every pair of parentheses the author wrote is kept, even where precedence makes
   it redundant, and none is added.
 - **`else` placement.** `} else {` on one line and `else` at the start of the next line are both
@@ -77,13 +85,15 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 
 ### 4.1 Files
 
-- The output is UTF-8 with `\n` line endings. A `\r\n` or a lone `\r` line ending becomes `\n`,
-  except inside a template string, whose text is kept byte for byte. A byte order mark at the
-  start of the file is removed.
-- No line ends in spaces or tabs, except inside a template string.
+- The output is UTF-8 with `\n` line endings. A `\r\n` becomes `\n`, except inside a template
+  string, whose text is kept byte for byte. A lone `\r` is not a line ending: the lexer reads it
+  as a space (section 2), so between tokens it becomes the spacing this section prescribes, and
+  inside a comment it stays.
+- No line ends in spaces or tabs, except inside the text of a template string.
 - The file starts with its first token or comment, and ends with exactly one `\n`.
-- Indentation is two spaces per level and never a tab. A tab anywhere outside a string, template,
-  or comment becomes the spacing this section prescribes.
+- Indentation is two spaces per level and never a tab. A tab anywhere outside a string, the text
+  of a template, a regular expression literal, or a comment becomes the spacing this section
+  prescribes.
 
 ### 4.2 Blank lines
 
@@ -99,14 +109,18 @@ A block is the body of a `func`, an `if`, `else`, `while`, `for`, `go`, `defer`,
 block at indentation zero.
 
 A block is **flat** when the author wrote it on one line: no newline between its `{` and its `}`,
-outside the nested brackets of its statements. A flat block stays on one line, with one space
-inside each brace and `; ` between its statements: `{ n += 1; n }`. An empty block is `{}`.
+outside the nested brackets of its statements. A newline inside a block comment does not count, nor
+does one inside a template string; a line comment does, since it ends its line.
+
+A flat block stays on one line, with one space inside each brace and `; ` between its statements:
+`{ n += 1; n }`. An empty block is `{}`.
 
 Any other block is **broken**. Its `{` ends its line, each statement starts its own line one level
 deeper than the line that holds the `{`, and the `}` starts a line at that line's level. A
 semicolon that separates two statements of a broken block becomes a line break, so `a; b` on one
 line of a broken block becomes two lines. A semicolon at the end of a line, and an empty statement
-such as `;;`, are removed.
+such as `;;`, are removed; a semicolon followed only by a comment is at the end of its line, so
+`a; // c` becomes `a // c`.
 
 ```ant
 // before
@@ -133,16 +147,23 @@ Items are separated by commas, and a parenthesized expression has one item.
 
 A list is **broken** when the author wrote a newline between its opening bracket and its first
 item, between two of its items, or between its last item and its closing bracket. A newline inside
-an item, such as inside a lambda passed as an argument, does not break the list. Any other list is
-**flat**.
+an item, such as inside a lambda passed as an argument or after a binary operator within an
+item, does not break the list. Newlines inside block comments and template strings do not count.
+Any other list is **flat**.
 
-A flat list stays on one line. Its items are separated by `, `, and a trailing comma is removed.
+A flat list adds no line breaks. Its items are separated by `, `, and a trailing comma is removed.
+A line break the author wrote inside an item stays, indented as 4.5 says.
 
 A broken list puts each item on its own line, one level deeper than the line that holds the opening
-bracket. Every item, the last included, is followed by a comma, and the closing bracket starts a
-line at the level of the line that holds the opening one. A parenthesized expression is the
-exception: it takes no comma, since `(a,)` is not an expression, and its closing `)` follows its
-item when the author wrote it there.
+bracket, and the closing bracket starts a line at the level of the line that holds the opening one.
+The last item is followed by a comma wherever the grammar allows a trailing comma there (section 2,
+Line endings). It does not after the single expression of a parenthesized expression or an index,
+since `(a,)` and `xs[i,]` do not parse, nor after the rest position `...name` of a destructuring,
+which must be last.
+
+A comma goes directly after its item and before any comment that follows the item, so a trailing
+comma added to `a // c` gives `a, // c`, and a comma the author wrote at the start of a line, as in
+`f(a // c` followed by `, b)`, moves back to the end of `a`, before the comment.
 
 ```ant
 // before
@@ -177,11 +198,12 @@ it is broken and the comment takes the place of an item.
 
 ### 4.5 Continuation lines
 
-Outside brackets, an expression continues onto the next line where section 2 says it does: after a
-token that cannot end an expression, such as a binary operator, `=`, or `,`, or before a line that
-starts with `.`, `?.`, or `|`. Every continuation line of an expression is indented one level
-deeper than the line the expression starts on. The indentation does not grow with each
-continuation, so a pipeline's stages line up:
+A statement continues onto the next line where section 2 says it does: after a token that cannot
+end an expression, such as a binary operator, `=`, or `,`, or before a line that starts with `.`,
+`?.`, or `|`. An item of a list continues onto the next line wherever the author broke it, since
+newlines inside a list are ignored. Every continuation line of a statement or a list item is
+indented one level deeper than the line the statement or item starts on. The indentation does not
+grow with each continuation, so a pipeline's stages line up:
 
 ```ant
 var names = users
@@ -192,6 +214,9 @@ var names = users
 var total = subtotal +
   shipping +
   tax
+
+var r = (total
+  / count)
 ```
 
 A bracket opened on a continuation line indents its contents relative to that line, by the rules
@@ -201,7 +226,8 @@ of 4.3 and 4.4.
 
 An `else` that the author wrote after the `}` on the same line stays there, with one space on each
 side: `} else {`, `} else if c {`. An `else` that the author wrote at the start of a line starts a
-line at the level of the `if` it belongs to, which keeps chains of one-line branches readable:
+line at the level of the line that holds the `if` it belongs to, which keeps chains of one-line
+branches readable:
 
 ```ant
 if e is NoAccount { `no account named ${e.id}` }
@@ -209,8 +235,8 @@ else if e is Insufficient { `${e.id} is short by ${e.short}` }
 else { "unknown" }
 ```
 
-The same holds for the `else` clause of a `select`, which is always on its own line, as every
-clause is (section 5, `select`).
+The `else` clause of a `select` follows the same rule, placed against the line that holds the
+`select`'s previous clause.
 
 ### 4.7 Spacing
 
@@ -219,9 +245,9 @@ applies wins.
 
 | Between                                                                   | Spacing | Example                          |
 | ------------------------------------------------------------------------- | ------- | -------------------------------- |
-| an opening bracket and what follows it, except a flat block's `{`         | none    | `f(a)`, `[1, 2]`, `(a + b)`      |
-| what precedes a closing bracket and it, except a flat block's `}`         | none    | `f(a)`, `xs[i]`                  |
-| a flat block's or a flat brace list's `{` or `}` and its contents         | one     | `{ x * 2 }`, `Point{ x: 1.0 }`   |
+| a non-empty flat block's or flat brace list's `{` or `}` and its contents | one     | `{ x * 2 }`, `Point{ x: 1.0 }`   |
+| an opening bracket and what follows it                                    | none    | `f(a)`, `[1, 2]`, `(a + b)`      |
+| what precedes a closing bracket and it                                    | none    | `f(a)`, `xs[i]`, `Map{}`         |
 | a token and `,` `;` `:` `.` `?.`                                          | none    | `a, b`, `x: int`, `p.x`, `a?.b`  |
 | `,` `;` `:` and the next token                                            | one     | `f(a, b)`, `{ a; b }`            |
 | `.` `?.` `...` and the next token                                         | none    | `p.x`, `[head, ...tail]`         |
@@ -235,8 +261,8 @@ applies wins.
 | any other pair, such as a header and its `{`                              | one     | `if ready {`, `func f() {`       |
 
 A `-` is prefix when the token before it is not an operand, by the same rule that tells a regular
-expression from a division (section 2, Literals). `type` before a record type's `{` is a keyword
-and takes a space: `type P = { x: int }`.
+expression from a division (section 2, Literals). The `{` of a record type is not a literal's, so
+it takes the spacing of the token before it: `type P = { x: int }`, `Array[{ x: int }]`.
 
 ### 4.8 Comments
 
@@ -248,7 +274,8 @@ reindented; its other lines are kept as written, trailing spaces removed.
 A comment after code on the same line is a trailing comment. It keeps the column the author wrote
 it at, so that a column of aligned comments stays aligned, as long as at least one space then
 separates it from the code. When the code has grown past that column, one space separates them.
-A tab before a trailing comment counts as one column.
+Columns are counted in Unicode code points, not bytes, so non-ASCII text in a string does not shift
+the alignment; a tab before a trailing comment counts as one column.
 
 ```ant
 // before
@@ -263,9 +290,29 @@ Array.reverse(xs)                   // => [2, 1, 3]
 ```
 
 A block comment between two tokens of a line, as in `f(a, /* b */ c)`, takes the spacing of the
-token after it on its left and one space on its right. The text of a comment, including any space
-after `//`, is never changed, so the corpus's `// expect`, `// =>`, and `// ERR:` markers keep
-their meaning.
+token after it on its left and one space on its right. Apart from trailing whitespace and line
+endings (4.1), the text of a comment, including any space after `//`, is never changed, so the
+corpus's `// expect`, `// =>`, and `// ERR:` markers keep their meaning.
+
+### 4.9 Template strings
+
+The text of a template string, everything outside its interpolations, is kept byte for byte,
+including its line breaks, spaces, and tabs. The code inside each `${...}` is formatted as an
+expression, as TypeScript formatters do: its tokens take the spacing of 4.7, with no space after
+`${` or before `}`, and a lambda or record literal inside keeps its own inner spaces.
+
+```ant
+// before
+`total: ${ a+b } items, first ${Array.map(xs,{x*2})[0]}`
+
+// after
+`total: ${a + b} items, first ${Array.map(xs, { x * 2 })[0]}`
+```
+
+An interpolation adds no line breaks and removes none. Its code is not reindented, since the lines
+of a multi-line template belong to the string: a line break the author wrote inside `${...}` stays
+where it is, with its indentation as written. Comments inside an interpolation are kept as 4.8
+says.
 
 ## 5. What `ant fmt` does not do
 
@@ -273,14 +320,9 @@ their meaning.
 - It does not sort imports, declarations, or record fields.
 - It does not remove redundant parentheses, simplify expressions, or rename anything.
 - It does not align anything except by keeping the columns of trailing comments.
-- It does not format the code inside template interpolations, nor Ant code in Markdown files.
-- It has no options, no configuration file, and no way to turn it off for part of a file.
-
-## 6. Open questions
-
-- Whether `ant fmt` should also accept the top-level statements of the library tables
-  (`tests/stdlib`), which are not modules, or the corpus formats them through the test harness.
-- Whether a `--diff` flag that prints a unified diff instead of writing earns its place next to
-  `--check`.
-- Whether `ant check` should warn on an unformatted file, or that stays the job of
-  `ant fmt --check` in continuous integration.
+- It does not format Ant code in Markdown files.
+- It has no options beyond `--check`, no configuration file, and no way to turn it off for part of a
+  file. There is no diff output; `--check` names the files and `git diff` after a run shows the
+  changes.
+- It formats modules only. A file of top-level statements, such as the library tables in the test
+  corpus, is a syntax error, as it is for `ant run`.
