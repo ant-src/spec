@@ -80,14 +80,16 @@ Http.post(url: string, body: string, headers: Map[string, string] = Map{},
           timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
                                                                                   // request("POST", url, body, headers, timeout, ctx)
 Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Response,
-           ctx: Context | null = null): Result[void, Error]                       // ◆ a response status outside 100 to 599, in the handler's goroutine
+           ctx: Context | null = null): Result[void, Error]                       // ◆ a response status outside 200 to 599, in the handler's goroutine
 ```
 
 `request` sends one request with `method` as given, `GET`, `PUT`, `DELETE`, or any other token,
 `body` as its body, and `headers` as its headers, and reads the whole response. A response of any
-status is `Ok` with that `status`; `Err` is a failure to get one: a malformed `url`, no connection,
-the timeout, or the context. The response's headers hold one string per name, a repeated header
-joined with `, `. `get` and `post` are `request` with the method filled in.
+status is `Ok` with that `status`, a redirect included: no redirect is followed, so a 3xx comes
+back with its `Location` header, and a program that wants the next page asks for it. `Err` is a
+failure to get one: a malformed `url`, an empty `method`, no connection, the timeout, or the
+context. The response's headers hold one string per name, a repeated header joined with `, `.
+`get` and `post` are `request` with the method filled in.
 
 `timeout` bounds the whole call, from connecting to the end of the body, and when it passes the
 result is `Err` with the message `timeout`. The duration is taken as `Time.total` takes one without
@@ -102,12 +104,14 @@ the earlier wins: a one-off bound is a `timeout`, a bound shared with other work
 `serve` answers every request that arrives on `l` by calling `handler` on a goroutine of its own,
 as section 9's goroutines, and returns `Ok` once `ctx` is done and the requests in flight have
 finished, waiting at most five seconds for them before it closes their connections; with `null` it
-serves until the run is cancelled. It is `Err` when the listener is closed under it. A handler's
-panic is reported as a goroutine's panic is, and the client gets status 500 with an empty body; a
-response whose status is outside 100 to 599 is a ◆ in the handler's goroutine, which takes the same
-path. The `Http.Response` is sent as given, with `Content-Length` from the body. In the `Request`,
-`path` is decoded and `query` is raw, for `Url.parseQuery`; the headers hold one string per name,
-a repeated header joined with `, `; `remote` is `ip:port`. Bodies are read whole, as the client
+serves until the run is cancelled. The listener is closed once `serve` returns. It is `Err` when
+the listener is closed under it. A handler's panic is reported as a goroutine's panic is, and the
+client gets status 500 with an empty body; a response whose status is outside 200 to 599 is a ◆ in
+the handler's goroutine, which takes the same path, since a status below 200 is an interim
+response and cannot be sent as the final one. The `Http.Response` is sent as given, with
+`Content-Length` from the body. In the `Request`, `path` is decoded and `query` is raw, for
+`Url.parseQuery`; the headers hold one string per name, `Host` among them, a repeated header
+joined with `, `; `remote` is `ip:port`. Bodies are read whole, as the client
 reads them. Taking a listener rather than an address is what lets a program know its port, run the
 server on a goroutine, and talk to it:
 
@@ -141,7 +145,9 @@ Net.peer(f: File.Handle): string | null                          // the other en
 
 A connection is a `File.Handle`, so `File.readLine`, `readAll`, `writeLine`, `writeText`, `pipe`
 and `close` need nothing new, and a line protocol is a loop over `readLine`. A write to a
-connection is flushed, as `File` says. TCP only: there is no TLS, UDP or Unix socket.
+connection is flushed, as `File` says. Several goroutines may `accept` on one listener, each with
+a context of its own, and each connection goes to one of them. TCP only: there is no TLS, UDP or
+Unix socket.
 
 ## Path
 
