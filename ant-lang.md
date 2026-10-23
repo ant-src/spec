@@ -651,7 +651,9 @@ type arguments are invariant: `Result.err(NotFound{ id: from })` under an expect
 `Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it.
 Lambdas go last so that the other arguments have fixed the type their `x` depends on, which is also
 what lets an editor complete `x.` inside a lambda. A type parameter that nothing fixes is a compile
-error: annotate the result, or use `func` with annotated parameters.
+error: annotate the result, or use `func` with annotated parameters. Inside a generic function its
+own type parameters are types the caller chooses, so a call in its body binds nothing to them: a
+lambda whose body has another type is an error there, as `var t: T = 1` is.
 
 ```ant
 Array.map([1, 2, 3], { x * 2 })           // T = int from the array, U = int from the body
