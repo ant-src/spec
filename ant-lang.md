@@ -2219,7 +2219,7 @@ WaitGroup.wait(wg: WaitGroup, ctx: Context | null = null): void   // blocks unti
 
 Once.new(): Once
 Once.do[T](once: Once, f: func(): T): void                     // runs f the first time only and discards its value; later calls wait for it
-Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value
+Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value; it panics if that run was left by a return before f gave one
                                                                // for both: if f panics, the once is complete and every call, waiting or later, panics with the same message
 
 Cond.new(m: Mutex): Cond
