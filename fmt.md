@@ -308,9 +308,10 @@ Array.sum(xs)     // => 6
 var long = Array.map(xs, { x * 1000 }) // a lone comment
 ```
 
-Since a blank line is kept or removed only as 4.2 says, and a comment never moves to another line,
-formatting never joins a comment to a declaration or parts one from it: a doc comment (section 2)
-stays a doc comment, and a comment that documents nothing does not become one.
+A line comment on a line of its own stays on a line of its own, a trailing comment stays after its
+code, and at the top level a blank line is kept or removed only as 4.2 says, so formatting never
+joins a comment to a declaration or parts one from it: a doc comment (section 2) stays a doc
+comment, and a comment that documents nothing does not become one.
 
 A block comment between two tokens of a line, as in `f(a, /* b */ c)`, has one space on each
 side, except directly after an opening bracket, where it takes the bracket's own spacing:

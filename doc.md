@@ -15,16 +15,17 @@ ant doc <file.ant>          the exported declarations of a module
 ant doc <file.ant> <name>   one exported declaration of a module: Point, Point.distance
 ```
 
-A name is `Name` or `Owner.name`, matched as identifiers are, without regard to case. An argument
+A name is `Name` or `Owner.name`, matched as identifiers are, without regard to case. A `var` that
+destructures has no name of its own: a module lists it, but a name does not find it. An argument
 that ends in `.ant` is a module path; every other first argument is a prelude name. `ant doc` reads
 only the file it is given: it does not follow imports and does not run the checker, so a module with
 type errors is documented like any other. The file must parse as a module (section 10).
 
 For a single declaration, `ant doc` prints its signature as written in the source, followed by its
 doc comment with every non-empty line indented by four spaces. The signature of a `func` runs
-through its result type, of a `type` through its whole definition, and of a `var` through its
-annotation, leaving out the body or initializer. A declaration without a doc comment prints only its
-signature.
+through its result type, or its parameters when it has none, of a `type` through its whole
+definition, and of a `var` through its annotation, leaving out the body or initializer. A
+declaration without a doc comment prints only its signature.
 
 A name without a dot that is a namespace, or a type with functions declared on it, prints its own
 declaration, if it has one, as above, and then the signature of every declaration owned by it, one

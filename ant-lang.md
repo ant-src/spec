@@ -33,12 +33,14 @@ syntax error at that byte, so a string literal holds only scalar values (section
 
 Block comments do not nest.
 
-A doc comment is a run of line comments, each alone on its line, on consecutive lines that end on
-the line directly above a top-level `var`, `func`, or `type` declaration, or above the `export` that
-starts one. It documents that declaration. A blank line, a block comment, or a comment that follows
-code on its line ends the run, so a comment separated from a declaration by a blank line documents
-nothing, and neither does a trailing comment on the line before it. The doc is the run's text with
-each line's `//` and, when present, the one space after it removed. A doc comment means nothing to
+A doc comment is a run of line comments, each alone on its line, on consecutive lines, followed by
+a line break and then directly by a top-level `var`, `func`, or `type` declaration, or by the
+`export` that starts one, with nothing between but white space. It documents that declaration. A
+blank line, a block comment, or a comment that follows code on its line ends the run, so a comment
+separated from a declaration by a blank line documents nothing, and neither does a trailing comment
+on the line before it; in `var a = 1; var b = 2`, a doc comment above the line documents only `a`.
+The doc is the run's text with each line's `//`, the one space after it when present, and its
+trailing white space removed. A doc comment means nothing to
 `ant check` or `ant run`; editors and `ant doc` read it, and `doc.md` gives its conventions.
 
 ```ant
