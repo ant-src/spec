@@ -2051,8 +2051,8 @@ Iter.toArray[T](s: Seq[T]): Array[T]
 
 ```
 Math.abs[T: Number](x: T): T                                   // panics on the most negative integer, whose absolute value does not fit
-Math.min[T: Ordered](a: T, b: T): T
-Math.max[T: Ordered](a: T, b: T): T
+Math.min[T: Ordered](a: T, b: T): T                            // NaN when either is NaN
+Math.max[T: Ordered](a: T, b: T): T                            // NaN when either is NaN
 Math.pow(x: float64, y: float64): float64
 Math.sqrt(x: float64): float64
 Math.floor(x: float64): float64
