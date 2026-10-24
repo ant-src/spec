@@ -367,7 +367,8 @@ An arithmetic operator applies to two values of one named primitive type when it
 base, and the result has that type. A comparison on them is a plain `bool`, as is `==`, which
 follows the equality rule of section 5 and never panics. Mixing a tagged value with a plain one, or
 two different tags, in arithmetic or a comparison is a compile error and a kind panic. Library
-functions take the base kinds, so `String.length(id)` needs `string(id)`.
+functions take the base kinds, so `String.length(id)` needs `string(id)`, while `len(id)`, like the
+conversions, unwraps it (section 11, Prelude).
 
 In expression position `UserId` is its constructor, a function from the base type to `UserId`, in
 the checker as in the interpreter. The name binds a function value that carries the tag, so
@@ -1509,12 +1510,12 @@ Imports are live and read-only. `export var` is allowed; an imported name reads 
 module's current value each time, and assigning to an imported name or to a field of a namespace
 from outside the module is a compile error. Two imports binding the same local name, or a top-level
 declaration that shadows an imported name, are syntax errors, so every name in a file has one
-visible origin. The prelude names count as imports in every module: `print`, `panic`, the type and
-conversion names such as `int` and `Result`, and the namespaces. Unlike other imports, a prelude
-name cannot be shadowed in an inner scope either, so `int` and `x is int` mean one thing everywhere;
-the parser enforces it, since the prelude is a fixed list. There is no re-export. An import cycle is
-an error in both commands, since no module in it could be initialized after its imports: `ant run`
-stops before `main`.
+visible origin. The prelude names count as imports in every module: `print`, `panic`, `len`, the
+type and conversion names such as `int` and `Result`, and the namespaces. Unlike other imports, a
+prelude name cannot be shadowed in an inner scope either, so `int` and `x is int` mean one thing
+everywhere; the parser enforces it, since the prelude is a fixed list. There is no re-export. An
+import cycle is an error in both commands, since no module in it could be initialized after its
+imports: `ant run` stops before `main`.
 
 Imports are resolved depth first in source order, and each module is initialized once, after
 everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may
@@ -1568,12 +1569,21 @@ panic(message: string): never
 int8[T: Number](x: T): int8                      // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
 string(x): string                                // x is a string or a named primitive over string: the payload
 bool(x): bool                                    // likewise
+len(x): int                                      // x is an array, a map, a set, a string, or a channel: its size
 ```
 
 The twelve conversion names are built into the checker. The signatures give their shape; each also
 accepts a value of a named primitive type whose base is a kind it takes, and unwraps it, so
 `int(count)` works on a `Count` declared over `int` although `Count` is not assignable to `Number`
 (section 4, Named primitive types).
+
+`len` is built into the checker as well. It counts an array's elements, a map's entries, a set's
+members, a string's code points (as `String.length` does), and the values a channel buffers now (as
+`Channel.length` does). It also accepts a named primitive over `string` and unwraps it, as the
+conversions do, and a union or a bounded type parameter whose every member it accepts. Any other
+argument is a compile error. As a value, `len` takes its parameter type from the function type
+expected, which must be one of these, so `Array.map(words, len)` is an `Array[int]`. The namespace
+functions stay; `len(xs)` and `Array.length(xs)` are the same count.
 
 ### Array
 
@@ -2220,6 +2230,7 @@ can only panic in the ways the last column lists, which depend on values known a
 | `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                       | the count is negative or not below the operand's width                                                                                           |
 | numeric conversion                                |                                                                                                                                                                                                                                                       | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                               |
 | `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                   |                                                                                                                                                  |
+| `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, or a channel                                                                                                                                                                 |                                                                                                                                                  |
 | `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                              |                                                                                                                                                  |
 | `a[i]`, `a[i] = v`                                | `a` is neither an array nor a map                                                                                                                                                                                                                     | `a` is an array and `i` is not an `int` from `0` up to but excluding the length                                                                  |
 | call                                              | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |                                                                                                                                                  |
