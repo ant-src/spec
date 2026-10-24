@@ -1712,8 +1712,17 @@ for line in lines {
 
 A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear,
 so a loop over indices would be quadratic, and indexing by byte would be a trap. Lengths, indices,
-and slices count code points, `for` iterates them (section 5), `String.toCodePoints` gives them as
-integers, and `String.toBytes` gives the bytes.
+and slices count code points, `for` iterates them (section 5), `String.chars` gives them as an array
+to index, `String.toCodePoints` gives them as integers, and `String.toBytes` gives the bytes. There
+is no character type: a character is a string of one code point. What a reader sees as one
+character can be several code points, such as an `e` followed by a combining accent, or a family
+emoji joined from three people; `String.graphemes` splits text into those units, and
+`String.normalize` brings the two spellings of `é` to one.
+
+Every string holds only scalar values. Text that reaches a program as a `string` from outside it, a
+file, standard input, a network peer, an argument, or the environment, is decoded as UTF-8 with
+each invalid sequence replaced by U+FFFD, as Unicode recommends; a program that must keep the bytes
+as they were reads them as `Array[byte]`, and `String.fromBytes` tells it whether they are text.
 
 ```
 type Cut = { before: string, after: string }                   // the two sides of String.cut
@@ -1743,16 +1752,31 @@ String.replaceFirst(s: string, old: string, new: string): string   // the first 
 String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; panics if sep is empty
 String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
 String.lines(s: string): Array[string]                         // split at \n, a \r before it dropped; no empty final line
-String.toUpper(s: string): string
-String.toLower(s: string): string
-String.isDigit(s: string): bool                                // every code point is a decimal digit; false on ""
-String.isLetter(s: string): bool                               // every code point is a letter; false on ""
-String.isSpace(s: string): bool                                // every code point is white space; false on ""
-String.isUpper(s: string): bool                                // every code point is an upper-case letter; false on ""
-String.isLower(s: string): bool                                // every code point is a lower-case letter; false on ""
+String.toUpper(s: string): string                              // the full mappings, so "straße" gives "STRASSE"
+String.toLower(s: string): string                              // likewise
+String.foldCase(s: string): string                             // the full case folding: a key in which case does not matter
+String.equalFold(a: string, b: string): bool                   // String.foldCase(a) == String.foldCase(b)
+String.normalize(s: string, form: string): string              // form is "NFC", "NFD", "NFKC", or "NFKD"; panics on another
+String.isDigit(s: string): bool                                // every code point is a decimal digit, Nd; false on ""
+String.isLetter(s: string): bool                               // every code point is a letter, L; false on ""
+String.isNumber(s: string): bool                               // every code point is a number, N: Nd, Nl such as Ⅻ, or No such as ½; false on ""
+String.isSpace(s: string): bool                                // every code point is white space, the White_Space property; false on ""
+String.isUpper(s: string): bool                                // every code point is an upper-case letter, Lu; false on ""
+String.isLower(s: string): bool                                // every code point is a lower-case letter, Ll; false on ""
+String.isPunct(s: string): bool                                // every code point is punctuation, P; false on ""
+String.isSymbol(s: string): bool                               // every code point is a symbol, S; false on ""
+String.isMark(s: string): bool                                 // every code point is a mark, M, such as a combining accent; false on ""
+String.isControl(s: string): bool                              // every code point is a control character, Cc; false on ""
+String.isGraphic(s: string): bool                              // every code point is in L, M, N, P, S, or Zs; false on ""
+String.isPrint(s: string): bool                                // every code point is in L, M, N, P, or S, or is the space U+0020; false on ""
+String.category(c: string): string                             // the two-letter general category of c, such as "Lu"; "Cn" when unassigned; panics unless c is one code point
+String.inScript(c: string, script: string): bool               // whether c has the Script property script; panics unless c is one code point, or if script names no script
 String.chars(s: string): Array[string]                         // one code point each
+String.graphemes(s: string): Array[string]                     // one extended grapheme cluster of Unicode's UAX #29 each
 String.toBytes(s: string): Array[byte]                         // UTF-8
 String.fromBytes(bytes: Array[byte]): string | null            // null on invalid UTF-8
+String.codePoint(c: string): int                               // the scalar value of c; panics unless c is one code point
+String.fromCodePoint(n: int): string | null                    // the string of the one code point n; null when n is not a scalar value
 String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
 String.fromCodePoints(points: Array[int]): string | null       // null when a value is not a scalar value
 String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
@@ -1760,21 +1784,62 @@ String.toFloat(s: string): float64 | null
 String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; panics if base is outside 2 ..= 36
 String.fromFloat(x: float64, digits: int): string              // fixed point with digits decimals, rounded half to even; panics if digits < 0
 String.from[T](value: T): string
+String.unicodeVersion: string                                  // the version of the Unicode tables, such as "17.0.0"
 ```
 
 The padding of `padStart` and `padEnd` is `pad` repeated and cut to the code points `s` lacks, so
 `String.padStart("7", 4, "ab")` is `"aba7"`, and a string already at or beyond `width` comes back
 unchanged. `String.lines` splits the text `File.read` gives at every `\n`, drops a `\r` just before
 one, and omits the piece after the last `\n` when it is empty: `"a\r\nb\n"` gives `["a", "b"]`,
-`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is
-`String.Cut{ before: "k", after: "v=w" }`. The class tests take a string because Ant has no
-character type: `for c in s` yields one-code-point strings, so `String.isDigit(c)` tests a
-character, and `String.isDigit(s)` tests that a whole field is digits. The letters of a base above
-ten are `a` to `z`, which `toInt` accepts in either case. `fromInt` writes an unsigned value as the
-number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` of `NaN` or an
-infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
-`String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a
-format string would give; there is no format string.
+`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is `String.Cut{ before: "k",
+after: "v=w" }`. The class tests take a string because Ant has no character type: `for c in s`
+yields one-code-point strings, so `String.isDigit(c)` tests a character, and `String.isDigit(s)`
+tests that a whole field is digits. Each names the Unicode general categories or property it
+follows. A decimal digit is one in any script, `٣` among them, while `toInt` reads only `0` to `9`
+and the letters of a base above ten, `a` to `z`, which it accepts in either case; so
+`String.isDigit("٣")` is `true` and `String.toInt("٣")` is `null`. `fromInt` writes an unsigned
+value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` of `NaN`
+or an infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
+`String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
+string would give; there is no format string.
+
+`category`, `inScript`, and `codePoint` ask about one character, so they panic on any other string.
+A script is named as in Unicode's `Scripts.txt`, in full: `"Latin"`, `"Han"`, `"Cyrillic"`,
+`"Common"`, `"Old_Italic"`; a short code such as `"Latn"` panics. Digits and punctuation are in the
+script `Common`, so a test for letters of a foreign script runs per character:
+
+```ant
+func mixesScripts(host: string): bool {
+  var latin = false
+  var cyrillic = false
+  for c in host {
+    if String.inScript(c, "Latin") { latin = true }
+    if String.inScript(c, "Cyrillic") { cyrillic = true }
+  }
+  latin && cyrillic                     // true for "pаypal.com", whose second letter is Cyrillic
+}
+```
+
+`toUpper` and `toLower` apply Unicode's full case mappings that hold in every language, so a string
+can change length: `String.toUpper("ß")` is `"SS"`. The mappings depend on context, as the Greek
+sigma does at the end of a word, so a string is mapped whole, not one character at a time:
+`String.toLower("ΣΟΦΟΣ")` is `"σοφος"`, while mapping each character gives `"σοφοσ"`. The rules for
+Turkish and Lithuanian, which depend on the language, are not applied, so `String.toLower("İ")` is
+`"i\u{307}"`, an `i` and a combining dot. `foldCase` maps every case variant of a string to one
+form, so it is the key for grouping or deduplicating text without regard to case:
+`String.foldCase("Straße")` and `String.foldCase("STRASSE")` are both `"strasse"`. Neither it nor
+`==` normalizes: `"\u{E9}" == "e\u{301}"` is `false`, and text that can arrive in either spelling
+is compared or keyed after `String.normalize(s, "NFC")`. `normalize` takes the four forms of
+Unicode's UAX #15; `NFKD` also splits an accent from its letter, so dropping the code points that
+`isMark` accepts strips accents.
+
+Code point indices can cut through what a reader sees as one character. `String.slice` can end
+inside an emoji, and reversing `String.chars` moves an accent onto another letter and turns the
+flag 🇨🇭 into 🇭🇨. `String.graphemes("👨‍👩‍👧e\u{301}")` is the two strings `"👨‍👩‍👧"` and
+`"e\u{301}"`, so text cut, reversed, or counted for display goes through `graphemes`. Grapheme
+splitting, normalization, case mapping, and the class tests follow the Unicode version
+`String.unicodeVersion` names; a code point that a later version assigns is unassigned, `"Cn"`,
+until the implementation moves to that version.
 
 `String.from` renders any value. `print`, `println` and template strings use it, so this is the format a
 program's output has. It is the only function the language calls implicitly, and only inside
@@ -1784,8 +1849,12 @@ template strings.
   value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
   below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. The
   non-finite values render as `NaN`, `Infinity`, and `-Infinity`.
-- A string renders as itself at the top level and quoted with escapes inside a container. `bool`,
-  `null`, and `void` render as their literals.
+- A string renders as itself at the top level and quoted with escapes inside a container. Inside
+  the quotes, `"` and `\` are escaped, `\n`, `\t`, and `\r` are written so, and every other code
+  point that `String.isPrint` rejects, such as a control character, a non-breaking space, a
+  zero-width joiner, or a bidirectional override, is written `\u{...}` in lower-case hexadecimal.
+  The rendering shows every code point that is there and reads back as a literal. `bool`, `null`,
+  and `void` render as their literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
   call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
   their tag and the fields in declaration order. Entries are separated by `, `. An empty array, map,
