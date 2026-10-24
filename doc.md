@@ -29,7 +29,9 @@ declaration without a doc comment prints only its signature.
 
 A name without a dot that is a namespace, or a type with functions declared on it, prints its own
 declaration, if it has one, as above, and then the signature of every declaration owned by it, one
-after another in source order. A module prints the signature of each exported declaration in source
+after another in source order. A namespace of the standard library without a type of its name, such
+as `Array` or `Time`, has a doc of its own, which stands in for the declaration: its name, then its
+doc indented. A module prints the signature of each exported declaration in source
 order.
 
 | Exit status | When                                                                  |
