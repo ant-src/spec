@@ -1672,8 +1672,8 @@ Array.min[T: Ordered](xs: Array[T]): T | null                  // null when empt
 Array.max[T: Ordered](xs: Array[T]): T | null
 Array.minBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first element with the least key
 Array.maxBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first with the greatest
-Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending, stable
-Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]   // ascending by key, stable
+Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending, stable; NaN after every number
+Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]   // ascending by key, stable; a NaN key after every number
 Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b; stable
 Array.reverse[T](xs: Array[T]): Array[T]
 Array.unique[T](xs: Array[T]): Array[T]                        // the first of each == value, in order
