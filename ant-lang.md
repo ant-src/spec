@@ -21,7 +21,8 @@ language as a programmer sees it, not the compiler or the runtime.
 
 ## 2. Lexical structure
 
-Source files are UTF-8 text with the extension `.ant`.
+Source files are UTF-8 text with the extension `.ant`. A byte that begins no UTF-8 character is a
+syntax error at that byte, so a string literal holds only scalar values (section 11, String).
 
 ### Comments
 
@@ -1810,7 +1811,8 @@ string would give; there is no format string.
 
 `category`, `inScript`, and `codePoint` ask about one character, so they panic on any other string.
 A script is named as in Unicode's `Scripts.txt`, in full: `"Latin"`, `"Han"`, `"Cyrillic"`,
-`"Common"`, `"Old_Italic"`. A name the tables do not know panics, so a typo such as `"latin"` or a
+`"Common"`, `"Old_Italic"`, and `"Unknown"`, the script of every code point no other script holds,
+the unassigned among them. A name the tables do not know panics, so a typo such as `"latin"` or a
 short code such as `"Latn"` is caught where it is written; so does a script that a later Unicode
 version adds, until the implementation moves to that version. The test reads the Script property,
 not Script_Extensions, so a character that several scripts share, such as the Japanese long-vowel
