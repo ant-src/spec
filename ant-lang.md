@@ -1720,9 +1720,11 @@ emoji joined from three people; `String.graphemes` splits text into those units,
 `String.normalize` brings the two spellings of `é` to one.
 
 Every string holds only scalar values. Text that reaches a program as a `string` from outside it, a
-file, standard input, a network peer, an argument, or the environment, is decoded as UTF-8 with
-each invalid sequence replaced by U+FFFD, as Unicode recommends; a program that must keep the bytes
-as they were reads them as `Array[byte]`, and `String.fromBytes` tells it whether they are text.
+file, standard input, a network peer, an argument, the environment, or a child process, is decoded
+as UTF-8 with each maximal subpart of an ill-formed sequence replaced by U+FFFD, as Unicode
+recommends and the WHATWG Encoding standard does: the bytes `FF FE` become two U+FFFD, and `E2 82`,
+a euro sign cut short, one. A program that must keep the bytes as they were reads them as
+`Array[byte]`, and `String.fromBytes` tells it whether they are text.
 What the host gives only as text has no such form: `Os.args`, `Os.env`, `Os.environ`, and the names
 `File.list` and `File.walk` return. A file name that is not UTF-8, which some file systems allow,
 comes back with U+FFFD in it, and a path built from that name does not reach the file.
