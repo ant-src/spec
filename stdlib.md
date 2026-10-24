@@ -123,10 +123,10 @@ func handle(req: Http.Request): Http.Response {
 
 func main(): void {
   var listener = Result.unwrap(Net.listen(":8080"))
-  print(`listening on ${Net.address(listener)}`)
+  println(`listening on ${Net.address(listener)}`)
   var stop = Os.interrupt()
   var served = Http.serve(listener, handle, stop)
-  print(`stopped: ${Context.reason(stop) ?? "?"}`)
+  println(`stopped: ${Context.reason(stop) ?? "?"}`)
 }
 ```
 
@@ -507,7 +507,7 @@ Os.exec(program: string, args: Array[string] = [], dir: string | null = null,
         env: Map[string, string] | null = null, stdin: string = "",
         ctx: Context | null = null): Result[Os.Output, Error]
 Os.stdin(): File.Handle               // the program's standard input
-Os.stdout(): File.Handle              // its standard output, which print writes to as well
+Os.stdout(): File.Handle              // its standard output, which print and println write to as well
 Os.stderr(): File.Handle              // its standard error
 Os.interrupt(): Context               // done when the process is interrupted; the same context at every call
 ```
@@ -535,8 +535,8 @@ nothing, as a shell does for a process a signal ended.
 
 The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.stdin())`,
 `File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new.
-`Os.stdout()` and `print` write to one buffer, so their output interleaves in program order, and
-a read of standard input flushes it first, so a prompt is seen before the program waits.
+`Os.stdout()`, `print` and `println` write to one buffer, so their output interleaves in program
+order, and a read of standard input flushes it first, so a prompt is seen before the program waits.
 `File.close` on a stream does nothing. In the REPL standard input belongs to the REPL, and
 `Os.stdin()` is at end of file.
 

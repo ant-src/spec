@@ -61,8 +61,8 @@ keyword or reserved word is a plain name. So `event.type`, `{ type: string }`, a
 JavaScript. The shorthands `Map{ type }` and `var { type } = event` would read or bind a variable
 named `type`, which cannot exist, so they are errors; write `var { type: kind } = event`.
 
-`Array`, `Map`, `Set`, `Result`, `never`, `print`, `panic`, and the other standard library names are
-ordinary identifiers bound by the prelude, not keywords.
+`Array`, `Map`, `Set`, `Result`, `never`, `println`, `panic`, and the other standard library names
+are ordinary identifiers bound by the prelude, not keywords.
 
 ### Literals
 
@@ -496,7 +496,7 @@ func area(s: Shape): float64 {
   else if s is Empty { 0.0 }
 }
 
-if s is Circle { print(s.radius) }
+if s is Circle { println(s.radius) }
 ```
 
 The chain in `area` has no final `else` and still has type `float64`: after the third test `s` has
@@ -820,7 +820,7 @@ for user in users {
 }
 
 for { key, value } in ages {  // destructures each Entry[string, int]
-  print(`${key}: ${value}`)
+  println(`${key}: ${value}`)
 }
 
 for i in Iter.range(0, 10) { ... }
@@ -846,7 +846,7 @@ func evens(limit: int): Seq[int] {
   }
 }
 
-for n in evens(10) { print(n) }
+for n in evens(10) { println(n) }
 Iter.range(0, 1000) | Iter.filter({ x % 7 == 0 }) | Iter.take(5) | Iter.toArray()
 ```
 
@@ -856,7 +856,7 @@ A `select` waits for the first of several things, with a block for each:
 
 ```ant
 select {
-  var line = Channel.receive(lines) { print(line ?? "closed") }
+  var line = Channel.receive(lines) { println(line ?? "closed") }
   Channel.send(out, batch) { batch = [] }
   Time.sleep(Time.duration(seconds: 1)) { flush() }
   Context.wait(ctx) { return }
@@ -922,8 +922,8 @@ var { address: { city } } = user
 var [first, second] = xs             // panics when xs has fewer than two elements
 var [head, ...tail] = xs             // tail is a new array; panics only when xs is empty
 var [_, y] = pair
-for { key, value } in ages { print(`${key}: ${value}`) }
-for [a, b] in pairs { print(a + b) }
+for { key, value } in ages { println(`${key}: ${value}`) }
+for [a, b] in pairs { println(a + b) }
 ```
 
 An array destructuring is also an assignment target. Its positions are assignable places or nested
@@ -1093,7 +1093,7 @@ var city = user?.address?.city          // string | null: null if any link is nu
 var label = user?.name ?? "anonymous"   // string: right side when left is null
 
 if user != null {
-  print(user.name)                      // user: User here
+  println(user.name)                    // user: User here
 }
 ```
 
@@ -1144,18 +1144,18 @@ block, and the rule has two directions:
 ```ant
 var user = find(id)                          // User | null, never reassigned
 if user != null {
-  Mutex.withLock(lock, { print(user.name) })  // ok: user keeps its narrowing
+  Mutex.withLock(lock, { println(user.name) })  // ok: user keeps its narrowing
 }
 
 var hit: User | null = null
 go { hit = find(id) }                        // assigned in a go block
-if hit != null { print(hit.name) }           // compile error: hit never narrows
+if hit != null { println(hit.name) }         // compile error: hit never narrows
 ```
 
 ```ant
-if user.address != null { print(user.address.city) }   // compile error: a path does not narrow
+if user.address != null { println(user.address.city) }   // compile error: a path does not narrow
 var address = user.address
-if address != null { print(address.city) }             // ok
+if address != null { println(address.city) }             // ok
 ```
 
 ## 8. Errors
@@ -1187,11 +1187,11 @@ func parseInt(s: string): Result[int, ParseError] {
 }
 
 var parsed = parseInt(input)
-if parsed is Ok { print(`parsed ${parsed.value}`) }
+if parsed is Ok { println(`parsed ${parsed.value}`) }
 else {
   var error = parsed.error                 // parsed: Err[ParseError] here
-  if error is EmptyInput { print("nothing to parse") }
-  else { print(`bad digit at ${error.at}`) }   // error: BadDigit here
+  if error is EmptyInput { println("nothing to parse") }
+  else { println(`bad digit at ${error.at}`) }   // error: BadDigit here
 }
 ```
 
@@ -1444,16 +1444,16 @@ var results: Array[Result[Http.Response, Error] | null] = Array.filled(n, null)
 go { results[i] = Http.get(url) }            // an index write, not a reassignment
 WaitGroup.wait(wg)
 var r = results[i]                           // a snapshot
-if r != null && r is Ok { print(r.value.status) }
+if r != null && r is Ok { println(r.value.status) }
 
 var latest: Atomic[Result[Http.Response, Error] | null] = Atomic.new(null)
 go { Atomic.store(latest, Http.get(url)) }
 WaitGroup.wait(wg)
 var v = Atomic.load(latest)
-if v != null && v is Ok { print(v.value.status) }
+if v != null && v is Ok { println(v.value.status) }
 
 var config = Once.value({ load() })          // lazy initialization without a nullable variable
-print(config().name)
+println(config().name)
 ```
 
 ### Panics in goroutines
@@ -1510,12 +1510,12 @@ Imports are live and read-only. `export var` is allowed; an imported name reads 
 module's current value each time, and assigning to an imported name or to a field of a namespace
 from outside the module is a compile error. Two imports binding the same local name, or a top-level
 declaration that shadows an imported name, are syntax errors, so every name in a file has one
-visible origin. The prelude names count as imports in every module: `print`, `panic`, `len`, the
-type and conversion names such as `int` and `Result`, and the namespaces. Unlike other imports, a
-prelude name cannot be shadowed in an inner scope either, so `int` and `x is int` mean one thing
-everywhere; the parser enforces it, since the prelude is a fixed list. There is no re-export. An
-import cycle is an error in both commands, since no module in it could be initialized after its
-imports: `ant run` stops before `main`.
+visible origin. The prelude names count as imports in every module: `print`, `println`, `panic`,
+`len`, the type and conversion names such as `int` and `Result`, and the namespaces. Unlike other
+imports, a prelude name cannot be shadowed in an inner scope either, so `int` and `x is int` mean
+one thing everywhere; the parser enforces it, since the prelude is a fixed list. There is no
+re-export. An import cycle is an error in both commands, since no module in it could be initialized
+after its imports: `ant run` stops before `main`.
 
 Imports are resolved depth first in source order, and each module is initialized once, after
 everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may
@@ -1564,7 +1564,8 @@ type Integer = int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 type Number = Integer | float32 | float64
 type Ordered = Number | string
 
-print[T](value: T): void                         // String.from(value) and a newline to standard output
+print[T](value: T): void                         // String.from(value) to standard output
+println[T](value: T): void                       // String.from(value) and a newline; println() writes only the newline
 panic(message: string): never
 int8[T: Number](x: T): int8                      // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
 string(x): string                                // x is a string or a named primitive over string: the payload
@@ -1584,6 +1585,10 @@ conversions do, and a union or a bounded type parameter whose every member it ac
 argument is a compile error. As a value, `len` takes its parameter type from the function type
 expected, which must be one of these, so `Array.map(words, len)` is an `Array[int]`. The namespace
 functions stay; `len(xs)` and `Array.length(xs)` are the same count.
+
+`println` is built into the checker too, so that it may be called with no argument, which writes an
+empty line. `print` writes no newline, so a prompt or a progress dot needs nothing else; output is
+buffered and flushed when the program reads standard input, blocks, or exits (stdlib.md, Os).
 
 ### Array
 
@@ -1699,7 +1704,7 @@ each value needs no separate test:
 ```ant
 var seen: Set[string] = Set.of([])
 for line in lines {
-  if Set.add(seen, line) { print(line) }
+  if Set.add(seen, line) { println(line) }
 }
 ```
 
@@ -1771,7 +1776,7 @@ infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a
 format string would give; there is no format string.
 
-`String.from` renders any value. `print` and template strings use it, so this is the format a
+`String.from` renders any value. `print`, `println` and template strings use it, so this is the format a
 program's output has. It is the only function the language calls implicitly, and only inside
 template strings.
 
@@ -2303,14 +2308,14 @@ func main() {
   accounts[linus] = Account{ id: linus, owner: "linus", balance: 20.0, status: Suspended{ reason: "audit" } }
 
   var result = transfer(accounts, ada, linus, 50.0)
-  if result is Ok { print("ok") }
+  if result is Ok { println("ok") }
   else {
     var error = result.error
-    if error is NotFound { print(`unknown account ${int(error.id)}`) }
-    else if error is Insufficient { print(`short by ${error.needed}`) }
-    else { print(`account ${int(error.id)} is suspended: ${error.reason}`) }
+    if error is NotFound { println(`unknown account ${int(error.id)}`) }
+    else if error is Insufficient { println(`short by ${error.needed}`) }
+    else { println(`account ${int(error.id)} is suspended: ${error.reason}`) }
   }
 
-  print(report(accounts))
+  println(report(accounts))
 }
 ```
