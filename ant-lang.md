@@ -1728,7 +1728,8 @@ a euro sign cut short, one. A program that must keep the bytes as they were read
 `Array[byte]`, and `String.fromBytes` tells it whether they are text.
 What the host gives only as text has no such form: `Os.args`, `Os.env`, `Os.environ`, and the names
 `File.list` and `File.walk` return. A file name that is not UTF-8, which some file systems allow,
-comes back with U+FFFD in it, and a path built from that name does not reach the file.
+comes back with U+FFFD in it, and a path built from that name does not reach the file. Two names
+that differ only in such bytes become one, so `Os.environ` then holds one of the two variables.
 
 ```
 type Cut = { before: string, after: string }                   // the two sides of String.cut
