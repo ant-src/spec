@@ -1657,8 +1657,8 @@ Array.max[T: Ordered](xs: Array[T]): T | null
 Array.minBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first element with the least key
 Array.maxBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first with the greatest
 Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending, stable
-Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]
-Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b
+Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]   // ascending by key, stable
+Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b; stable
 Array.reverse[T](xs: Array[T]): Array[T]
 Array.unique[T](xs: Array[T]): Array[T]                        // the first of each == value, in order
 Array.uniqueBy[T, K](xs: Array[T], key: func(T): K): Array[T]  // the first of each == key, in order
@@ -1818,7 +1818,7 @@ String.fromCodePoint(n: int): string | null                    // the string of 
 String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
 String.fromCodePoints(points: Array[int]): string | null       // null when a value is not a scalar value
 String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
-String.toFloat(s: string): float64 | null
+String.toFloat(s: string): float64 | null                     // a decimal number, below; null otherwise
 String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; panics if base is outside 2 ..= 36
 String.fromFloat(x: float64, digits: int): string              // fixed point with digits decimals, rounded half to even; panics if digits < 0
 String.from[T](value: T): string
@@ -1835,7 +1835,13 @@ yields one-code-point strings, so `String.isDigit(c)` tests a character, and `St
 tests that a whole field is digits. Each names the Unicode general categories or property it
 follows. A decimal digit is one in any script, `٣` among them, while `toInt` reads only `0` to `9`
 and the letters of a base above ten, `a` to `z`, which it accepts in either case; so
-`String.isDigit("٣")` is `true` and `String.toInt("٣")` is `null`. `fromInt` writes an unsigned
+`String.isDigit("٣")` is `true` and `String.toInt("٣")` is `null`. A number that does not fit an
+`int` is `null` too. `toFloat` reads ASCII decimal digits with an optional sign, an optional
+fraction after `.`, and an optional exponent after `e` or `E` with its own optional sign, so `-1.5`,
+`.5`, `5.`, and `1e+3` are numbers; it rounds to the nearest `float64`, so a tiny value is `0.0`,
+and returns `null` on a value beyond the range of `float64` and on anything else: white space,
+`_`, a prefix such as `0x`, and `Infinity` and `NaN`, which `String.from` writes but which are not
+numbers to parse. `fromInt` writes an unsigned
 value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` of `NaN`
 or an infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
@@ -2017,7 +2023,7 @@ Lazy sequences (section 5, Loops). Every function here returns a new `Seq` witho
 source; `Iter.toArray` and `for` run it. A sequence may be run more than once if its source allows.
 
 ```
-Iter.range(from: int, to: int): Seq[int]                       // from inclusive, to exclusive
+Iter.range(from: int, to: int): Seq[int]                       // from inclusive, to exclusive; empty when to <= from
 Iter.fromArray[T](xs: Array[T]): Seq[T]
 Iter.map[T, U](s: Seq[T], f: func(T): U): Seq[U]
 Iter.filter[T](s: Seq[T], f: func(T): bool): Seq[T]
@@ -2117,9 +2123,9 @@ Mutex.unlock(m: Mutex): void                                   // panics if m is
 Mutex.withLock[T](m: Mutex, f: func(): T): T
 
 RwMutex.new(): RwMutex
-RwMutex.readLock(m: RwMutex): void
+RwMutex.readLock(m: RwMutex): void                             // blocks while a writer holds m
 RwMutex.readUnlock(m: RwMutex): void                           // panics if m is not read-locked
-RwMutex.writeLock(m: RwMutex): void
+RwMutex.writeLock(m: RwMutex): void                            // blocks while any reader or writer holds m
 RwMutex.writeUnlock(m: RwMutex): void                          // panics if m is not write-locked
 RwMutex.withRead[T](m: RwMutex, f: func(): T): T
 RwMutex.withWrite[T](m: RwMutex, f: func(): T): T
@@ -2136,8 +2142,8 @@ Once.value[T](f: func(): T): func(): T                         // the returned f
 
 Cond.new(m: Mutex): Cond
 Cond.wait(c: Cond): void                                       // releases m, waits, reacquires; panics if m is not locked
-Cond.signal(c: Cond): void
-Cond.broadcast(c: Cond): void
+Cond.signal(c: Cond): void                                     // wakes one goroutine waiting on c, if any
+Cond.broadcast(c: Cond): void                                  // wakes every goroutine waiting on c
 
 Atomic.new[T](v: T): Atomic[T]
 Atomic.load[T](a: Atomic[T]): T

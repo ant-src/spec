@@ -25,22 +25,22 @@ type Info = { name: string, size: int, isDir: bool, modified: Time.Instant }
 
 File.read(path: string): Result[string, Error]
 File.readBytes(path: string): Result[Bytes, Error]
-File.write(path: string, text: string): Result[void, Error]
-File.writeBytes(path: string, bytes: Bytes): Result[void, Error]
-File.exists(path: string): bool
+File.write(path: string, text: string): Result[void, Error]   // creates the file, or replaces what it held
+File.writeBytes(path: string, bytes: Bytes): Result[void, Error]   // likewise
+File.exists(path: string): bool                            // anything at path, a directory included
 File.stat(path: string): Result[File.Info, Error]
 File.remove(path: string): Result[void, Error]             // one file, or an empty directory
 File.removeAll(path: string): Result[void, Error]          // a whole tree; Ok when there is nothing to remove
 File.rename(from: string, to: string): Result[void, Error]
 File.mkdir(path: string): Result[void, Error]              // with its parents; Ok when it exists
-File.tempDir(prefix: string): Result[string, Error]        // a fresh directory under the host's temporary directory
-File.list(dir: string): Result[Array[string], Error]       // the names in dir
+File.tempDir(prefix: string): Result[string, Error]        // a fresh directory under the host's temporary directory, named prefix and a random suffix
+File.list(dir: string): Result[Array[string], Error]       // the names in dir, in lexical order
 File.walk(dir: string): Result[Array[string], Error]       // every file below dir, as paths relative to it
 
 File.open(path: string): Result[File.Handle, Error]        // for reading
 File.create(path: string): Result[File.Handle, Error]      // for writing; truncates
 File.append(path: string): Result[File.Handle, Error]      // for writing at the end; creates
-File.readLine(f: File.Handle, ctx: Context | null = null): Result[string | null, Error]   // null at end of file
+File.readLine(f: File.Handle, ctx: Context | null = null): Result[string | null, Error]   // the line without its \n or \r\n; null at end of file
 File.readAll(f: File.Handle, ctx: Context | null = null): Result[string, Error]           // the rest of the file
 File.writeLine(f: File.Handle, line: string): Result[void, Error]
 File.writeText(f: File.Handle, text: string): Result[void, Error]   // writeLine without the newline
@@ -64,7 +64,7 @@ line and the body after it as bytes. `readChunk` returns as soon as there is any
 least one byte and at most `max`, and waits only while there is nothing; it is the read for a stream
 whose pieces have no fixed size. `readExactly` waits for all `n` bytes, the read for a protocol that
 announces a length, and is `Err` with the message `unexpected end of file` when the input ends after
-some of them; `n` of 0 gives empty `Bytes`. A `max` below 1 or an `n` below 0 is `Err`.
+some of them; `n` of 0 gives empty `Bytes` without reading, at the end of the file too. A `max` below 1 or an `n` below 0 is `Err`.
 `writeChunk` writes the bytes as they are, as `writeText` writes text as UTF-8.
 
 A handle is also a connection from `Net`, and the reads and writes are the same. A context
@@ -186,6 +186,10 @@ Path.abs(p: string): Result[string, Error]       // against the working director
 Path.rel(base: string, target: string): Result[string, Error]   // target as a path from base
 ```
 
+`Path.rel` works on the text, cleaned, and is `Err` when no relative path leads from `base` to
+`target`: when one is absolute and the other is not, when they are on different Windows volumes, or
+when `base` climbs out with `..` further than `target` does, as from `../a` to `b`.
+
 ## Time
 
 Dates and times follow JavaScript's Temporal: exact time and wall-clock time are different types,
@@ -241,7 +245,7 @@ type RoundingMode = Ceil | Floor | Expand | Trunc | HalfCeil | HalfFloor | HalfE
 **Zones.**
 
 ```
-Time.utc: Time.Zone
+Time.utc: Time.Zone                                 // the named zone UTC, so not == to the offset zone +00:00
 Time.zone(id: string): Result[Time.Zone, Error]     // a name of the IANA database in any case, or an offset
 Time.localZone(): Time.Zone                         // the host's zone
 Time.zoneId(z: Time.Zone): string                   // "Europe/Stockholm", "+05:30"
@@ -437,9 +441,10 @@ Years, months, weeks and days are calendar units and move the wall clock; hours 
 exact units and move the instant. `add` applies the calendar part first, years then months with
 the day constrained, so August 31 plus a month is September 30, then weeks and days, and the exact
 part after. On a `ZonedDateTime` the wall-clock result of the calendar part is placed in the zone
-by `Compatible` before the exact part is added, so a day added to 01:00 on the Saturday before a
-change in New York is 01:00 on the Sunday with the new offset, and an hour added is the next hour
-of the time line, whatever the clock shows. An `Instant` has no calendar, so a duration with
+by `Compatible` before the exact part is added, so a day added to noon on the Saturday before a
+change in New York is noon on the Sunday, 23 or 25 hours later, a day added to 02:30 on the
+Saturday before the spring change is 03:30 on the Sunday, since the change skips 02:30, and an hour
+added is the next hour of the time line, whatever the clock shows. An `Instant` has no calendar, so a duration with
 years, months, weeks or days panics. A `PlainDate` takes the exact part as whole days of 24 hours
 and drops the remainder; a `PlainTime` ignores the calendar part and wraps around the clock; a
 `PlainDateTime` takes everything with days of 24 hours.
