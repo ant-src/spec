@@ -363,12 +363,12 @@ Records, arrays, maps, and sets are reference values: assigning or passing one s
 change made through one name is visible through every other. `==` compares structure, never
 identity. Two records are equal when they carry the same tag and their fields are equal. Arrays
 compare by length and elements, maps by key set and values, sets by members, primitives, time values
-(`stdlib.md`), and regular expression patterns (section 11) by value, and functions and sync objects
-by identity. The comparison recurses with `==` over every run-time field, including fields the
-static type does not mention, so it agrees with `String.from` and `Json.stringify`. A pair of values
-already under comparison counts as equal, so cyclic structures compare in finite time. Identity is a
-library call: `Record.same`, `Array.same`, `Map.same`, and `Set.same` report whether two names refer
-to one value.
+(`stdlib.md`), and regular expression patterns (section 11) by value, and functions, sync objects,
+and generators by identity. The comparison recurses with `==` over every run-time field, including
+fields the static type does not mention, so it agrees with `String.from` and `Json.stringify`. A
+pair of values already under comparison counts as equal, so cyclic structures compare in finite
+time. Identity is a library call: `Record.same`, `Array.same`, `Map.same`, and `Set.same` report
+whether two names refer to one value.
 
 ```ant
 var p = Point{ x: 1.0, y: 2.0 }
@@ -1576,12 +1576,12 @@ could not be loaded because of a syntax error, an import cycle, or a missing mod
 The standard library is a set of namespaces in the prelude. Each is a plain record of functions and
 types, exactly like an imported module (section 10), so a type a namespace declares is written
 through it, as in `Http.Response`; none has methods or state. `Array`, `Map`, and `Set` are the
-functions of the three built-in container types, `Bytes` those of binary data, and `Result` and the
-sync types are types with functions declared on them (section 6); all read as `Name.function`, like
-a namespace. Every function takes its subject as the first argument so it composes with `|`. This
-section is the complete core library. The I/O namespaces `File`, `Http`, `Net`, `Path`, `Time`,
-`Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto` are policy rather than language and live in
-`stdlib.md`.
+functions of the three built-in container types, `Bytes` those of binary data, and `Result`,
+`Random`, and the sync types are types with functions declared on them (section 6); all read as
+`Name.function`, like a namespace. Every function takes its subject as the first argument so it
+composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`,
+`Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto` are policy rather than
+language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
 carry a default, which a call omits or names as for a declared function (section 6). A callback
@@ -1930,9 +1930,9 @@ template strings.
 - A named primitive renders as its constructor call, `UserId("u-1")`.
 - `Bytes` renders as `Bytes(89 50 4e 47)`, two lower-case hexadecimal digits per byte separated by
   spaces, and `Bytes()` when empty.
-- Functions render as `func`, a constructor and a tag as their type's name, sync objects as
-  their namespace name, and time values as `stdlib.md` says: an RFC 9557 string, or a zone's
-  identifier.
+- Functions render as `func`, a constructor and a tag as their type's name, sync objects and
+  generators as their namespace name, and time values as `stdlib.md` says: an RFC 9557 string, or a
+  zone's identifier.
 - A regular expression pattern renders as a literal that reads back to it, `/a\/b/i`, as the Regex
   section says.
 - A value already being rendered renders as `...`, so cyclic structures terminate.
@@ -2075,7 +2075,7 @@ Math.cbrt(x: float64): float64                                 // cube root
 Math.isNaN(x: float64): bool
 Math.isFinite(x: float64): bool                                // neither NaN nor an infinity
 Math.clamp[T: Ordered](x: T, lo: T, hi: T): T                  // x held within lo ..= hi; panics if lo > hi or a bound is NaN
-Math.random(): float64                                         // uniform in [0, 1); the sequence cannot be seeded
+Math.random(): float64                                         // uniform in [0, 1); the sequence cannot be seeded, which Random is
 Math.randomInt(from: int, to: int): int                        // uniform, from inclusive, to exclusive; the same sequence; panics if to <= from
 Math.PI: float64
 Math.E: float64
@@ -2105,6 +2105,69 @@ The functions over `float64` follow IEEE 754 and never panic: `Math.log(0.0)` is
 `Math.log(-1.0)` and `Math.sqrt(-1.0)` are `NaN`, and `Math.clamp(x, lo, hi)` with a `NaN` `x` is
 `NaN`. The rotations pair with the shifts and panic on a negative count as they do, but a count at
 or beyond the width is taken modulo the width, since a rotation by the width is the identity.
+
+### Random
+
+A seeded generator of pseudo-random numbers. The same seed gives the same values in the same order
+on every implementation of Ant, so a simulation, a test, or a game can be run again exactly.
+`Random` is a prelude type with its functions declared on it (section 6), as the sync types are: a
+generator is a reference, compared by identity, and renders as `Random`. Every function but `new`
+draws from the generator and so changes it, which makes two goroutines that draw from one generator
+without a lock a data race, as two that push to one array are (section 9); `Random.fork` gives each
+goroutine its own. `Math.random` stays the unseeded source, and neither is fit for keys or tokens,
+which take `Crypto.randomBytes` (`stdlib.md`).
+
+```
+Random.new(seed: int): Random
+Random.int(r: Random, from: int, to: int): int                 // uniform, from inclusive, to exclusive; panics if to <= from
+Random.float(r: Random): float64                               // uniform in [0, 1)
+Random.bool(r: Random): bool                                   // true or false, each half the time
+Random.pick[T](r: Random, xs: Array[T]): T | null              // a uniform element; null when empty, without a draw
+Random.shuffle[T](r: Random, xs: Array[T]): void               // reorders xs in place into a uniform permutation
+Random.fork(r: Random): Random                                 // a generator with r's state, after which r jumps 2^128 draws ahead
+```
+
+The values are fixed by what follows, and a later version of Ant may add functions here but never
+change what these return. Arithmetic is on `uint64` and wraps modulo 2^64; `rotl(x, k)` rotates left
+by `k` bits.
+
+- **State and draw.** A generator holds four words `s0`, `s1`, `s2`, `s3`, and a draw is one step of
+  xoshiro256** (Blackman and Vigna, 2018). Its value is `rotl(s1 * 5, 7) * 9`, and then, with `t =
+  s1 << 17`, the words become `s2 ^= s0`, `s3 ^= s1`, `s1 ^= s2`, `s0 ^= s3`, `s2 ^= t`, and `s3 =
+  rotl(s3, 45)`, in that order.
+- **Seeding.** `Random.new` fills `s0` to `s3`, in order, with four outputs of SplitMix64 started
+  from the seed's two's complement bits as `x`. Each output adds `0x9E3779B97F4A7C15` to `x`, takes
+  `z = x`, then `z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9`, `z = (z ^ (z >> 27)) *
+  0x94D049BB133111EB`, and is `z ^ (z >> 31)`. SplitMix64 maps distinct values of `x` to distinct
+  outputs, so at most one word is zero, and xoshiro256** needs only that not all four are.
+- **`float`** is one draw `d` as `(d >> 11) * 2^-53`, the top 53 bits as a fraction, exact in a
+  `float64`. **`bool`** is whether the top bit of one draw is 1.
+- **`int`** takes `n = to - from` as a `uint64`, which every pair of `int` bounds fits, and the mask
+  `m = 2^k - 1` for the smallest `k` with `2^k >= n`. It draws `d` until `d & m < n`, which happens
+  within two draws on average, and returns `from + (d & m)`. Each try is one draw, `n = 1` included,
+  where `m` is 0 and the first try succeeds.
+- **`pick`** is `xs[Random.int(r, 0, len(xs))]`, and on an empty array returns `null` and draws
+  nothing.
+- **`shuffle`** is Fisher-Yates from the end: for `i` from `len(xs) - 1` down to 1, it swaps `xs[i]`
+  with `xs[Random.int(r, 0, i + 1)]`.
+- **`fork`** returns a new generator holding `r`'s four words, and then moves `r` by the jump of
+  xoshiro256**: with `t0` to `t3` at 0, for each bit of `0x180ec6d33cfd0aba`, `0xd5a61266f0c9392c`,
+  `0xa9582618e03fc9aa`, and `0x39abdc4529b1661c`, in that order and lowest bit first, a set bit
+  xors `s0` to `s3` into `t0` to `t3`, and then `r` draws; after the 256 bits, `t0` to `t3` become
+  `r`'s words. The new generator goes on with the values `r` would have given, and `r` gives values
+  2^128 draws further along, so neither reaches the other's within any run.
+
+These values check an implementation:
+
+```ant
+var r = Random.new(42)
+Array.map(Array.range(0, 5), { Random.int(r, 0, 100) })   // [22, 33, 33, 56, 50]
+var f = Random.new(42)
+Random.float(f)                                           // 0.08386297105988216
+var xs = Array.range(1, 11)
+Random.shuffle(Random.new(42), xs)
+xs                                                        // [6, 8, 10, 4, 3, 1, 5, 9, 2, 7]
+```
 
 ### Result and Record
 
@@ -2225,11 +2288,12 @@ Every value has a kind, fixed when the value is created:
 | time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
 | bytes                            | an immutable sequence of bytes (section 11, Bytes), which `==` compares by content                                                                                                                                                              |
 | regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
+| random                           | a `Random` generator of section 11: four `uint64` words that each draw changes                                                                                                                                                                  |
 
-Arrays, maps, sets, records, functions, and sync objects are references: a variable holds a
-reference, and copying the variable copies the reference. Numbers, booleans, strings, `Bytes`,
-`null`, `void`, tags, time values, and patterns are immutable, so for them the distinction never
-shows.
+Arrays, maps, sets, records, functions, sync objects, and generators are references: a variable
+holds a reference, and copying the variable copies the reference. Numbers, booleans, strings,
+`Bytes`, `null`, `void`, tags, time values, and patterns are immutable, so for them the distinction
+never shows.
 
 ### Names and scopes
 
