@@ -245,6 +245,10 @@ bound type parameters (see Generics).
 assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly
 when a value is required, as in `Result.ok(void)`.
 
+`Bytes` is an immutable sequence of bytes, for binary data rather than text: an image, a digest, a
+frame of a network protocol. It is built in, so `len`, `for`, indexing, and `is` take it, but it is
+not a primitive, so no named primitive type is declared over it. Section 11 has its functions.
+
 Numeric types never mix. Convert explicitly by calling the target type as a function. Each of the
 ten numeric names is a prelude function that takes any numeric value, and it is a value in its own
 right, so `Array.map([72, 105], byte)` builds an `Array[byte]`. A conversion to an integer kind must
@@ -807,8 +811,9 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 ### Loops
 
-`for` iterates over an array, a map, a set, a string, or a sequence function; over a map it yields
-each `Entry`, over a set each member, and over a string each code point as a one-character string.
+`for` iterates over an array, a map, a set, a string, `Bytes`, or a sequence function; over a map it
+yields each `Entry`, over a set each member, over a string each code point as a one-character
+string, and over `Bytes` each byte as a `byte`.
 Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's
 value. `while` repeats while a condition holds. Both have type `void`, except that a `while` whose
 condition is the literal `true` and whose body contains no `break` has type `never`, since only
@@ -1534,11 +1539,12 @@ could not be loaded because of a syntax error, an import cycle, or a missing mod
 The standard library is a set of namespaces in the prelude. Each is a plain record of functions and
 types, exactly like an imported module (section 10), so a type a namespace declares is written
 through it, as in `Http.Response`; none has methods or state. `Array`, `Map`, and `Set` are the
-functions of the three built-in container types, and `Result` and the sync types are types with
-functions declared on them (section 6); all read as `Name.function`, like a namespace. Every
-function takes its subject as the first argument so it composes with `|`. This section is the
-complete core library. The I/O namespaces `File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`,
-`Csv`, `Encoding`, `Url`, and `Crypto` are policy rather than language and live in `stdlib.md`.
+functions of the three built-in container types, `Bytes` those of binary data, and `Result` and the
+sync types are types with functions declared on them (section 6); all read as `Name.function`, like
+a namespace. Every function takes its subject as the first argument so it composes with `|`. This
+section is the complete core library. The I/O namespaces `File`, `Http`, `Net`, `Path`, `Time`,
+`Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto` are policy rather than language and live in
+`stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
 carry a default, which a call omits or names as for a declared function (section 6). A callback
@@ -1571,7 +1577,7 @@ panic(message: string): never
 int8[T: Number](x: T): int8                      // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
 string(x): string                                // x is a string or a named primitive over string: the payload
 bool(x): bool                                    // likewise
-len(x): int                                      // x is an array, a map, a set, a string, or a channel: its size
+len(x): int                                      // x is an array, a map, a set, a string, Bytes, or a channel: its size
 ```
 
 The twelve conversion names are built into the checker. The signatures give their shape; each also
@@ -1580,12 +1586,13 @@ accepts a value of a named primitive type whose base is a kind it takes, and unw
 (section 4, Named primitive types).
 
 `len` is built into the checker as well. It counts an array's elements, a map's entries, a set's
-members, a string's code points (as `String.length` does), and the values a channel buffers now (as
-`Channel.length` does). It also accepts a named primitive over `string` and unwraps it, as the
-conversions do, and a union or a bounded type parameter whose every member it accepts. Any other
-argument is a compile error. As a value, `len` takes its parameter type from the function type
-expected, which must be one of these, so `Array.map(words, len)` is an `Array[int]`. The namespace
-functions stay; `len(xs)` and `Array.length(xs)` are the same count.
+members, a string's code points (as `String.length` does), the bytes of `Bytes` (as `Bytes.length`
+does), and the values a channel buffers now (as `Channel.length` does). It also accepts a named
+primitive over `string` and unwraps it, as the conversions do, and a union or a bounded type
+parameter whose every member it accepts. Any other argument is a compile error. As a value, `len`
+takes its parameter type from the function type expected, which must be one of these, so
+`Array.map(words, len)` is an `Array[int]`. The namespace functions stay; `len(xs)` and
+`Array.length(xs)` are the same count.
 
 `println` is built into the checker too, so that it may be called with no argument, which writes an
 empty line. `print` writes no newline, so a prompt or a progress dot needs nothing else; output is
@@ -1725,7 +1732,8 @@ file, standard input, a network peer, an argument, the environment, or a child p
 as UTF-8 with each maximal subpart of an ill-formed sequence replaced by U+FFFD, as Unicode
 recommends and the WHATWG Encoding standard does: the bytes `FF FE` become two U+FFFD, and `E2 82`,
 a euro sign cut short, one. A program that must keep the bytes as they were reads them as
-`Array[byte]`, and `String.fromBytes` tells it whether they are text.
+`Bytes`, which a file, a handle, an HTTP body, and a child's output also give, and
+`String.fromBytes` tells it whether they are text.
 What the host gives only as text has no such form: `Os.args`, `Os.env`, `Os.environ`, and the names
 `File.list` and `File.walk` return. A file name that is not UTF-8, which some file systems allow,
 comes back with U+FFFD in it, and a path built from that name does not reach the file. Two names
@@ -1780,8 +1788,9 @@ String.category(c: string): string                             // the two-letter
 String.inScript(c: string, script: string): bool               // whether c has the Script property script; panics unless c is one code point, or if script names no script
 String.chars(s: string): Array[string]                         // one code point each
 String.graphemes(s: string): Array[string]                     // one extended grapheme cluster of Unicode's UAX #29 each
-String.toBytes(s: string): Array[byte]                         // UTF-8
-String.fromBytes(bytes: Array[byte]): string | null            // null on invalid UTF-8
+String.toBytes(s: string): Bytes                               // UTF-8
+String.fromBytes(bytes: Bytes): string | null                  // null on invalid UTF-8
+String.fromBytesLossy(bytes: Bytes): string                    // each maximal subpart of an ill-formed sequence as U+FFFD, as outside text is
 String.codePoint(c: string): int                               // the scalar value of c; panics unless c is one code point
 String.fromCodePoint(n: int): string | null                    // the string of the one code point n; null when n is not a scalar value
 String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
@@ -1876,12 +1885,46 @@ template strings.
   set, or record renders as `[]`, `Map{}`, `Set.of([])`, or `Empty{}`, with nothing inside the
   brackets.
 - A named primitive renders as its constructor call, `UserId("u-1")`.
+- `Bytes` renders as `Bytes(89 50 4e 47)`, two lower-case hexadecimal digits per byte separated by
+  spaces, and `Bytes()` when empty.
 - Functions render as `func`, a constructor and a tag as their type's name, sync objects as
   their namespace name, and time values as `stdlib.md` says: an RFC 9557 string, or a zone's
   identifier.
 - A regular expression pattern renders as a literal that reads back to it, `/a\/b/i`, as the Regex
   section says.
 - A value already being rendered renders as `...`, so cyclic structures terminate.
+
+### Bytes
+
+`Bytes` is an immutable sequence of bytes, for binary data: what a file, a connection, or a child
+process gives that is not text, and what a digest or an encoding works on. It holds one byte per
+byte, where an `Array[byte]` holds a value per element, and `==` compares the contents, so `Bytes`
+serves as a map key. `len(b)` is the number of bytes; `b[i]` reads one as a `byte` and panics
+outside `0 ..= len(b) - 1`, as an array index does; `for x in b` yields each byte. There is no
+`b[i] = x`. A program that computes bytes one at a time builds an `Array[byte]` and converts it, and
+one that joins pieces collects them for `Bytes.concat`, as text is joined with `String.concat`.
+
+```
+Bytes.length(b: Bytes): int
+Bytes.slice(b: Bytes, from: int, to: int): Bytes               // panics as Array.slice does
+Bytes.concat(parts: Array[Bytes]): Bytes
+Bytes.indexOf(b: Bytes, sub: Bytes): int | null                // the first index of sub; 0 for an empty sub
+Bytes.startsWith(b: Bytes, prefix: Bytes): bool
+Bytes.endsWith(b: Bytes, suffix: Bytes): bool
+Bytes.fromArray[T: Integer](xs: Array[T]): Bytes               // panics if an element is outside 0 ..= 255
+Bytes.toArray(b: Bytes): Array[byte]
+```
+
+There is no literal. Bytes come from I/O, from `String.toBytes`, from `Encoding.fromHex` and
+`Encoding.fromBase64`, and from `Bytes.fromArray`, which takes integers of any kind so that a
+constant is written with plain literals: `Bytes.fromArray([0x89, 0x50, 0x4e, 0x47])` begins every
+PNG file. A string escape does not write a byte: `String.toBytes("\u{89}")` is U+0089 in UTF-8, the
+two bytes `c2 89`.
+
+`Bytes` renders as `Bytes(89 50 4e 47)`. `Json.stringify` panics on it, since JSON has no form for
+bytes and its reader would have to know which encoding to undo; a program writes
+`Encoding.toBase64(b)` or `Encoding.toHex(b)` into the JSON instead. Since neither side can change,
+`Bytes.slice`, `String.toBytes`, and `String.fromBytes` need not copy the bytes.
 
 ### Regex
 
@@ -2137,11 +2180,13 @@ Every value has a kind, fixed when the value is created:
 | tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
 | sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, or `Context`                                                                                                                                                              |
 | time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
+| bytes                            | an immutable sequence of bytes (section 11, Bytes), which `==` compares by content                                                                                                                                                              |
 | regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
 
 Arrays, maps, sets, records, functions, and sync objects are references: a variable holds a
-reference, and copying the variable copies the reference. Numbers, booleans, strings, `null`,
-`void`, tags, time values, and patterns are immutable, so for them the distinction never shows.
+reference, and copying the variable copies the reference. Numbers, booleans, strings, `Bytes`,
+`null`, `void`, tags, time values, and patterns are immutable, so for them the distinction never
+shows.
 
 ### Names and scopes
 
@@ -2182,9 +2227,10 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace
   is a record, so this rule also covers `Array.map` and `Geometry.Point`; a tag and a constructor
   have the functions declared on their type as fields, so it also covers `Point.distance`.
-- **Index read `a[i]`.** `a` must be an array or a map. For an array, `i` must be an `int` from `0`
-  up to but excluding the length, and the value is that element. For a map, the value is the entry
-  whose key is `==` to `i`, or `null` when there is none.
+- **Index read `a[i]`.** `a` must be an array, a map, or `Bytes`. For an array, `i` must be an `int`
+  from `0` up to but excluding the length, and the value is that element; for `Bytes` likewise, and
+  the value is that byte as a `byte`. For a map, the value is the entry whose key is `==` to `i`, or
+  `null` when there is none.
 - **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest
   of the postfix chain is skipped. Otherwise the plain rule applies.
 - **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one
@@ -2218,19 +2264,19 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, or two strings, which
   compare by code point, or two tagged values with the same tag, which compare as their base kind.
 - **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers
-  are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`,
-  `null`, and `void` values are equal by value; records have the same tag and `==` fields; tagged
-  primitives have the same tag and equal payloads; time values have the same tag and equal fields,
-  as `stdlib.md` lists them per type; patterns have the same normalized source and flags; arrays
-  have the same length and `==` elements in order; maps have the same key set and `==` values per
-  key; sets have the same members; functions, tags, and sync objects are the same object. A pair of
-  values already under comparison counts as equal (section 4). Values of different kinds are
-  unequal, so `x == null` is simply `false` for a non-null `x`.
-- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
-  `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other
-  path evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a constructor, not
-  an alias tag, and the test is whether `a` is a record, tagged primitive, time value, or pattern
-  carrying that tag. The result is a `bool`.
+  are equal by value, with IEEE 754 rules for floats; strings have the same code points; `Bytes`
+  have the same bytes; `bool`, `null`, and `void` values are equal by value; records have the same
+  tag and `==` fields; tagged primitives have the same tag and equal payloads; time values have the
+  same tag and equal fields, as `stdlib.md` lists them per type; patterns have the same normalized
+  source and flags; arrays have the same length and `==` elements in order; maps have the same key
+  set and `==` values per key; sets have the same members; functions, tags, and sync objects are the
+  same object. A pair of values already under comparison counts as equal (section 4). Values of
+  different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
+- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `Bytes`, `func`, `Array`,
+  `Map`, `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any
+  other path evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a
+  constructor, not an alias tag, and the test is whether `a` is a record, tagged primitive, time
+  value, or pattern carrying that tag. The result is a `bool`.
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the
   left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right
   operand must be a `bool` when it is evaluated.
@@ -2263,19 +2309,19 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   the heads that can proceed is performed, chosen at random among them, its result is bound when
   the clause binds, and its block is evaluated; the value is the block's. A send performed on a
   closed channel panics.
-- **`for x in e`.** `e` must be an array, a map, a set, a string, or a function. Over an array it
-  iterates by index from zero while the index is below the current length, so elements appended
-  during the loop are visited and removed ones are not. Over a map it visits the entries as `Entry`
-  records in insertion order, reading the map as it goes, like an array. An entry inserted during
-  the loop is visited, an entry removed before the loop reaches it is not, and no entry is visited
-  twice. A key removed and inserted again is a new entry at the end. Over a set it visits the
-  members the same way. Over a string it yields each code point as a one-character string. Over a
-  function it calls the function with a fresh `yield` function; each call of `yield` with one
-  argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with
-  `break`. Calling `yield` again after it returned `false`, or after the sequence function has
-  returned, panics; a `return` or a panic in the body propagates through the sequence function like
-  any other call. A destructuring on the left reads the named fields of each element, which must be
-  a record with those fields. The value is `void`.
+- **`for x in e`.** `e` must be an array, a map, a set, a string, `Bytes`, or a function. Over an
+  array it iterates by index from zero while the index is below the current length, so elements
+  appended during the loop are visited and removed ones are not. Over a map it visits the entries as
+  `Entry` records in insertion order, reading the map as it goes, like an array. An entry inserted
+  during the loop is visited, an entry removed before the loop reaches it is not, and no entry is
+  visited twice. A key removed and inserted again is a new entry at the end. Over a set it visits
+  the members the same way. Over a string it yields each code point as a one-character string, and
+  over `Bytes` each byte as a `byte`. Over a function it calls the function with a fresh `yield`
+  function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or
+  `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or
+  after the sequence function has returned, panics; a `return` or a panic in the body propagates
+  through the sequence function like any other call. A destructuring on the left reads the named
+  fields of each element, which must be a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function
   body, lambda, `go` block, or `defer` block, running the deferred blocks of every block they exit.
 - **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body,
@@ -2323,14 +2369,14 @@ can only panic in the ways the last column lists, which depend on values known a
 | `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                       | the count is negative or not below the operand's width                                                                                           |
 | numeric conversion                                |                                                                                                                                                                                                                                                       | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                               |
 | `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                   |                                                                                                                                                  |
-| `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, or a channel                                                                                                                                                                 |                                                                                                                                                  |
+| `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, `Bytes`, or a channel                                                                                                                                                        |                                                                                                                                                  |
 | `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                              |                                                                                                                                                  |
-| `a[i]`, `a[i] = v`                                | `a` is neither an array nor a map                                                                                                                                                                                                                     | `a` is an array and `i` is not an `int` from `0` up to but excluding the length                                                                  |
+| `a[i]`, `a[i] = v`                                | `a` is not an array or a map, nor `Bytes` for a read                                                                                                                                                                                                  | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length                                                       |
 | call                                              | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |                                                                                                                                                  |
 | record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |                                                                                                                                                  |
 | array literal                                     | a spread operand is not an array                                                                                                                                                                                                                      |                                                                                                                                                  |
 | `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                 |                                                                                                                                                  |
-| `for`                                             | the operand is not an array, a map, a set, a string, or a function                                                                                                                                                                                    | a sequence calls `yield` after it returned `false` or after the sequence returned                                                                |
+| `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                           | a sequence calls `yield` after it returned `false` or after the sequence returned                                                                |
 | destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                           | the array has fewer elements than the fixed positions                                                                                            |
 | variable                                          | no scope binds the name                                                                                                                                                                                                                               |                                                                                                                                                  |
 | `_`                                               | read                                                                                                                                                                                                                                                  |                                                                                                                                                  |

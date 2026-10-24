@@ -3,8 +3,8 @@
 Companion to `ant-lang.md`. The core library, which every program needs, is section 11 of the
 specification. The namespaces here talk to the world outside the program, and they follow one rule:
 every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
-panics on bad input, with these exceptions. `Json.stringify` panics on a value that contains
-itself, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O, panic where the
+panics on bad input, with these exceptions. `Json.stringify` panics on a value that contains itself
+or `Bytes`, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O, panic where the
 core library would, on an argument that cannot be, as `int8(300)` does. The comment of each such
 function says when it panics. Blocking calls block only the calling goroutine (section 9).
 
@@ -24,9 +24,9 @@ type Handle                                                // opaque: an open fi
 type Info = { name: string, size: int, isDir: bool, modified: Time.Instant }
 
 File.read(path: string): Result[string, Error]
-File.readBytes(path: string): Result[Array[byte], Error]
+File.readBytes(path: string): Result[Bytes, Error]
 File.write(path: string, text: string): Result[void, Error]
-File.writeBytes(path: string, bytes: Array[byte]): Result[void, Error]
+File.writeBytes(path: string, bytes: Bytes): Result[void, Error]
 File.exists(path: string): bool
 File.stat(path: string): Result[File.Info, Error]
 File.remove(path: string): Result[void, Error]             // one file, or an empty directory
@@ -44,6 +44,9 @@ File.readLine(f: File.Handle, ctx: Context | null = null): Result[string | null,
 File.readAll(f: File.Handle, ctx: Context | null = null): Result[string, Error]           // the rest of the file
 File.writeLine(f: File.Handle, line: string): Result[void, Error]
 File.writeText(f: File.Handle, text: string): Result[void, Error]   // writeLine without the newline
+File.readChunk(f: File.Handle, max: int, ctx: Context | null = null): Result[Bytes | null, Error]   // what is there, 1 to max bytes; null at end of file
+File.readExactly(f: File.Handle, n: int, ctx: Context | null = null): Result[Bytes | null, Error]   // n bytes; null at end of file; Err when it ends partway
+File.writeChunk(f: File.Handle, bytes: Bytes): Result[void, Error]
 File.flush(f: File.Handle): Result[void, Error]            // writes out what is buffered
 File.pipe(src: File.Handle, dst: File.Handle, ctx: Context | null = null): Result[void, Error]   // copies the rest of src to dst
 File.close(f: File.Handle): void                           // flushes; nothing on a standard stream
@@ -53,6 +56,16 @@ File.close(f: File.Handle): void                           // flushes; nothing o
 does not follow symbolic links, lists files and not directories, and returns them in lexical
 order. `modified` is the time of the last write. `remove` refuses a directory with entries;
 `removeAll` is the recursive form, named so the dangerous one is the longer name.
+
+`File.read`, `readLine`, and `readAll` take what they read as text, decoded as all text from outside
+is (section 11 of `ant-lang.md`, String); `File.readBytes`, `readChunk`, and `readExactly` keep the
+bytes as they are. The reads of a handle share one buffer, so a program can read a header line by
+line and the body after it as bytes. `readChunk` returns as soon as there is anything to return, at
+least one byte and at most `max`, and waits only while there is nothing; it is the read for a stream
+whose pieces have no fixed size. `readExactly` waits for all `n` bytes, the read for a protocol that
+announces a length, and is `Err` with the message `unexpected end of file` when the input ends after
+some of them; `n` of 0 gives empty `Bytes`. A `max` below 1 or an `n` below 0 is `Err`.
+`writeChunk` writes the bytes as they are, as `writeText` writes text as UTF-8.
 
 A handle is also a connection from `Net`, and the reads and writes are the same. A context
 interrupts a read of a connection, a pipe or a terminal, which are the handles that wait; a read
@@ -68,18 +81,20 @@ context ended it; `File.flush` is for files.
 ## Http
 
 ```
-type Response = { status: int, headers: Map[string, string], body: string }
+type Response = { status: int, headers: Map[string, string], body: string, bytes: Bytes }
 type Request = { method: string, path: string, query: string, headers: Map[string, string],
-                 body: string, remote: string }
+                 body: string, bytes: Bytes, remote: string }
+type Reply = { status: int, headers: Map[string, string], body: string | Bytes }
 
-Http.request(method: string, url: string, body: string = "", headers: Map[string, string] = Map{},
-             timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
+Http.request(method: string, url: string, body: string | Bytes = "",
+             headers: Map[string, string] = Map{}, timeout: Time.Duration | null = null,
+             ctx: Context | null = null): Result[Http.Response, Error]
 Http.get(url: string, headers: Map[string, string] = Map{}, timeout: Time.Duration | null = null,
          ctx: Context | null = null): Result[Http.Response, Error]                // request("GET", url, "", headers, timeout, ctx)
-Http.post(url: string, body: string, headers: Map[string, string] = Map{},
+Http.post(url: string, body: string | Bytes, headers: Map[string, string] = Map{},
           timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
                                                                                   // request("POST", url, body, headers, timeout, ctx)
-Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Response,
+Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Reply,
            ctx: Context | null = null): Result[void, Error]                       // panics on a response status outside 200 to 599, in the handler's goroutine
 ```
 
@@ -90,6 +105,13 @@ back with its `Location` header, and a program that wants the next page asks for
 failure to get one: a malformed `url`, an empty `method`, no connection, the timeout, or the
 context. The response's headers hold one string per name, a repeated header joined with `, `.
 `get` and `post` are `request` with the method filled in.
+
+A body is sent as given: a string as its UTF-8, `Bytes` as they are. A body that arrives, in a
+`Response` or in a `Request`, is there twice: as received in `bytes`, and in `body` as text,
+decoded as all text from outside is (section 11 of `ant-lang.md`, String). When the bytes are UTF-8
+the two share one copy, so a program reads whichever it needs at no cost: `body` for JSON or HTML,
+`bytes` for an image, or for a signature computed over what was sent. A handler returns an
+`Http.Reply`, whose body is a string or `Bytes`, so a proxy passes `bytes` on unchanged.
 
 `timeout` bounds the whole call, from connecting to the end of the body, and when it passes the
 result is `Err` with the message `timeout`. The duration is taken as `Time.total` takes one without
@@ -108,7 +130,7 @@ serves until the run is cancelled. The listener is closed once `serve` returns. 
 the listener is closed under it. A handler's panic is reported as a goroutine's panic is, and the
 client gets status 500 with an empty body; a response whose status is outside 200 to 599 is a panic in
 the handler's goroutine, which takes the same path, since a status below 200 is an interim
-response and cannot be sent as the final one. The `Http.Response` is sent as given, with
+response and cannot be sent as the final one. The `Http.Reply` is sent as given, with
 `Content-Length` from the body. In the `Request`, `path` is decoded and `query` is raw, for
 `Url.parseQuery`; the headers hold one string per name, `Host` among them, a repeated header
 joined with `, `; `remote` is `ip:port`. Bodies are read whole, as the client
@@ -116,9 +138,9 @@ reads them. Taking a listener rather than an address is what lets a program know
 server on a goroutine, and talk to it:
 
 ```ant
-func handle(req: Http.Request): Http.Response {
-  if req.path == "/health" { Http.Response{ status: 200, headers: Map{}, body: "ok" } }
-  else { Http.Response{ status: 404, headers: Map{}, body: `no ${req.path}` } }
+func handle(req: Http.Request): Http.Reply {
+  if req.path == "/health" { Http.Reply{ status: 200, headers: Map{}, body: "ok" } }
+  else { Http.Reply{ status: 404, headers: Map{}, body: `no ${req.path}` } }
 }
 
 func main(): void {
@@ -496,7 +518,7 @@ Time values are immutable and serve as map keys.
 ## Os
 
 ```
-type Output = { status: int, stdout: string, stderr: string }
+type Output = { status: int, stdout: string, stderr: string, stdoutBytes: Bytes, stderrBytes: Bytes }
 
 Os.args(): Array[string]              // the arguments after the program path: `ant run main.ant a b` gives ["a", "b"]
 Os.env(name: string): string | null
@@ -504,7 +526,7 @@ Os.environ(): Map[string, string]     // every variable
 Os.cwd(): Result[string, Error]       // the working directory
 Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 Os.exec(program: string, args: Array[string] = [], dir: string | null = null,
-        env: Map[string, string] | null = null, stdin: string = "",
+        env: Map[string, string] | null = null, stdin: string | Bytes = "",
         ctx: Context | null = null): Result[Os.Output, Error]
 Os.stdin(): File.Handle               // the program's standard input
 Os.stdout(): File.Handle              // its standard output, which print and println write to as well
@@ -512,17 +534,18 @@ Os.stderr(): File.Handle              // its standard error
 Os.interrupt(): Context               // done when the process is interrupted; the same context at every call
 ```
 
-`Os.exec` starts `program` with `args` as its arguments and no shell between: `args` arrive as
-they are, and `program` is looked up in `PATH` when it has no path separator. The child inherits
-the parent's working directory and environment unless `dir` or `env` is given; `env` is the
-child's whole environment, so a program that adds one variable starts from `Os.environ()`.
-`stdin` is what the child reads. Both outputs are captured whole and taken as text, as `File.read`
-takes a file. The call blocks the calling goroutine until the child has exited, and returns `Err`
-only when the child could not be started or run to its end: the program is not found, `dir` does
-not exist, the host cancelled the run, `ctx` is done. A nonzero exit is `Ok` with its `status`; a
-child ended by a signal has status `-1`. When the host cancels the run, or `ctx` is done, the
-child is killed, the child itself and not what it started, and in the second case the result is
-`Err` with the context's reason.
+`Os.exec` starts `program` with `args` as its arguments and no shell between: `args` arrive as they
+are, and `program` is looked up in `PATH` when it has no path separator. The child inherits the
+parent's working directory and environment unless `dir` or `env` is given; `env` is the child's
+whole environment, so a program that adds one variable starts from `Os.environ()`. `stdin` is what
+the child reads, a string as its UTF-8 and `Bytes` as they are. Both outputs are captured whole and
+kept twice, as an HTTP body is: as bytes in `stdoutBytes` and `stderrBytes`, and as text in `stdout`
+and `stderr`, one copy when the output is UTF-8. The call blocks the calling goroutine until the
+child has exited, and returns `Err` only when the child could not be started or run to its end: the
+program is not found, `dir` does not exist, the host cancelled the run, `ctx` is done. A nonzero
+exit is `Ok` with its `status`; a child ended by a signal has status `-1`. When the host cancels the
+run, or `ctx` is done, the child is killed, the child itself and not what it started, and in the
+second case the result is `Err` with the context's reason.
 
 An interrupt is Ctrl-C, SIGINT, and SIGTERM where the host has it. A program that has not called
 `Os.interrupt()` is ended by the first one, as `ant-lang.md` section 9 says of the host ending a
@@ -546,7 +569,7 @@ order, and a read of standard input flushes it first, so a prompt is seen before
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value or on Bytes
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -563,7 +586,9 @@ surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text 
 
 `Json.stringify` renders numbers as `String.from` does, so `1e21` is `1e+21`, and `NaN` and the
 infinities, which JSON cannot carry, as `null`. A value that contains itself has no JSON form, so
-`Json.stringify` panics with `cyclic value` where `String.from` would print `...`.
+`Json.stringify` panics with `cyclic value` where `String.from` would print `...`. Nor has `Bytes`,
+which JSON carries only in an encoding its reader must know, so `Json.stringify` panics on it and a
+program writes `Encoding.toBase64(b)` in its place.
 
 ## Csv
 
@@ -587,10 +612,10 @@ returns a `string`.
 ## Encoding
 
 ```
-Encoding.toBase64(bytes: Array[byte], url: bool = false): string                // the standard alphabet, padded; url: the URL-safe one
-Encoding.fromBase64(s: string, url: bool = false): Result[Array[byte], Error]    // padding present or absent; Err on another character
-Encoding.toHex(bytes: Array[byte]): string                                      // two lower-case digits per byte
-Encoding.fromHex(s: string): Result[Array[byte], Error]                         // either case; Err on an odd length or another character
+Encoding.toBase64(bytes: Bytes, url: bool = false): string                      // the standard alphabet, padded; url: the URL-safe one
+Encoding.fromBase64(s: string, url: bool = false): Result[Bytes, Error]          // padding present or absent; Err on another character
+Encoding.toHex(bytes: Bytes): string                                            // two lower-case digits per byte
+Encoding.fromHex(s: string): Result[Bytes, Error]                               // either case; Err on an odd length or another character
 ```
 
 Bytes go in and text comes out, with `String.toBytes` and `String.fromBytes` between them and
@@ -637,23 +662,23 @@ round-trip, and a request that is signed over its query has a known order. A one
 ## Crypto
 
 ```
-Crypto.sha256(bytes: Array[byte]): Array[byte]              // 32 bytes
-Crypto.sha512(bytes: Array[byte]): Array[byte]              // 64 bytes
-Crypto.sha1(bytes: Array[byte]): Array[byte]                // 20 bytes; not collision resistant; for formats that still use it
-Crypto.md5(bytes: Array[byte]): Array[byte]                 // 16 bytes; likewise
-Crypto.hmacSha1(key: Array[byte], message: Array[byte]): Array[byte]     // 20 bytes
-Crypto.hmacSha256(key: Array[byte], message: Array[byte]): Array[byte]   // 32 bytes
-Crypto.hmacSha512(key: Array[byte], message: Array[byte]): Array[byte]   // 64 bytes
-Crypto.equal(a: Array[byte], b: Array[byte]): bool          // in time that depends on the lengths only
-Crypto.randomBytes(n: int): Array[byte]                     // from the host's secure source; panics if n < 0 or n is above 2^31 − 1
+Crypto.sha256(bytes: Bytes): Bytes                          // 32 bytes
+Crypto.sha512(bytes: Bytes): Bytes                          // 64 bytes
+Crypto.sha1(bytes: Bytes): Bytes                            // 20 bytes; not collision resistant; for formats that still use it
+Crypto.md5(bytes: Bytes): Bytes                             // 16 bytes; likewise
+Crypto.hmacSha1(key: Bytes, message: Bytes): Bytes          // 20 bytes
+Crypto.hmacSha256(key: Bytes, message: Bytes): Bytes        // 32 bytes
+Crypto.hmacSha512(key: Bytes, message: Bytes): Bytes        // 64 bytes
+Crypto.equal(a: Bytes, b: Bytes): bool                      // in time that depends on the lengths only
+Crypto.randomBytes(n: int): Bytes                           // from the host's secure source; panics if n < 0 or n is above 2^31 − 1
 Crypto.uuid(): string                                       // a random UUID, version 4, lower case with hyphens
 ```
 
-Digests, message authentication, and random bytes: what a program needs to check a webhook, sign
-a request, or make a token. Encryption, signatures with keys, and key exchange are left out. A
-digest is bytes, so a hex digest is `Crypto.sha256(String.toBytes(s)) | Encoding.toHex()`. `sha1`
-and `md5` are broken against collisions and are here for the formats that still use them, as git
-and TOTP do. `equal` compares two arrays in time that depends on their lengths and not on their
-contents, for a received signature against a computed one; arrays of different lengths are
-unequal. `randomBytes` and `uuid` read the operating system's source of randomness, which does not
-fail, and are not seeded by anything a program can see.
+Digests, message authentication, and random bytes: what a program needs to check a webhook, sign a
+request, or make a token. Encryption, signatures with keys, and key exchange are left out. A digest
+is bytes, so a hex digest is `Crypto.sha256(String.toBytes(s)) | Encoding.toHex()`. `sha1` and `md5`
+are broken against collisions and are here for the formats that still use them, as git and TOTP do.
+`equal` compares two byte sequences in time that depends on their lengths and not on their contents,
+for a received signature against a computed one; sequences of different lengths are unequal.
+`randomBytes` and `uuid` read the operating system's source of randomness, which does not fail, and
+are not seeded by anything a program can see.
