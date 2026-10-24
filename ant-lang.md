@@ -1723,6 +1723,9 @@ Every string holds only scalar values. Text that reaches a program as a `string`
 file, standard input, a network peer, an argument, or the environment, is decoded as UTF-8 with
 each invalid sequence replaced by U+FFFD, as Unicode recommends; a program that must keep the bytes
 as they were reads them as `Array[byte]`, and `String.fromBytes` tells it whether they are text.
+What the host gives only as text has no such form: `Os.args`, `Os.env`, `Os.environ`, and the names
+`File.list` and `File.walk` return. A file name that is not UTF-8, which some file systems allow,
+comes back with U+FFFD in it, and a path built from that name does not reach the file.
 
 ```
 type Cut = { before: string, after: string }                   // the two sides of String.cut
@@ -1805,8 +1808,12 @@ string would give; there is no format string.
 
 `category`, `inScript`, and `codePoint` ask about one character, so they panic on any other string.
 A script is named as in Unicode's `Scripts.txt`, in full: `"Latin"`, `"Han"`, `"Cyrillic"`,
-`"Common"`, `"Old_Italic"`; a short code such as `"Latn"` panics. Digits and punctuation are in the
-script `Common`, so a test for letters of a foreign script runs per character:
+`"Common"`, `"Old_Italic"`. A name the tables do not know panics, so a typo such as `"latin"` or a
+short code such as `"Latn"` is caught where it is written; so does a script that a later Unicode
+version adds, until the implementation moves to that version. The test reads the Script property,
+not Script_Extensions, so a character that several scripts share, such as the Japanese long-vowel
+mark `ー`, is in `Common`, as digits and punctuation are. A test for letters of a foreign script
+therefore runs per character:
 
 ```ant
 func mixesScripts(host: string): bool {
@@ -1830,16 +1837,18 @@ form, so it is the key for grouping or deduplicating text without regard to case
 `String.foldCase("Straße")` and `String.foldCase("STRASSE")` are both `"strasse"`. Neither it nor
 `==` normalizes: `"\u{E9}" == "e\u{301}"` is `false`, and text that can arrive in either spelling
 is compared or keyed after `String.normalize(s, "NFC")`. `normalize` takes the four forms of
-Unicode's UAX #15; `NFKD` also splits an accent from its letter, so dropping the code points that
-`isMark` accepts strips accents.
+Unicode's UAX #15. `NFD` splits an accent from its letter, so dropping the code points that
+`isMark` accepts strips accents; `NFKD` also replaces compatibility characters, such as `ﬁ` with
+`fi`.
 
 Code point indices can cut through what a reader sees as one character. `String.slice` can end
-inside an emoji, and reversing `String.chars` moves an accent onto another letter and turns the
-flag 🇨🇭 into 🇭🇨. `String.graphemes("👨‍👩‍👧e\u{301}")` is the two strings `"👨‍👩‍👧"` and
-`"e\u{301}"`, so text cut, reversed, or counted for display goes through `graphemes`. Grapheme
-splitting, normalization, case mapping, and the class tests follow the Unicode version
-`String.unicodeVersion` names; a code point that a later version assigns is unassigned, `"Cn"`,
-until the implementation moves to that version.
+inside an emoji, and reversing `String.chars` moves an accent onto another letter and turns the flag
+🇨🇭 into two loose letter symbols. `String.graphemes("👨‍👩‍👧e\u{301}")` is the two strings `"👨‍👩‍👧"`
+and `"e\u{301}"`, so text cut, reversed, or counted for display goes through `graphemes`. Grapheme
+splitting, normalization, case mapping, the class tests, and the rendering of `String.from` follow
+the Unicode version `String.unicodeVersion` names. A code point that a later version assigns is
+unassigned, `"Cn"`, until the implementation moves to that version, and `String.from` writes it as
+an escape inside quotes until then.
 
 `String.from` renders any value. `print`, `println` and template strings use it, so this is the format a
 program's output has. It is the only function the language calls implicitly, and only inside
@@ -1852,9 +1861,10 @@ template strings.
 - A string renders as itself at the top level and quoted with escapes inside a container. Inside
   the quotes, `"` and `\` are escaped, `\n`, `\t`, and `\r` are written so, and every other code
   point that `String.isPrint` rejects, such as a control character, a non-breaking space, a
-  zero-width joiner, or a bidirectional override, is written `\u{...}` in lower-case hexadecimal.
-  The rendering shows every code point that is there and reads back as a literal. `bool`, `null`,
-  and `void` render as their literals.
+  zero-width joiner, or a bidirectional override, is written `\u{...}` in lower-case hexadecimal
+  without leading zeros, as `\u{7f}`. The rendering shows every code point that is there and reads
+  back as a literal, which an emoji joined from several shows too: `String.from(["👨‍👩‍👧"])` is
+  `["👨\u{200d}👩\u{200d}👧"]`. `bool`, `null`, and `void` render as their literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
   call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
   their tag and the fields in declaration order. Entries are separated by `, `. An empty array, map,
@@ -1916,6 +1926,10 @@ matches from the left without overlap, and skips an empty match that abuts the m
 `[s]`; with an empty `s` it gives `[""]`, whatever the pattern. An empty match at the start or at
 the end of `s` adds no empty piece, as JavaScript's `split` has it, so `Regex.split(/a*/, "baaab")`
 is `["b", "b"]`.
+
+The `i` flag folds case one code point at a time, as RE2 does, so `/k/i` matches the Kelvin sign
+`K`, but `/straße/i` does not match `"STRASSE"`, which `String.equalFold` accepts. Text compared
+without regard to case is compared through `String.foldCase`.
 
 In `replacement`, `$n` and `${n}` expand to group `n`, `${name}` to a named group, `$$` to one `$`,
 and a group that took no part to `""`. A name after `$` is taken as long as it can be: `$1x` is

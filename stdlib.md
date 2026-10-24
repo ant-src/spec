@@ -557,6 +557,10 @@ record, and propagate errors with `try`, passing the path along so an error can 
 `$.servers[2].port`. Typed decoding through reflection is deferred; the design is in the repository
 history at commit 81525d2.
 
+A `\u` escape of a surrogate pair in a JSON string is the one code point the pair encodes, and a
+surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text from outside does
+(section 11 of `ant-lang.md`, String).
+
 `Json.stringify` renders numbers as `String.from` does, so `1e21` is `1e+21`, and `NaN` and the
 infinities, which JSON cannot carry, as `null`. A value that contains itself has no JSON form, so
 `Json.stringify` panics with `cyclic value` where `String.from` would print `...`.
@@ -605,28 +609,30 @@ type Parts = { scheme: string, opaque: string, user: string, host: string, port:
 Url.parse(s: string): Result[Url.Parts, Error]                   // an absolute or a relative reference; absent parts are ""
 Url.stringify(parts: Url.Parts): string                          // the reference the parts make
 Url.escape(s: string): string                                    // for one query key or value: %XX, a space as +
-Url.unescape(s: string): Result[string, Error]                   // the reverse; Err on a bad %XX
+Url.unescape(s: string): Result[string, Error]                   // the reverse; Err on a bad %XX or on escapes that are not UTF-8
 Url.parseQuery(query: string): Result[Map[string, Array[string]], Error]   // keys in order of first appearance
 Url.stringifyQuery(params: Map[string, Array[string]]): string             // k=v joined with &, in the map's order
 ```
 
 `Parts` divides a reference as RFC 3986 does. `scheme` is the scheme in lower case, without its
 colon. `opaque` is what follows `scheme:` when it is not `//`: `mailto:alice@example.com` parses
-with `scheme` `mailto`, `opaque` `alice@example.com`, and an empty `path`, and without `opaque`
-that reference would lose its content. `user` is the userinfo as written, a password included.
-`host` and `port` are the two halves of the authority, `port` empty when there is none. `path` is
-decoded, `%20` read as a space; `query` is the raw text after `?`, without it, so `parseQuery`
-can read it; `fragment` is decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`
-or a space in the host. `stringify` assembles the parts, escaping what needs it in every part but
-`query`, which is raw and written as it is, so a program changes a URL by parsing it, replacing a
-field, and writing it back.
+with `scheme` `mailto`, `opaque` `alice@example.com`, and an empty `path`, and without `opaque` that
+reference would lose its content. `user` is the userinfo as written, a password included. `host` and
+`port` are the two halves of the authority, `port` empty when there is none. `path` is decoded,
+`%20` read as a space; `query` is the raw text after `?`, without it, so `parseQuery` can read it;
+`fragment` is decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`, escapes in
+`path` or `fragment` that do not decode to UTF-8, or a space in the host. `stringify` assembles the
+parts, escaping what needs it in every part but `query`, which is raw and written as it is, so a
+program changes a URL by parsing it, replacing a field, and writing it back.
 
-`escape` makes a string safe as one key or value of a query: every character but the unreserved
-ones becomes `%XX`, and a space becomes `+`. `parseQuery` reads `k=v&k=v`, each key and value
-decoded as `unescape` does, with a key's values in order and a repeated key such as `tag=a&tag=b`
-kept as `Map{ "tag": ["a", "b"] }`; a key without `=` has the value `""`. `stringifyQuery` writes
-the map back in its order, each key and value escaped, so the two round-trip, and a request that
-is signed over its query has a known order. A one-value query is `Map{ "q": ["ant"] }`.
+`escape` makes a string safe as one key or value of a query: every character but the unreserved ones
+becomes `%XX`, and a space becomes `+`. `parseQuery` reads `k=v&k=v`, each key and value decoded as
+`unescape` does, with a key's values in order and a repeated key such as `tag=a&tag=b` kept as
+`Map{ "tag": ["a", "b"] }`; a key without `=` has the value `""`. Escapes that decode to bytes that
+are not UTF-8, such as `%FF`, are `Err` in `unescape` and `parseQuery`, since no string can hold
+them. `stringifyQuery` writes the map back in its order, each key and value escaped, so the two
+round-trip, and a request that is signed over its query has a known order. A one-value query is
+`Map{ "q": ["ant"] }`.
 
 ## Crypto
 
