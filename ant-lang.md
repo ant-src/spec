@@ -1432,7 +1432,8 @@ particular result:
 - A racy array, map, or set operation observes the state before or after each concurrent mutation,
   or panics with the ordinary index error, or finds the key absent, never a corrupted structure. An
   operation over many elements, such as `Array.map`, may see some of several racing stores and not
-  others.
+  others. Each operation on a `Random` generator (section 11), a whole `shuffle` included, comes
+  before or after every racing one, so its values are those of some order of the draws.
 - The interpreter itself never crashes.
 
 An implementation may also detect a race and end the program with a report and exit status 1, since
@@ -2132,14 +2133,14 @@ change what these return. Arithmetic is on `uint64` and wraps modulo 2^64; `rotl
 by `k` bits.
 
 - **State and draw.** A generator holds four words `s0`, `s1`, `s2`, `s3`, and a draw is one step of
-  xoshiro256** (Blackman and Vigna, 2018). Its value is `rotl(s1 * 5, 7) * 9`, and then, with `t =
+  `xoshiro256**` (Blackman and Vigna, 2018). Its value is `rotl(s1 * 5, 7) * 9`, and then, with `t =
   s1 << 17`, the words become `s2 ^= s0`, `s3 ^= s1`, `s1 ^= s2`, `s0 ^= s3`, `s2 ^= t`, and `s3 =
   rotl(s3, 45)`, in that order.
 - **Seeding.** `Random.new` fills `s0` to `s3`, in order, with four outputs of SplitMix64 started
   from the seed's two's complement bits as `x`. Each output adds `0x9E3779B97F4A7C15` to `x`, takes
   `z = x`, then `z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9`, `z = (z ^ (z >> 27)) *
   0x94D049BB133111EB`, and is `z ^ (z >> 31)`. SplitMix64 maps distinct values of `x` to distinct
-  outputs, so at most one word is zero, and xoshiro256** needs only that not all four are.
+  outputs, so at most one word is zero, and `xoshiro256**` needs only that not all four are.
 - **`float`** is one draw `d` as `(d >> 11) * 2^-53`, the top 53 bits as a fraction, exact in a
   `float64`. **`bool`** is whether the top bit of one draw is 1.
 - **`int`** takes `n = to - from` as a `uint64`, which every pair of `int` bounds fits, and the mask
@@ -2151,11 +2152,11 @@ by `k` bits.
 - **`shuffle`** is Fisher-Yates from the end: for `i` from `len(xs) - 1` down to 1, it swaps `xs[i]`
   with `xs[Random.int(r, 0, i + 1)]`.
 - **`fork`** returns a new generator holding `r`'s four words, and then moves `r` by the jump of
-  xoshiro256**: with `t0` to `t3` at 0, for each bit of `0x180ec6d33cfd0aba`, `0xd5a61266f0c9392c`,
-  `0xa9582618e03fc9aa`, and `0x39abdc4529b1661c`, in that order and lowest bit first, a set bit
-  xors `s0` to `s3` into `t0` to `t3`, and then `r` draws; after the 256 bits, `t0` to `t3` become
-  `r`'s words. The new generator goes on with the values `r` would have given, and `r` gives values
-  2^128 draws further along, so neither reaches the other's within any run.
+  `xoshiro256**`: with `t0` to `t3` at 0, for each bit of `0x180ec6d33cfd0aba`,
+  `0xd5a61266f0c9392c`, `0xa9582618e03fc9aa`, and `0x39abdc4529b1661c`, in that order and lowest bit
+  first, a set bit xors `s0` to `s3` into `t0` to `t3`, and then `r` draws; after the 256 bits, `t0`
+  to `t3` become `r`'s words. The new generator goes on with the values `r` would have given, and
+  `r` gives values 2^128 draws further along, so neither reaches the other's within any run.
 
 These values check an implementation:
 
