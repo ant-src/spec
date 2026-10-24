@@ -2119,7 +2119,7 @@ goroutine its own. `Math.random` stays the unseeded source, and neither is fit f
 which take `Crypto.randomBytes` (`stdlib.md`).
 
 ```
-Random.new(seed: int): Random
+Random.new(seed: int | null = null): Random                    // without a seed, from the host's secure source
 Random.int(r: Random, from: int, to: int): int                 // uniform, from inclusive, to exclusive; panics if to <= from
 Random.float(r: Random): float64                               // uniform in [0, 1)
 Random.bool(r: Random): bool                                   // true or false, each half the time
@@ -2140,7 +2140,10 @@ by `k` bits.
   from the seed's two's complement bits as `x`. Each output adds `0x9E3779B97F4A7C15` to `x`, takes
   `z = x`, then `z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9`, `z = (z ^ (z >> 27)) *
   0x94D049BB133111EB`, and is `z ^ (z >> 31)`. SplitMix64 maps distinct values of `x` to distinct
-  outputs, so at most one word is zero, and `xoshiro256**` needs only that not all four are.
+  outputs, so at most one word is zero, and `xoshiro256**` needs only that not all four are. Without
+  a seed, or with `null`, `Random.new` fills the words from the source `Crypto.randomBytes` reads
+  (`stdlib.md`) instead, reading again in the case, one in 2^256, that all four are zero, so its
+  values differ from run to run as `Math.random`'s do.
 - **`float`** is one draw `d` as `(d >> 11) * 2^-53`, the top 53 bits as a fraction, exact in a
   `float64`. **`bool`** is whether the top bit of one draw is 1.
 - **`int`** takes `n = to - from` as a `uint64`, which every pair of `int` bounds fits, and the mask
