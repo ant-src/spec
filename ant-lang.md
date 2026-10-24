@@ -36,24 +36,38 @@ Block comments do not nest.
 A doc comment is a run of line comments, each alone on its line, on consecutive lines, followed by
 a line break and then directly by a top-level `var`, `func`, or `type` declaration, or by the
 `export` that starts one, with nothing between but white space. It documents that declaration. A
-blank line, a block comment, or a comment that follows code on its line ends the run, so a comment
-separated from a declaration by a blank line documents nothing, and neither does a trailing comment
-on the line before it; in `var a = 1; var b = 2`, a doc comment above the line documents only `a`.
-The doc is the run's text with each line's `//`, the one space after it when present, and its
-trailing white space removed. A doc comment means nothing to
-`ant check` or `ant run`; editors and `ant doc` read it, and `doc.md` gives its conventions.
+blank line, a block comment, a module doc line, or a comment that follows code on its line ends the
+run, so a comment separated from a declaration by a blank line documents nothing, and neither does
+a trailing comment on the line before it; in `var a = 1; var b = 2`, a doc comment above the line
+documents only `a`. The doc is the run's text with each line's `//`, the one space after it when
+present, and its trailing white space removed.
+
+A line comment that starts with `//!` is a module doc line, and the module doc lines of a file
+document the module (section 10). They come before its first `import` or declaration, each alone on
+its line, on consecutive lines: other comments may come before and after them, such as a license,
+but not between. A `//!` comment anywhere else is a syntax error, after code or apart from the
+other module doc lines, so a module has one doc and it is where a reader looks first. The doc is the lines' text with each line's `//!`, the one space after it when present,
+and its trailing white space removed.
+
+Doc comments and module docs mean nothing to `ant check` or `ant run`; editors and `ant doc` read
+them, and `doc.md` gives their conventions.
 
 ```ant
+// Copyright 2026 The Ant Authors. MIT license.
+
+//! Geometry computes distances and areas on the plane.
+
 // Point is a position on the plane.
 export type Point = { x: float64, y: float64 }
 
-// Geometry
+// Distances
 
 // distance returns the straight-line distance from a to b.
 export func distance(a: Point, b: Point): float64 { ... }
 ```
 
-`// Geometry` is followed by a blank line, so it labels a section and documents nothing.
+The license comment is followed by a blank line and is not a `//!` line, so it documents nothing;
+`// Distances` is followed by a blank line, so it labels a section and documents nothing either.
 
 ### Identifiers and keywords
 
@@ -1495,7 +1509,8 @@ never finishing its work; the `defer { WaitGroup.done(wg) }` above is the usual 
 
 Each file is a module: a sequence of `import` declarations followed by `var`, `func`, and `type`
 declarations. Nothing else appears at the top level. A declaration prefixed with `export` is visible
-to other modules; everything else is private.
+to other modules; everything else is private. The module's `//!` lines, before its first `import`,
+document it (section 2).
 
 ```ant
 // geometry.ant

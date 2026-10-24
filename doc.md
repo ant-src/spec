@@ -11,7 +11,7 @@ command and the conventions of the comments it prints; section numbers in it ref
 
 ```
 ant doc <name>              a prelude declaration or namespace: Array.map, Array, Result, print
-ant doc <file.ant>          the exported declarations of a module
+ant doc <file.ant>          a module's doc and its exported declarations
 ant doc <file.ant> <name>   one exported declaration of a module: Point, Point.distance
 ```
 
@@ -31,14 +31,14 @@ A name without a dot that is a namespace, or a type with functions declared on i
 declaration, if it has one, as above, and then the signature of every declaration owned by it, one
 after another in source order. A namespace of the standard library without a type of its name, such
 as `Array` or `Time`, has a doc of its own, which stands in for the declaration: its name, then its
-doc indented. A module prints the signature of each exported declaration in source
-order.
+doc indented. A module prints its doc, if it has one, with every non-empty line indented by four
+spaces, and then the signature of each exported declaration in source order.
 
-| Exit status | When                                                                  |
-| ----------- | --------------------------------------------------------------------- |
-| `0`         | the declaration was found                                             |
-| `1`         | there is no such declaration, or no exported one in the module       |
-| `2`         | the usage is wrong, or the file could not be read or parsed           |
+| Exit status | When                                                                     |
+| ----------- | ------------------------------------------------------------------------ |
+| `0`         | the declaration or the module was found                                  |
+| `1`         | there is no such declaration, or a module has no doc and exports nothing |
+| `2`         | the usage is wrong, or the file could not be read or parsed              |
 
 ## 2. Writing doc comments
 
@@ -49,7 +49,12 @@ conventions the standard library follows, and editors may rely on:
   `Array.map returns a new array holding f applied to each element of xs.` An editor shows it alone
   in a completion list, so it stands on its own. It ends at the first period followed by a space or
   a line break.
-- **Paragraphs** are separated by an empty comment line, `//` with nothing after it.
+- **A module doc** starts with a summary of the module in its own terms, since the name a module
+  goes by is the one each importer gives it: `//! Geometry computes distances and areas on the
+  plane.` It goes on to what a reader of the whole module needs: its main types, how its functions
+  fit together, an example of use. A program's main module says what the program does and how to
+  run it.
+- **Paragraphs** are separated by an empty comment line, `//` or `//!` with nothing after it.
 - **Code** is a run of lines indented by at least one space beyond the comment's own one, which an
   editor shows in a monospaced block, as Ant:
 
