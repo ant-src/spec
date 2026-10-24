@@ -546,7 +546,7 @@ order, and a read of standard input flushes it first, so a prompt is seen before
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a rune or a time value as a string; panics on a cyclic value
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -564,8 +564,8 @@ infinities, which JSON cannot carry, as `null`. A value that contains itself has
 ## Csv
 
 ```
-Csv.parse(text: string, sep: rune = ','): Result[Array[Array[string]], Error]    // rows of fields, as many per row as written; panics if sep is not a separator
-Csv.stringify(rows: Array[Array[string]], sep: rune = ','): string              // a line per row, ending in \n; panics if sep is not a separator
+Csv.parse(text: string, sep: string = ","): Result[Array[Array[string]], Error]   // rows of fields, as many per row as written; panics if sep is not a separator
+Csv.stringify(rows: Array[Array[string]], sep: string = ","): string             // a line per row, ending in \n; panics if sep is not a separator
 ```
 
 The format is RFC 4180 with the separator as given. A row ends at `\n` or `\r\n`; a field that
@@ -575,7 +575,7 @@ lines included, trims nothing, reads a line break inside a quoted field as `\n` 
 drops an empty line, and is `Err` on a quote inside an unquoted
 field or a quoted field that never closes, naming the line. `stringify` quotes a field when it
 holds the separator, a quote, or a line break, or begins with white space, and ends every row with
-`\n`. A separator is any rune other than `'"'`, `'\r'`, `'\n'`, U+0000, and U+FFFD. It is part of
+`\n`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
 the program, not of the data, so another value panics in both functions, checked before any row is
 read or written. With a separator, `stringify` cannot fail, since it writes to a string, so it
 returns a `string`.

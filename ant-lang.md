@@ -70,7 +70,6 @@ are ordinary identifiers bound by the prelude, not keywords.
 42          1_000_000     0xFF        0b1010    // integers
 3.14        1e9           2.5e-3                // floats
 "hello"     "line\nbreak" "\u{1F600}"           // strings
-'a'         '\n'          '\u{E9}'              // runes
 `total: ${count} items`                         // template strings
 /^\d{4}-\d{2}$/   /\bant\b/i                    // regular expressions
 true        false         null
@@ -88,13 +87,8 @@ The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, who
 must be a Unicode scalar value: at most `10FFFF` and not a surrogate. A plain string stays on one
 line; a template string may span lines. A template string interpolates any expression: each `${...}`
 is rendered with `String.from`, which is defined for every type (section 11). Braces nest inside
-`${...}`, so a lambda or a record literal can appear there. There are no raw strings.
-
-A rune literal is one code point between single quotes and evaluates to a `rune` (section 4). It
-takes the escapes of a string and also `\'`, and it stays on one line. An empty literal and one that
-holds two code points, such as `'ab'` or `'e\u{301}'`, an `e` and a combining accent, are syntax
-errors whose message says that a string is written in double quotes. Single quotes never delimit a
-string, as they can in JavaScript.
+`${...}`, so a lambda or a record literal can appear there. There are no raw strings and no
+character literals.
 
 A regular expression literal is a pattern between slashes with optional flags after the closing
 slash, as in JavaScript. The pattern is RE2 syntax, which section 11 (Regex) describes, and it is
@@ -236,7 +230,6 @@ only on a record type.
 | `int8` `int16` `int32` `int64`     | signed integers                                                              |
 | `uint8` `uint16` `uint32` `uint64` | unsigned integers                                                            |
 | `float32` `float64`                | IEEE 754 floats                                                              |
-| `rune`                             | a Unicode scalar value: a code point up to `10FFFF` that is not a surrogate  |
 | `string`                           | immutable sequence of Unicode code points, stored as UTF-8                   |
 | `null`                             | the single value `null`                                                      |
 | `void`                             | the single value `void`, which carries no information                        |
@@ -244,8 +237,8 @@ only on a record type.
 
 `int` is an alias for `int64` and `byte` for `uint8`. `int` is the default; the sized names are for
 when the size matters. The prelude also declares `Integer`, the union of the eight integer types,
-`Number`, which adds the two float types, and `Ordered`, which is `Number | rune | string`. They
-exist to bound type parameters (see Generics).
+`Number`, which adds the two float types, and `Ordered`, which is `Number | string`. They exist to
+bound type parameters (see Generics).
 
 `void` is both a type and its only value, like `null`. A block that ends in a declaration or
 assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly
@@ -259,13 +252,6 @@ be exact: a fraction, a value out of range, `NaN`, or an infinity panics, and tr
 never panics. Section 12 has the table. `string` and `bool` are callable too, but only to unwrap a
 named primitive type (see Named primitive types) or as the identity on their own kind. Parsing is
 `String.toInt` and `String.toFloat`; rendering is `String.from`.
-
-A `rune` is one code point of a string (section 11, String and Rune). It is not a number: it
-compares with `<` and the other comparisons, by code point, but `'a' + 1` is a compile error.
-`rune` is callable on an integer and gives the code point with that value, panicking when the value
-is not a scalar value, so `rune(65)` is `'A'` and `rune(0xD800)` panics. Each numeric name takes a
-rune and converts its value as the integer it is, so `int('A')` is `65` and `int8('é')` panics as
-`int8(233)` does. The next code point is `rune(int(c) + 1)`, written out.
 
 ```ant
 var n = 7
@@ -355,8 +341,8 @@ Record.same(p, Point{ ...p })     // false
 
 ### Named primitive types
 
-A `type` declaration whose body is one of the thirteen primitive types, the ten numeric kinds, `bool`,
-`rune`, and `string`, also creates a new nominal type, with its name as the tag. A value of it is a
+A `type` declaration whose body is one of the twelve primitive types, the ten numeric kinds, `bool`,
+and `string`, also creates a new nominal type, with its name as the tag. A value of it is a
 primitive carrying the tag, built by calling the type name with one argument of the base type,
 exactly as `byte(255)` builds a `byte`. A literal cannot carry the tag, because the interpreter
 never sees an annotation. Calling the base type name on it, `string(id)` or `int(count)`, gives the
@@ -446,7 +432,7 @@ A nullable type is written `T | null` (section 7).
 The members of a union must be distinguishable at run time, because `is` has only kinds and tags to
 look at. Each member has a discriminator:
 
-- the kind, for `bool`, `rune`, `string`, `null`, `void`, and each of the ten numeric kinds;
+- the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds;
 - the word array, map, set, or func, type arguments not counting; or
 - the tag, for a named record or primitive type, for a time type of `stdlib.md`, or for
   `Regex.Pattern`, whose values carry the tag of their type as records do.
@@ -721,7 +707,7 @@ From tightest to loosest binding:
 | prefix         | `-a` `!a` `try a`            |                                                                                                                          |
 | multiplicative | `*` `/` `%`                  | integer `/` truncates toward zero; `%` is the truncated remainder with the dividend's sign, for floats too; a `/` that does not follow an operand begins a regular expression literal (section 2) |
 | additive       | `+` `-`                      | `+` also concatenates strings                                                                                            |
-| comparison     | `<` `<=` `>` `>=` `is`       | numbers, runes, and strings; `is` tests a union member                                                                   |
+| comparison     | `<` `<=` `>` `>=` `is`       | numbers and strings; `is` tests a union member                                                                           |
 | equality       | `==` `!=`                    | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4) |
 | logical        | `&&` then `\|\|`             | short-circuit, `bool` only                                                                                               |
 | null           | `??`                         | cannot mix with `&&` or `\|\|` without parentheses                                                                       |
@@ -730,13 +716,13 @@ From tightest to loosest binding:
 
 There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`.
 An arithmetic or comparison operator needs both operands of the same type, and that type must be a
-single numeric kind, `string` or `rune` where they are allowed, or one named primitive type over
-such a base. `+` takes two strings; the comparisons take two strings or two runes. An arithmetic
-result has the operands' type, tag included; a comparison or an equality test is a plain `bool`. A
-union such as `Number` is not a kind, so `a > b` on two `Number` values is a compile error until
-they are narrowed. Integer overflow panics, including unsigned subtraction below zero. Division by
-zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is `Bits.wrapAdd`,
-`Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width panics.
+single numeric kind, `string` where strings are allowed, or one named primitive type over such a
+base. An arithmetic result has the operands' type, tag included; a comparison or an equality test is
+a plain `bool`. A union such as `Number` is not a kind, so `a > b` on two `Number` values is a
+compile error until they are narrowed. Integer overflow panics, including unsigned subtraction below
+zero. Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is
+`Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width
+panics.
 
 Bitwise operations are functions in the `Bits` namespace:
 
@@ -821,7 +807,7 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 ### Loops
 
 `for` iterates over an array, a map, a set, a string, or a sequence function; over a map it yields
-each `Entry`, over a set each member, and over a string each code point as a `rune`.
+each `Entry`, over a set each member, and over a string each code point as a one-character string.
 Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's
 value. `while` repeats while a condition holds. Both have type `void`, except that a `while` whose
 condition is the literal `true` and whose body contains no `break` has type `never`, since only
@@ -1576,19 +1562,18 @@ type Indexed[T] = { index: int, value: T }       // yielded by Array.entries
 type Seq[T] = func(func(T): bool): void          // a sequence: pushes elements to yield until it returns false
 type Integer = int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 type Number = Integer | float32 | float64
-type Ordered = Number | rune | string
+type Ordered = Number | string
 
 print[T](value: T): void                         // String.from(value) to standard output
 println[T](value: T): void                       // String.from(value) and a newline; println() writes only the newline
 panic(message: string): never
-int8[T: Number | rune](x: T): int8               // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number or a rune is accepted and unwrapped
-rune[T: Integer | rune](x: T): rune              // panics unless x is a scalar value; a named primitive over an integer or a rune is accepted and unwrapped
+int8[T: Number](x: T): int8                      // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
 string(x): string                                // x is a string or a named primitive over string: the payload
 bool(x): bool                                    // likewise
 len(x): int                                      // x is an array, a map, a set, a string, or a channel: its size
 ```
 
-The thirteen conversion names are built into the checker. The signatures give their shape; each also
+The twelve conversion names are built into the checker. The signatures give their shape; each also
 accepts a value of a named primitive type whose base is a kind it takes, and unwraps it, so
 `int(count)` works on a `Count` declared over `int` although `Count` is not assignable to `Number`
 (section 4, Named primitive types).
@@ -1725,18 +1710,10 @@ for line in lines {
 
 ### String
 
-A `string` is immutable and stored as UTF-8, and each of its code points is a `rune`. There is no
-`s[i]`: indexing by code point is linear, so a loop over indices would be quadratic, and indexing by
-byte would be a trap. Lengths, indices, and slices count code points, `for` iterates them as runes
-(section 5), `String.runes` gives them as an array to index, and `String.toBytes` gives the bytes.
-What a reader sees as one character can be several code points, such as an `e` followed by a
-combining accent, or a family emoji joined from three people; `String.graphemes` splits text into
-those units, and `String.normalize` brings the two spellings of `é` to one.
-
-Every string holds only scalar values. Text that reaches a program as a `string` from outside it, a
-file, standard input, a network peer, an argument, or the environment, is decoded as UTF-8 with
-each invalid sequence replaced by U+FFFD, as Unicode recommends; a program that must keep the bytes
-as they were reads them as `Array[byte]`, and `String.fromBytes` tells it whether they are text.
+A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by code point is linear,
+so a loop over indices would be quadratic, and indexing by byte would be a trap. Lengths, indices,
+and slices count code points, `for` iterates them (section 5), `String.toCodePoints` gives them as
+integers, and `String.toBytes` gives the bytes.
 
 ```
 type Cut = { before: string, after: string }                   // the two sides of String.cut
@@ -1766,20 +1743,18 @@ String.replaceFirst(s: string, old: string, new: string): string   // the first 
 String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; panics if sep is empty
 String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
 String.lines(s: string): Array[string]                         // split at \n, a \r before it dropped; no empty final line
-String.toUpper(s: string): string                              // the full mappings, so "straße" gives "STRASSE"
-String.toLower(s: string): string                              // likewise
-String.equalFold(a: string, b: string): bool                   // equal under full case folding
-String.normalize(s: string, form: string): string              // form is "NFC", "NFD", "NFKC", or "NFKD"; panics on another
-String.isDigit(s: string): bool                                // every code point passes Rune.isDigit; false on ""
-String.isLetter(s: string): bool                               // likewise Rune.isLetter
-String.isSpace(s: string): bool                                // likewise Rune.isSpace
-String.isUpper(s: string): bool                                // likewise Rune.isUpper
-String.isLower(s: string): bool                                // likewise Rune.isLower
-String.runes(s: string): Array[rune]                           // one per code point
-String.fromRunes(runes: Array[rune]): string
-String.graphemes(s: string): Array[string]                     // the extended grapheme clusters of Unicode's UAX #29
+String.toUpper(s: string): string
+String.toLower(s: string): string
+String.isDigit(s: string): bool                                // every code point is a decimal digit; false on ""
+String.isLetter(s: string): bool                               // every code point is a letter; false on ""
+String.isSpace(s: string): bool                                // every code point is white space; false on ""
+String.isUpper(s: string): bool                                // every code point is an upper-case letter; false on ""
+String.isLower(s: string): bool                                // every code point is a lower-case letter; false on ""
+String.chars(s: string): Array[string]                         // one code point each
 String.toBytes(s: string): Array[byte]                         // UTF-8
 String.fromBytes(bytes: Array[byte]): string | null            // null on invalid UTF-8
+String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
+String.fromCodePoints(points: Array[int]): string | null       // null when a value is not a scalar value
 String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
 String.toFloat(s: string): float64 | null
 String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; panics if base is outside 2 ..= 36
@@ -1791,26 +1766,15 @@ The padding of `padStart` and `padEnd` is `pad` repeated and cut to the code poi
 `String.padStart("7", 4, "ab")` is `"aba7"`, and a string already at or beyond `width` comes back
 unchanged. `String.lines` splits the text `File.read` gives at every `\n`, drops a `\r` just before
 one, and omits the piece after the last `\n` when it is empty: `"a\r\nb\n"` gives `["a", "b"]`,
-`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is `String.Cut{ before: "k",
-after: "v=w" }`. The class tests ask whether every code point of a string passes the `Rune` test of
-the same name, so `String.isDigit(field)` tests a whole field and `Rune.isDigit(c)` one rune. A
-decimal digit is one in any script, `٣` among them, while `String.toInt` reads only `0` to `9` and
-the letters of a base above ten, `a` to `z`, which it accepts in either case. `fromInt` writes an
-unsigned value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat`
-of `NaN` or an infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
-`String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
-string would give; there is no format string.
-
-`toUpper` and `toLower` apply Unicode's full case mappings that hold in every language, the final
-sigma of Greek included, so a string can change length: `String.toUpper("ß")` is `"SS"`. The rules
-for Turkish and Lithuanian, which depend on the language, are not applied. `String.equalFold` is
-the case-insensitive equality, through the full case folding, so `"Straße"` and `"STRASSE"` are
-equal under it. Neither it nor `==` normalizes: `"\u{E9}" == "e\u{301}"` is `false`, and text that
-can arrive in either spelling is compared after `String.normalize(s, "NFC")`. `normalize` takes the
-four forms of Unicode's UAX #15. `String.graphemes("👨‍👩‍👧e\u{301}")` is the two strings
-`"👨‍👩‍👧"` and `"e\u{301}"`, and `String.length` of either part counts its code points, five and
-two. Splitting, normalizing, and case mapping follow the Unicode version that `Rune.unicodeVersion`
-names.
+`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is
+`String.Cut{ before: "k", after: "v=w" }`. The class tests take a string because Ant has no
+character type: `for c in s` yields one-code-point strings, so `String.isDigit(c)` tests a
+character, and `String.isDigit(s)` tests that a whole field is digits. The letters of a base above
+ten are `a` to `z`, which `toInt` accepts in either case. `fromInt` writes an unsigned value as the
+number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` of `NaN` or an
+infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
+`String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a
+format string would give; there is no format string.
 
 `String.from` renders any value. `print`, `println` and template strings use it, so this is the format a
 program's output has. It is the only function the language calls implicitly, and only inside
@@ -1820,8 +1784,8 @@ template strings.
   value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
   below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. The
   non-finite values render as `NaN`, `Infinity`, and `-Infinity`.
-- A string or a rune renders as itself at the top level and as its literal, quoted with escapes,
-  inside a container: `["a", 'b', '\n']`. `bool`, `null`, and `void` render as their literals.
+- A string renders as itself at the top level and quoted with escapes inside a container. `bool`,
+  `null`, and `void` render as their literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
   call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
   their tag and the fields in declaration order. Entries are separated by `, `. An empty array, map,
@@ -1834,63 +1798,6 @@ template strings.
 - A regular expression pattern renders as a literal that reads back to it, `/a\/b/i`, as the Regex
   section says.
 - A value already being rendered renders as `...`, so cyclic structures terminate.
-
-### Rune
-
-A `rune` is one code point (section 4). Its literal is `'a'`, `int(c)` and `rune(n)` convert
-between it and an integer, and it compares by value but takes no arithmetic. The tests name the
-Unicode general categories and properties they follow.
-
-```
-Rune.isLetter(c: rune): bool                                   // the category L
-Rune.isDigit(c: rune): bool                                    // Nd, a decimal digit in any script
-Rune.isNumber(c: rune): bool                                   // N: Nd, Nl, and No, such as Ⅻ and ½
-Rune.isSpace(c: rune): bool                                    // the White_Space property
-Rune.isUpper(c: rune): bool                                    // Lu
-Rune.isLower(c: rune): bool                                    // Ll
-Rune.isPunct(c: rune): bool                                    // P
-Rune.isSymbol(c: rune): bool                                   // S
-Rune.isMark(c: rune): bool                                     // M, such as a combining accent
-Rune.isControl(c: rune): bool                                  // Cc
-Rune.isGraphic(c: rune): bool                                  // L, M, N, P, S, or Zs
-Rune.isPrint(c: rune): bool                                    // L, M, N, P, S, or the space U+0020
-Rune.category(c: rune): string                                 // the two-letter general category, such as "Lu"; "Cn" when unassigned
-Rune.inScript(c: rune, script: string): bool                   // the Script property; panics if script names no script
-Rune.toUpper(c: rune): rune                                    // the simple mapping, one rune to one; c when there is none
-Rune.toLower(c: rune): rune                                    // likewise
-Rune.toTitle(c: rune): rune                                    // likewise
-Rune.digitValue(c: rune, base: int = 10): int | null           // a digit of base as String.toInt reads it; null otherwise; panics if base is outside 2 ..= 36
-Rune.fromInt(n: int): rune | null                              // null where rune(n) would panic
-Rune.unicodeVersion: string                                    // the version of the Unicode tables, such as "17.0.0"
-```
-
-A script is named as in Unicode's `Scripts.txt`, in full: `"Latin"`, `"Han"`, `"Cyrillic"`,
-`"Common"`, `"Old_Italic"`. A short code such as `"Latn"` panics. `Rune.toUpper('ß')` is `'ß'`,
-because the full mapping to `SS` takes two runes; the full mappings belong to `String.toUpper`.
-`Rune.digitValue` reads `0` to `9` and, above base ten, the letters in either case, so
-`Rune.digitValue('7')` is `7`, `Rune.digitValue('f', 16)` is `15`, and `Rune.digitValue('٣')` is
-`null`, though `Rune.isDigit('٣')` is `true`. Every table, here and in `String`, is of the one
-Unicode version `Rune.unicodeVersion` names, so a code point that a later version assigns is
-unassigned, `"Cn"`, until the implementation moves to that version.
-
-```ant
-func isIdentStart(c: rune): bool { Rune.isLetter(c) || c == '_' }
-
-func words(s: string): Array[string] {
-  var out: Array[string] = []
-  var word: Array[rune] = []
-  for c in s {
-    if isIdentStart(c) || !Array.isEmpty(word) && Rune.isDigit(c) {
-      Array.push(word, c)
-    } else if !Array.isEmpty(word) {
-      Array.push(out, String.fromRunes(word))
-      word = []
-    }
-  }
-  if !Array.isEmpty(word) { Array.push(out, String.fromRunes(word)) }
-  out
-}
-```
 
 ### Regex
 
@@ -2132,12 +2039,12 @@ Every value has a kind, fixed when the value is created:
 | Kind                             | Values                                                                                                                                                                                                                                         |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | the ten numeric kinds            | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it                                                                                                                              |
-| `bool`, `rune`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                        |
+| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                |
 | array                            | a growable sequence of values                                                                                                                                                                                                                  |
 | map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                           |
 | set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                      |
 | record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                    |
-| tagged primitive                 | a value of one of the thirteen primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
+| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
 | func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
 | tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
 | sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, or `Context`                                                                                                                                                              |
@@ -2201,12 +2108,10 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   accepts zero or one positional argument, binding `x` to `void` when none is given. The body then
   runs in a new scope, and the call's value is the body's value, or the operand of the `return` that
   ended it.
-- **Conversion `int8(x)` … `float64(x)`, `rune(x)`, `string(x)`, `bool(x)`.** The thirteen primitive
-  names are prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require
-  their own kind and yield the value. `rune` requires an integer or a rune and yields the rune with
-  that value, panicking when it is not a scalar value: above `10FFFF`, negative, or a surrogate from
-  `D800` to `DFFF`. For the numeric names the argument must be a number or a rune, which converts as
-  an integer of its value, and the result follows this table:
+- **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are
+  prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their
+  own kind and yield the value. For the numeric names the argument must be a number, and the result
+  follows this table:
 
   | From    | To      | Rule                                                                                         |
   | ------- | ------- | -------------------------------------------------------------------------------------------- |
@@ -2222,10 +2127,10 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   unsigned subtraction below zero. Integer `/` truncates toward zero, `%` takes the sign of the
   dividend, and both panic on a zero divisor. Float arithmetic follows IEEE 754 and never panics.
   Unary `-` needs a number; `!` needs a `bool`.
-- **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, two runes, which compare
-  by value, or two strings, which compare by code point, or two tagged values with the same tag, which compare as their base kind.
+- **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, or two strings, which
+  compare by code point, or two tagged values with the same tag, which compare as their base kind.
 - **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers
-  are equal by value, with IEEE 754 rules for floats; runes are equal by value; strings have the same code points; `bool`,
+  are equal by value, with IEEE 754 rules for floats; strings have the same code points; `bool`,
   `null`, and `void` values are equal by value; records have the same tag and `==` fields; tagged
   primitives have the same tag and equal payloads; time values have the same tag and equal fields,
   as `stdlib.md` lists them per type; patterns have the same normalized source and flags; arrays
@@ -2233,7 +2138,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   key; sets have the same members; functions, tags, and sync objects are the same object. A pair of
   values already under comparison counts as equal (section 4). Values of different kinds are
   unequal, so `x == null` is simply `false` for a non-null `x`.
-- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `rune`, `string`, `func`, `Array`, `Map`,
+- **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `func`, `Array`, `Map`,
   `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any other
   path evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a constructor, not
   an alias tag, and the test is whether `a` is a record, tagged primitive, time value, or pattern
@@ -2276,7 +2181,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   records in insertion order, reading the map as it goes, like an array. An entry inserted during
   the loop is visited, an entry removed before the loop reaches it is not, and no entry is visited
   twice. A key removed and inserted again is a new entry at the end. Over a set it visits the
-  members the same way. Over a string it yields each code point as a `rune`. Over a
+  members the same way. Over a string it yields each code point as a one-character string. Over a
   function it calls the function with a fresh `yield` function; each call of `yield` with one
   argument binds `x`, runs the body, and returns `true`, or `false` when the body ended with
   `break`. Calling `yield` again after it returned `false`, or after the sequence function has
@@ -2323,12 +2228,12 @@ can only panic in the ways the last column lists, which depend on values known a
 
 | Operation                                         | Panics when (ruled out by the checker)                                                                                                                                                                                                                | Panics when (possible in a checked program)                                                                                                      |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `+ - * / %`, `< <= > >=`, unary `-`               | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings, and the comparisons two runes                                                                                                       |                                                                                                                                                  |
+| `+ - * / %`, `< <= > >=`, unary `-`               | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                      |                                                                                                                                                  |
 | `!`, `&&`, `\|\|`, `if`, `while`                  | an operand or condition is not a `bool`                                                                                                                                                                                                               |                                                                                                                                                  |
 | integer `+ - *`, compound assignment, `Array.sum` |                                                                                                                                                                                                                                                       | the result does not fit the kind                                                                                                                 |
 | integer `/`, `%`                                  |                                                                                                                                                                                                                                                       | the divisor is zero                                                                                                                              |
 | `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                       | the count is negative or not below the operand's width                                                                                           |
-| numeric conversion, `rune`                        | the argument, after unwrapping, is not a number or a rune; for `rune`, not an integer or a rune                                                                                                                                                      | an integer target is given a fraction, a value out of range, `NaN`, or an infinity; `rune` is given a value that is not a scalar value            |
+| numeric conversion                                |                                                                                                                                                                                                                                                       | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                               |
 | `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                   |                                                                                                                                                  |
 | `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, or a channel                                                                                                                                                                 |                                                                                                                                                  |
 | `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                              |                                                                                                                                                  |
