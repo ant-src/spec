@@ -72,7 +72,8 @@ The license comment is followed by a blank line and is not a `//!` line, so it d
 ### Identifiers and keywords
 
 An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`.
-Case carries no meaning. `_` on its own is a write-only identifier: it can be bound or assigned
+Identifiers are case-sensitive, so `value` and `Value` are two names, but case means nothing else:
+unlike in Go, it does not decide what a module exports. `_` on its own is a write-only identifier: it can be bound or assigned
 wherever a name can, which discards the value. Reading it is a compile error in `ant check` and a
 panic in `ant run`.
 
