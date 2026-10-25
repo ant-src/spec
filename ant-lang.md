@@ -167,8 +167,10 @@ RE2 has no lookahead, lookbehind, or backreferences, so a JavaScript pattern tha
 `(?!`, `(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct; `\1` through
 `\9` are the backreferences, while `\10` and up are octal escapes, as RE2 reads them. JavaScript's
 `\u0041` is a syntax error whose message names `\x{0041}`. `(?<name>...)` names a group as in
-JavaScript. Inside `\Q...\E`, where RE2 takes every character as itself, `\/` is two characters,
-while the normalization of section 11 takes it for `/`; write `/` there. A few patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
+JavaScript. Inside `\Q...\E`, where RE2 takes every character as itself up to the first `\E`, a
+`\/` is the two characters `\` and `/`, and a `/` still ends the literal, so a `/` to match there is
+written by closing and reopening the span around it: `/\Qa\E\/\Qb\E/` matches `a/b`. A few
+patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
 `\v` or the Unicode spaces, and `.` excludes only `\n`, where JavaScript also excludes `\r`, U+2028,
 and U+2029. `\d`, `\w`, and `\b` are ASCII in both.
 
@@ -2020,12 +2022,16 @@ A pattern is its source and its flags. `Regex.compile` takes the flags as a stri
 letters a literal takes, in any order, and is `Err` on any other letter or a repeated one. The
 source is normalized: a `\/` loses its backslash, since RE2 reads `\/` and `/` alike, a line break
 becomes `\n` or `\r` and an empty source becomes `(?:)`, which RE2 reads the same, and the flags
-are sorted. Two patterns are `==` when their normalized sources and flags are, so `/a/i == /a/i`,
+are sorted. The text of a `\Q...\E` span, which RE2 takes as itself, is kept as written, line breaks
+and `\/` included; a span left open at the end gets its `\E`, and a span closed and reopened around
+a single `/` or line break, written as itself or escaped, as in `\Qa\E\/\Qb\E`, becomes one span
+holding that character, `\Qa/b\E`. Two patterns are `==` when their normalized sources and flags are, so `/a/i == /a/i`,
 `/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`, `Regex.compile("a/b") == /a\/b/`,
 `Regex.compile("a\nb") == /a\nb/` and `Regex.compile("") == /(?:)/` all hold, and
 `Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as a literal that reads back to it: every `/`
-of the normalized source written `\/`, so `/(?:)/` for the empty pattern, as JavaScript renders
-it. `Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a
+of the normalized source written `\/` and every line break `\n` or `\r`, so `/(?:)/` for the empty
+pattern, as JavaScript renders it; inside a `\Q...\E` span the span is closed and reopened around
+each, as `\E\/\Q`, `\E\n\Q`, or `\E\r\Q`. `Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a
 string.
 
 A `Match` is one match of the whole pattern: `text` is the matched text, `start` and `end` are its
