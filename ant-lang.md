@@ -187,7 +187,9 @@ A newline or a semicolon ends an expression. A newline does not end one when:
 
 Nothing else is inferred. A line that starts with `(` or `[` begins a new statement, so `a` followed
 by `(b)` on the next line is two statements, not a call. A `return` at the end of a line returns
-`void`, which the checker rejects in a function with another return type. A trailing comment changes
+`void`, which the checker rejects in a function with another return type. It ends its statement
+even when the next line starts with `.`, `?.`, `|`, or `else`, so that line begins a statement of its
+own, which is a syntax error since none of those tokens can start one. A trailing comment changes
 none of this.
 
 Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. Calls,
@@ -816,7 +818,8 @@ directly follows an identifier path, a literal, or a closing `)` or `]`. A `{` d
 operator or an opening bracket starts a lambda. A record or map literal in a header would put `{`
 after an identifier path, so it must be parenthesized, as in Go:
 `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a
-newline would end the header expression (section 2).
+newline would end the header expression (section 2). That holds inside parentheses too, where
+newlines are otherwise ignored: `(if c` followed by `{ 1 } else { 2 })` on the next line is an error.
 
 ### `if`
 
@@ -918,9 +921,9 @@ select {
 }
 ```
 
-A clause is a head and a block, one clause per line. A head is one of five blocking calls of
-section 11 and `stdlib.md`, written as the call would be and not performed: `Channel.receive(c)`,
-`Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
+A clause is a head and a block, one clause per line; a `;` between clauses is a syntax error. A
+head is one of five blocking calls of section 11 and `stdlib.md`, written as the call would be and
+not performed: `Channel.receive(c)`, `Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
 before a head binds the call's result in the block: a receive binds `T | null`, `null` when the
 channel is closed, a send binds `bool`, and a binding on a head that returns `void` is a compile
 error. A head takes no context, since the context is its own clause, and a head given one is a
@@ -960,7 +963,8 @@ five, and a `{` on a line after its head are each a syntax error.
 `{ x, y }` binds the fields `x` and `y`, and `{ x: px }` binds the field `x` as `px`; fields not
 mentioned are ignored. An array destructuring `[a, b]` binds elements by position and ignores extra
 elements, and `[head, ...tail]` binds the rest as a new array. Each position holds a name, `_` to
-discard, or another destructuring, so they nest.
+discard, or another destructuring, so they nest. A destructuring has at least one field or position,
+so `var [] = xs` and `var {} = r` are syntax errors.
 
 Destructuring is binding plus indexing, and it fails the way indexing does. An array with fewer
 elements than the fixed positions panics, as `xs[1]` would on a one-element array. A nested record
