@@ -65,7 +65,7 @@ line and the body after it as bytes. `readChunk` returns as soon as there is any
 least one byte and at most `max`, and waits only while there is nothing; it is the read for a stream
 whose pieces have no fixed size. `readExactly` waits for all `n` bytes, the read for a protocol that
 announces a length, and is `Err` with the message `unexpected end of file` when the input ends after
-some of them; `n` of 0 gives empty `Bytes` without reading, at the end of the file too. A `max` below 1 or an `n` below 0 is `Err`.
+some of them, which are discarded, since they are no whole message; `n` of 0 gives empty `Bytes` without reading, at the end of the file too. A `max` below 1 or an `n` below 0 is `Err`.
 `writeChunk` writes the bytes as they are, as `writeText` writes text as UTF-8.
 
 A handle is also a connection from `Net`, and the reads and writes are the same. A context
