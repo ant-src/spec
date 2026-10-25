@@ -1406,9 +1406,10 @@ Messages follow one convention, so that the joined text reads as one line:
 ### `panic`
 
 `panic(message)` is a prelude function of type `never`. It stops the current goroutine immediately.
-It is for bugs and impossible states, never for expected failures. Panics cannot be caught. A panic
-in the main goroutine ends the program with a non-zero exit status; a panic in any other goroutine
-ends only that goroutine (section 9).
+It is for bugs and impossible states, never for expected failures. A panic in the main goroutine
+ends the program with a non-zero exit status; a panic in any other goroutine ends only that
+goroutine (section 9). `Panic.catch` stops one on its way and makes it a value (see Catching a
+panic).
 
 Section 12 lists every operation that panics. The common ones: integer overflow, integer division by
 zero, array index out of range, lossy numeric conversion, and `unwrap` on the wrong case.
@@ -1428,6 +1429,45 @@ func copy(src: string, dst: string): Result[void, Error] {
   File.pipe(input, output)
 }
 ```
+
+### Catching a panic
+
+`Panic.catch(f)` calls `f` with no argument and returns `Ok` of its value. When a panic leaves `f`,
+it returns an `Err` holding the panic instead, once the deferred blocks inside `f` have run. A
+panic is a record of two prelude types:
+
+```
+type Panic = { message: string, trace: Array[Panic.Frame] }
+type Panic.Frame = { function: string, path: string, line: int, column: int }
+```
+
+The trace is the goroutine's stack when the panic began, innermost first, the frames the runtime
+writes to standard error for a panic it reports. A frame names a function, the path of its module,
+and the line and column, counted from 1, where that function was: the panic itself in the first
+frame, a call in the others. It runs past `f` to the goroutine's root. A panic in a deferred block
+replaces the one in progress (section 12), so `catch` sees the last. A caught panic is not reported.
+`Panic.raise(p)` panics with `p` as it is, its trace included, so a panic that a caller does not
+handle goes on as though it had not been caught, and is reported where it ends a goroutine.
+
+```ant
+type Job = { id: int, input: string }
+
+func runAll(jobs: Array[Job]) {
+  for job in jobs {
+    var done = Panic.catch({ handle(job) })
+    if done is Err { println(`job ${job.id}: ${done.error.message}`) }
+  }
+}
+```
+
+`catch` belongs at the edge of a unit of work that must not take the others down with it: a job, a
+request, a test, a plugin. It is not a second way to fail. A panic carries only a message, so there
+is nothing to branch on, and a failure a caller is meant to handle is a `Result` (see `Result`).
+Only a panic is caught: `Os.exit` and the end of a run the host cancels (section 9) pass through,
+and a goroutine started inside `f` panics on its own (section 9, Panics in goroutines). A panic can
+leave shared data half changed. `Mutex.withLock` releases its lock as the panic leaves the block,
+but what the block wrote before the panic stays written, and the code that catches it decides
+whether that data can still be used.
 
 ## 9. Concurrency
 
@@ -1640,6 +1680,10 @@ reports the message and stack trace on standard error. Nothing else happens: no 
 interrupted, and the program continues. Code that waits on a goroutine must therefore account for it
 never finishing its work; the `defer { WaitGroup.done(wg) }` above is the usual pattern.
 
+A goroutine that runs many units of work, such as a worker reading jobs or a server's handler loop,
+calls each through `Panic.catch` (section 8, Catching a panic), so that a bug in one unit ends that
+unit and the goroutine goes on to the next.
+
 ## 10. Modules
 
 Each file is a module: a sequence of `import` declarations followed by items, which are `var`,
@@ -1779,7 +1823,9 @@ Besides the namespaces below, the prelude declares these names in every module:
 type Ok[T] = { value: T }
 type Err[E] = { error: E }
 type Result[T, E] = Ok[T] | Err[E]
-type Error = { message: string }                 // the library's error type; see Result, Error, and Record
+type Error = { message: string }                 // the library's error type; see Result, Error, Panic, and Record
+type Panic = { message: string, trace: Array[Panic.Frame] }   // a caught panic; see Result, Error, Panic, and Record
+type Panic.Frame = { function: string, path: string, line: int, column: int }   // innermost first in a trace
 type Entry[K, V] = { key: K, value: V }          // yielded by maps
 type Indexed[T] = { index: int, value: T }       // yielded by Array.entries
 type Seq[T] = func(func(T): bool): void          // a sequence: pushes elements to yield until it returns false
@@ -2364,7 +2410,7 @@ Random.shuffle(Random.new(42), xs)
 xs                                                        // [6, 8, 10, 4, 3, 1, 5, 9, 2, 7]
 ```
 
-### Result, Error, and Record
+### Result, Error, Panic, and Record
 
 ```
 Result.ok[T, E](value: T): Result[T, E]
@@ -2379,13 +2425,17 @@ Result.wrapErr[T](r: Result[T, Error], context: string): Result[T, Error]   // r
 
 Error.wrap(e: Error, context: string): Error                   // Error{ message: `${context}: ${e.message}` }, a new record
 
+Panic.catch[T](f: func(): T): Result[T, Panic]                 // Ok of f's value, or Err of the panic that left f, after its deferred blocks ran
+Panic.raise(p: Panic): never                                   // panics with p's message and trace
+
 Record.same[T: {}](a: T, b: T): bool                           // identity; {} bounds T to any record
 ```
 
 `Result.ok` and the others are functions declared on the `Result` type (section 6), so `Result`
 names the alias in a type and its functions in an expression; `Error.wrap` is declared on `Error`
-likewise, and `Error{ message: "..." }` is still a literal (section 8, Wrapping errors). `Record` is
-a namespace.
+likewise, and `Error{ message: "..." }` is still a literal (section 8, Wrapping errors). `Panic.catch`
+and `Panic.raise` are declared on `Panic`, and `Panic.Frame` is a type in its namespace, as
+`String.Cut` is in `String`'s (section 8, Catching a panic). `Record` is a namespace.
 
 ### Synchronization
 
@@ -2660,10 +2710,12 @@ deferred blocks run in reverse order of registration, each in the scope it was r
 `return` inside a deferred block returns from the deferred block only.
 
 A panic unwinds the current goroutine: every block being evaluated exits in turn, running its
-deferred blocks, until the goroutine's root block has exited. A panic inside a deferred block
-replaces the one in progress. When unwinding finishes, the runtime writes the message and a stack
+deferred blocks, until the goroutine's root block has exited or a call of `Panic.catch` has
+returned. A panic inside a deferred block replaces the one in progress. `Panic.catch` stops the
+unwinding at its own call, which returns an `Err` of the panic, and nothing is reported (section 8,
+Catching a panic). Otherwise, when unwinding finishes, the runtime writes the message and a stack
 trace to standard error. In the main goroutine the program then exits with a non-zero status; in any
-other goroutine, that goroutine ends and nothing else happens. Panics cannot be caught.
+other goroutine, that goroutine ends and nothing else happens.
 
 ### Goroutines
 
