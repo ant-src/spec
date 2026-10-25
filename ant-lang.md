@@ -225,7 +225,7 @@ outer one, except that no declaration in any scope may shadow a prelude name (se
 is visible from its declaration to the end of the enclosing block; its own initializer may refer to
 it only inside a nested function body, which is how a local function calls itself (section 6).
 Top-level `func`, `type`, and `var` declarations are visible throughout the module regardless of
-order, but a top-level initializer may refer directly, outside a nested function body, only to the
+order, as a `type` in a block is throughout its block (section 4, Type declarations), but a top-level initializer may refer directly, outside a nested function body, only to the
 `var`s above it (section 10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
@@ -653,7 +653,7 @@ generic type with different type arguments is a different type: `Array[Circle]` 
 
 ### Type declarations
 
-`type` declares a name and appears only at the top level of a module. The body decides what the name
+`type` declares a name at the top level of a module or in a block. The body decides what the name
 means:
 
 - A record type creates a new type with that name as its tag, marked as a record tag (see Records).
@@ -674,6 +674,35 @@ parameters unchanged and in order, so that every level is the same instantiation
 `type N[A, B] = Array[N[B, Box[A]]] | Map[string, A | B]`, since `N[int, string]` would hold
 `N[string, Box[int]]`, which holds `N[Box[int], Box[string]]`, whose `A | B` repeats a tag (see
 Unions).
+
+A `type` in a block keeps a shape next to its one use, since a record value always needs a named
+type. It is visible throughout its block, as a top-level type is throughout its module, so the types
+of one block may refer to each other in any order, and it follows the shadowing rules of section 3.
+As a statement it is `void`. Each declaration has one tag for the whole run, made once and not each
+time the block runs, so every call of `tally` below builds values of one type, which `==` compares
+as usual. Its body may not mention a type parameter of the enclosing function, which would make the
+one tag stand for a different type in each call. A local type is never exported and has no
+functions declared on it, since `export` and `func` appear only at the top level. Its values may
+still leave the block, as an inferred return type or an element of an array; code outside then uses
+them without naming the type.
+
+```ant
+func tally(words: Array[string]): Array[string] {
+  type Count = { word: string, n: int }
+  var counts: Map[string, Count] = Map{}
+  for w in words {
+    var c = counts[w] ?? Count{ word: w, n: 0 }
+    c.n += 1
+    counts[w] = c
+  }
+  Map.values(counts) | Array.sortBy({ -x.n }) | Array.map({ `${x.word}: ${x.n}` })
+}
+
+func wrap[T](v: T): Array[T] {
+  type Box = { value: T }                  // compile error: Box cannot mention T of wrap
+  [v]
+}
+```
 
 A type name is also the namespace of the functions declared on it (section 6, Functions on types).
 It is an expression only as the head of a record literal, as the target of `is`, as the left side of
@@ -1111,8 +1140,8 @@ next()    // 2
 ### Functions on types
 
 `func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`. The call
-is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared by
-the same module and may be a record, a named primitive type, or an alias, including an alias of a
+is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared at
+the top level of the same module and may be a record, a named primitive type, or an alias, including an alias of a
 union. A type's namespace is therefore closed, and the prelude's types cannot be extended.
 
 The function is an ordinary function. It need not take the type as a parameter, which is how
@@ -2368,7 +2397,9 @@ module scope and then to the prelude. A closure keeps a reference to the scopes 
 so it sees later assignments to the variables it captured, and a closure made in a `var`'s
 initializer sees that `var` once it is bound. The initializer runs first, so a call that reaches the
 variable before it is bound panics, as for a top-level `var`. Each iteration of a `for` opens a
-fresh scope for the loop variable.
+fresh scope for the loop variable. A `type` in a block is bound when the block starts, so it is
+visible throughout the block, and every time to the one tag or constructor its declaration made when
+the module was loaded.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
