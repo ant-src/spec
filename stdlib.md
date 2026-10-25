@@ -145,13 +145,11 @@ func handle(req: Http.Request): Http.Reply {
   else { Http.Reply{ status: 404, headers: Map{}, body: `no ${req.path}` } }
 }
 
-func main(): void {
-  var listener = Result.unwrap(Net.listen(":8080"))
-  println(`listening on ${Net.address(listener)}`)
-  var stop = Os.interrupt()
-  var served = Http.serve(listener, handle, stop)
-  println(`stopped: ${Context.reason(stop) ?? "?"}`)
-}
+var listener = Result.unwrap(Net.listen(":8080"))
+println(`listening on ${Net.address(listener)}`)
+var stop = Os.interrupt()
+var served = Http.serve(listener, handle, stop)
+println(`stopped: ${Context.reason(stop) ?? "?"}`)
 ```
 
 ## Net

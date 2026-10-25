@@ -226,8 +226,8 @@ is visible from its declaration to the end of the enclosing block; its own initi
 it only inside a nested function body, which is how a local function calls itself (section 6).
 Top-level `func`, `type`, and `var` declarations are visible throughout the module regardless of
 order, as a `type` in a block is throughout its block (section 4, Type declarations), but a
-top-level initializer may refer directly, outside a nested function body, only to the `var`s above
-it (section 10).
+top-level initializer or statement may refer directly, outside a nested function body, only to the
+`var`s above it (section 10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -257,14 +257,14 @@ so does their cost. Every rule in this document that mentions a type is a checke
 compile error is an error the checker reports.
 
 `ant run file.ant` does no static work beyond parsing. It loads the import graph, so a syntax error
-anywhere stops the program before `main`, and then it runs with annotations parsed and discarded. An
-unknown name panics when it is reached, not before, though an implementation may resolve names to
-slots as it loads. Every runtime rule is defined on values, which carry their concrete type: every
-value has a kind, such as `int`, `string`, array, or record, and a record or a tagged primitive also
-carries a tag (section 12). A program can run without being checked. Where the checker would have
-rejected it, the runtime panics at the point of the error: `+` on operands of different types, a
-call on a value that is not a function, a field read on a value that is not a record. Section 12
-lists every such check.
+anywhere stops the program before any module runs, and then it runs with annotations parsed and
+discarded. An unknown name panics when it is reached, not before, though an implementation may
+resolve names to slots as it loads. Every runtime rule is defined on values, which carry their
+concrete type: every value has a kind, such as `int`, `string`, array, or record, and a record or a
+tagged primitive also carries a tag (section 12). A program can run without being checked. Where the
+checker would have rejected it, the runtime panics at the point of the error: `+` on operands of
+different types, a call on a value that is not a function, a field read on a value that is not a
+record. Section 12 lists every such check.
 
 Editors and continuous integration run `check`; the terminal runs `run`. No flag makes `run` check
 first.
@@ -1060,11 +1060,12 @@ These have type `never`, so they can appear anywhere an expression is expected. 
 whole expression to its right, so `x ?? return y + 1` returns `y + 1`; parenthesize it to end
 earlier. `panic` is an ordinary function of type `never` (section 8).
 
-A function body, a lambda, a `go` block, and a `defer` block are the four boundaries. `return`
-leaves the innermost one; inside a `go` or `defer` block it takes no value, since neither has a
-result. `break` and `continue` target the innermost loop inside the same boundary, so a `break` in a
-lambda or a `go` block cannot leave a loop outside it. A `break` or `continue` with no loop to
-target is a syntax error, as is a `return` outside any boundary. The parser enforces all of this.
+A function body, a script body (section 10), a lambda, a `go` block, and a `defer` block are the
+five boundaries. `return` leaves the innermost one; inside a `go` or `defer` block it takes no
+value, since neither has a result. `break` and `continue` target the innermost loop inside the same
+boundary, so a `break` in a lambda or a `go` block cannot leave a loop outside it. A `break` or
+`continue` with no loop to target is a syntax error, as is a `return` outside any boundary, which
+can only be in a library's top-level initializer. The parser enforces all of this.
 
 ```ant
 var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
@@ -1247,9 +1248,17 @@ parameter:
   assignment anywhere in the body cancels it from the loop head on.
 
 A field path such as `user.address` never narrows, because any call between the test and the use may
-reassign it. Bind it to a local first, or use `?.` or `??`. A top-level `var`, including an imported
-one, never narrows either, because any call may reassign it; read it into a local first in the same
-way.
+reassign it. Bind it to a local first, or use `?.` or `??`. A top-level `var` of a library,
+including an imported one, never narrows either, because any call may reassign it; read it into a
+local first in the same way.
+
+A script's top-level `var`s are different: a script cannot be imported, so only its own code
+assigns them, and they are locals of the script body (section 10). They narrow in its top-level
+code like any local, and the script's `func` declarations are nested bodies under the rule below.
+A `func` declaration does not get that rule's exception for a local never assigned after its
+declaration: it is hoisted and has no position, so it may run before the test that narrowed the
+variable. A lambda, a `go` block, or a `defer` block written in the script's top-level code is
+created where it stands and gets the exception as anywhere else.
 
 Narrowing is limited to locals because a local can go stale in only one way, by reassignment: a
 record's tag never changes and a reference never becomes `null` on its own. Another goroutine can
@@ -1332,8 +1341,9 @@ enclosing function, typed by that function's return type. The enclosing function
 return a `Result` whose error type accepts `E`, or such a `Result` or `null`, since `Err[E]` is
 assignable to `Result[U, E] | null` too; an inferred return type must come out one of the two. A
 `go` or `defer` block has no result, so `try` directly inside one is a compile error. Outside every
-boundary (section 5), in a top-level initializer outside a lambda, there is no function to return
-from, so `try` there is a syntax error, as `return` is; a parameter default evaluates in the called
+boundary (section 5), in a library's top-level initializer outside a lambda, there is no function
+to return from, so `try` there is a syntax error, as `return` is; in a script's top-level code it
+returns from the script body (section 10); a parameter default evaluates in the called
 function, which a `try` in it returns from. `try` reads only the outer tag, so on an `Ok[Ok[int]]`
 it yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null`
 (section 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter
@@ -1395,7 +1405,8 @@ call chains. Blocking library calls such as file and network I/O block only the 
 go { sendReport(report) }
 ```
 
-The program exits when the main goroutine returns, regardless of other goroutines.
+The main goroutine is the one that loads the program and runs its script (section 10). The program
+exits when the script body ends, regardless of other goroutines.
 
 The host can end a run before that: the `ant` command on an interrupt the program did not ask for
 (`stdlib.md`, `Os.interrupt`), a Go program by cancelling the context it gave `Run`. Every
@@ -1593,10 +1604,10 @@ never finishing its work; the `defer { WaitGroup.done(wg) }` above is the usual 
 
 ## 10. Modules
 
-Each file is a module: a sequence of `import` declarations followed by `var`, `func`, and `type`
-declarations. Nothing else appears at the top level. A declaration prefixed with `export` is visible
-to other modules; everything else is private. The module's `//!` lines, before its first `import`,
-document it (section 2).
+Each file is a module: a sequence of `import` declarations followed by items, which are `var`,
+`func`, and `type` declarations and statements, in any order. A declaration prefixed with `export`
+is visible to other modules; everything else is private. The module's `//!` lines, before its first
+`import`, document it (section 2).
 
 ```ant
 // geometry.ant
@@ -1644,18 +1655,61 @@ visible origin. The prelude names count as imports in every module: `print`, `pr
 imports, a prelude name cannot be shadowed in an inner scope either, so `int` and `x is int` mean
 one thing everywhere; the parser enforces it, since the prelude is a fixed list. There is no
 re-export. An import cycle is an error in both commands, since no module in it could be initialized
-after its imports: `ant run` stops before `main`.
+after its imports: `ant run` stops before any module runs.
 
 Imports are resolved depth first in source order, and each module is initialized once, after
 everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may
-refer to each other in any order. Top-level `var` initializers run in source order. An initializer
-that refers to a later `var` outside a nested function body is a compile error; reaching one through
-a function call before it is initialized is a runtime panic, since the checker does not trace calls.
+refer to each other in any order. The other items, `var` initializers and statements alike, run in
+source order. An initializer or statement that refers to a later `var` outside a nested function
+body is a compile error; reading or assigning one through a function call before it is initialized
+is a runtime panic, since the checker does not trace calls. A `var` declared in a block, such as the
+body of a top-level `if` or `for`, belongs to that block, as anywhere; only top-level `var`s are
+fields of the module record.
 
-Execution starts at `func main()` in the module given to `ant run`, which must declare it. `main`
-takes no parameters and returns `void`; command-line arguments come from `Os.args()`. The exit
-status is `0` when `main` returns, `1` when the main goroutine panics, and `2` when the program
-could not be loaded because of a syntax error, an import cycle, or a missing module or `main`.
+### Scripts
+
+A module with a statement at its top level is a **script**; any other module is a **library**. A
+program is one script, the module given to `ant run`, and the libraries it imports. Two rules keep
+it that way, and both commands enforce them:
+
+- An `import` that names a script is an error, reported at the import together with the script's
+  first top-level statement.
+- `export` in a script is a syntax error.
+
+So importing a module never runs program logic, though a library's `var` initializers may still
+call anything.
+
+```ant
+//! Counts the lines of the files given as arguments.
+
+var total = 0
+for path in Os.args() {
+  var text = try File.read(path)
+  var n = len(String.lines(text))
+  total += n
+  println(`${n} ${path}`)
+}
+println(`${total} total`)
+```
+
+The script is initialized last, and its top-level code is the **script body**: the body of a
+function that only the runtime calls, with the script's top-level `var`s as its locals. It is a
+boundary (section 5), so `return` leaves it early, `try` returns an `Err` from it, `?? return`
+returns the value after it, and `defer` registers on it; its deferred blocks run when it ends, by
+its last item, by `return`, or by a panic. Unlike a function body, its last expression is discarded:
+only a `return`, written or reached through `try` or `?? return`, gives it a result. It may return
+`void` or an `Err`, which the checker enforces, so `return 5` is a compile error. A library has no
+script body, so `return` and `try` in its top-level initializers, outside a lambda, are syntax
+errors. Command-line arguments come from `Os.args()`.
+
+The exit status is `0` when the script body ends with its last item or returns anything but an
+`Err`; `1` when it returns an `Err`, after its deferred blocks have run and `String.from` of the
+error's `error` field and a newline have been written to standard error, or when the main goroutine
+panics; and `2` when the program could not be loaded because of a syntax error, an import cycle, a
+missing module, or an import of a script. `try` and `Result.unwrap` both end a script on an `Err`:
+`try` as an expected failure, reported as the error alone, and `unwrap` as a bug, reported as a
+panic with its stack trace. `Os.exit` ends the process with any status and skips deferred blocks. A
+library given to `ant run` is initialized, and the program exits with `0`.
 
 ## 11. Standard library
 
@@ -2412,9 +2466,10 @@ for the whole run.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
-start. Reading a top-level `var` whose initializer has not run yet panics (section 10). A module's
-scope is a record, and `export` is a checker rule: at run time every field of a module record is
-readable.
+start. Reading or assigning a top-level `var` whose initializer has not run yet panics (section 10).
+A script's top-level code runs in the module scope, which is also the scope of the script body's
+locals; a block in it opens its own scope. A module's scope is a record, and `export` is a checker
+rule: at run time every field of a module record is readable.
 
 ### Expressions
 
@@ -2539,13 +2594,16 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   A destructuring on the left reads the named
   fields of each element, which must be a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function
-  body, lambda, `go` block, or `defer` block, running the deferred blocks of every block they exit.
+  body, script body, lambda, `go` block, or `defer` block, running the deferred blocks of every
+  block they exit.
 - **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body,
-  lambda, `go` block, or `defer` block, running the deferred blocks of every block it exits.
+  script body, lambda, `go` block, or `defer` block, running the deferred blocks of every block it
+  exits. The value a script body returns sets the exit status (section 10).
   Directly inside a `go` or `defer` block it has no operand (section 5), so it ends the block with
   `void`.
 - **`try e`.** The value must be a record tagged `Ok` or `Err`. `Ok` yields its `value` field; `Err`
-  returns a new `Err` record with the same `error` field from the enclosing function.
+  returns a new `Err` record with the same `error` field from the enclosing function or script
+  body.
 - **Lambda and anonymous `func`.** Create a function value that captures the current scopes.
 - **`defer { ... }`.** Registers the block with the innermost enclosing block. The value is `void`.
 - **`go { ... }`.** Starts a new goroutine that evaluates the block, and yields `void` at once.
@@ -2569,7 +2627,7 @@ Goroutines are preemptive: a goroutine that never blocks cannot keep others from
 memory, and the sync objects of section 9 are the only synchronization. The runtime guarantees that
 a data race cannot corrupt memory or crash the interpreter, as section 9 spells out; the values a
 racing program observes are otherwise unspecified, and an implementation may end a racing program
-with a report. The program ends when `main` returns, whatever other goroutines are doing.
+with a report. The program ends when the script body ends, whatever other goroutines are doing.
 
 ### Runtime panics
 
@@ -2597,7 +2655,7 @@ can only panic in the ways the last column lists, which depend on values known a
 | variable                                          | no scope binds the name                                                                                                                                                                                                                               |                                                                                                                                                  |
 | `_`                                               | read                                                                                                                                                                                                                                                  |                                                                                                                                                  |
 | library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                     | the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                       |
-| `var`                                             |                                                                                                                                                                                                                                                       | read before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                  |
+| `var`                                             |                                                                                                                                                                                                                                                       | read or assigned before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                      |
 | `panic`                                           |                                                                                                                                                                                                                                                       | always                                                                                                                                           |
 | any call                                          |                                                                                                                                                                                                                                                       | the goroutine's call depth exceeds the runtime's limit                                                                                           |
 | a count                                           |                                                                                                                                                                                                                                                       | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold |
@@ -2651,22 +2709,20 @@ func report(accounts: Map[AccountId, Account]): string {
     | String.join("\n")
 }
 
-func main() {
-  var accounts: Map[AccountId, Account] = Map{}
-  var ada = AccountId(1)
-  var linus = AccountId(2)
-  accounts[ada] = Account{ id: ada, owner: "ada", balance: 100.0, status: Active{} }
-  accounts[linus] = Account{ id: linus, owner: "linus", balance: 20.0, status: Suspended{ reason: "audit" } }
+var accounts: Map[AccountId, Account] = Map{}
+var ada = AccountId(1)
+var linus = AccountId(2)
+accounts[ada] = Account{ id: ada, owner: "ada", balance: 100.0, status: Active{} }
+accounts[linus] = Account{ id: linus, owner: "linus", balance: 20.0, status: Suspended{ reason: "audit" } }
 
-  var result = transfer(accounts, ada, linus, 50.0)
-  if result is Ok { println("ok") }
-  else {
-    var error = result.error
-    if error is NotFound { println(`unknown account ${int(error.id)}`) }
-    else if error is Insufficient { println(`short by ${error.needed}`) }
-    else { println(`account ${int(error.id)} is suspended: ${error.reason}`) }
-  }
-
-  println(report(accounts))
+var result = transfer(accounts, ada, linus, 50.0)
+if result is Ok { println("ok") }
+else {
+  var error = result.error
+  if error is NotFound { println(`unknown account ${int(error.id)}`) }
+  else if error is Insufficient { println(`short by ${error.needed}`) }
+  else { println(`account ${int(error.id)} is suspended: ${error.reason}`) }
 }
+
+println(report(accounts))
 ```

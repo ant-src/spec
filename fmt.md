@@ -25,10 +25,10 @@ accident; the current directory is `ant fmt .`.
 
 `ant fmt` reads only the files it is given. It does not follow imports, and it does not run the
 checker: a file with type errors is formatted like any other. A file must parse as a module
-(section 10), the same as `ant run` and `ant check` require, so a file with top-level statements is
-a syntax error here too. A file that does not parse is left untouched, and its error is reported as
-those commands report it, `path:line:col: message`, with `<stdin>` as the path for standard input.
-The remaining files are still formatted.
+(section 10), the same as `ant run` and `ant check` require; a script is a module too. A file that
+does not parse is left untouched, and its error is reported as those commands report it,
+`path:line:col: message`, with `<stdin>` as the path for standard input. The remaining files are
+still formatted.
 
 In place, a file is written only when its formatted contents differ from what is on disk, and the
 new contents replace the old in one step, so an interrupted run leaves either the old file or the
@@ -355,5 +355,3 @@ line break go (4.1). Comments inside an interpolation are kept as 4.8 says.
 - It has no options beyond `--check`, no configuration file, and no way to turn it off for part of a
   file. There is no diff output; `--check` names the files and `git diff` after a run shows the
   changes.
-- It formats modules only. A file of top-level statements, such as the library tables in the test
-  corpus, is a syntax error, as it is for `ant run`.
