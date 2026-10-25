@@ -1668,7 +1668,7 @@ Array.countWhere[T](xs: Array[T], f: func(T): bool): int       // how many eleme
 Array.contains[T](xs: Array[T], v: T): bool                    // by ==
 Array.indexOf[T](xs: Array[T], v: T): int | null               // first index, by ==
 Array.lastIndexOf[T](xs: Array[T], v: T): int | null           // last index, by ==
-Array.min[T: Ordered](xs: Array[T]): T | null                  // null when empty; NaN when any element is NaN
+Array.min[T: Ordered](xs: Array[T]): T | null                  // null when empty; NaN when any element is NaN; -0.0 below 0.0
 Array.max[T: Ordered](xs: Array[T]): T | null
 Array.minBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first element with the least key
 Array.maxBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first with the greatest
@@ -2051,8 +2051,8 @@ Iter.toArray[T](s: Seq[T]): Array[T]
 
 ```
 Math.abs[T: Number](x: T): T                                   // panics on the most negative integer, whose absolute value does not fit
-Math.min[T: Ordered](a: T, b: T): T                            // NaN when either is NaN
-Math.max[T: Ordered](a: T, b: T): T                            // NaN when either is NaN
+Math.min[T: Ordered](a: T, b: T): T                            // NaN when either is NaN; -0.0 below 0.0
+Math.max[T: Ordered](a: T, b: T): T                            // NaN when either is NaN; -0.0 below 0.0
 Math.pow(x: float64, y: float64): float64
 Math.sqrt(x: float64): float64
 Math.floor(x: float64): float64
@@ -2104,7 +2104,9 @@ Bits.wrapMul[T: Integer](a: T, b: T): T
 
 The functions over `float64` follow IEEE 754 and never panic: `Math.log(0.0)` is `-Infinity`,
 `Math.log(-1.0)` and `Math.sqrt(-1.0)` are `NaN`, and `Math.clamp(x, lo, hi)` with a `NaN` `x` is
-`NaN`. The rotations pair with the shifts and panic on a negative count as they do, but a count at
+`NaN`. `Math.min` and `Math.max` hold `-0.0` less than `0.0`, as `Array.min` and `Array.max` do,
+though `-0.0 < 0.0` is `false`: `Math.min(0.0, -0.0)` and `Math.min(-0.0, 0.0)` are both `-0.0`,
+and the two `max` calls are both `0.0`. The rotations pair with the shifts and panic on a negative count as they do, but a count at
 or beyond the width is taken modulo the width, since a rotation by the width is the identity.
 
 ### Random
