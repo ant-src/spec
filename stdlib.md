@@ -585,6 +585,15 @@ record, and propagate errors with `try`, passing the path along so an error can 
 `$.servers[2].port`. Typed decoding through reflection is deferred; the design is in the repository
 history at commit 81525d2.
 
+`parse` reads one JSON text as RFC 8259 defines it, with white space around the value and nothing
+else. An object that repeats a key is a map with the key in its first place and its last value, so
+`{"a": 1, "b": 2, "a": 3}` is `Map{ "a": 3.0, "b": 2.0 }`. Arrays and objects nest at most 10000
+deep, which no document needs, and deeper nesting is `Err`, as is a number too large for a
+`float64`, such as `1e400`; a number too small for one is `0.0` or the nearest value it has. The
+message of a text that stops before its value does is `unexpected end of JSON input`; of one that
+goes on after its value, `unexpected text after the JSON value`; and of any other malformed text,
+what was expected and what was found, with the line and column where it was found.
+
 A `\u` escape of a surrogate pair in a JSON string is the one code point the pair encodes, and a
 surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text from outside does
 (section 11 of `ant-lang.md`, String).
