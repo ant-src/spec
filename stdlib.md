@@ -314,7 +314,10 @@ year, a month and a day from the world checks the month against 1 to 12 and the 
 `Time.daysInMonth(Time.plainDate(year, month, 1))` before it constructs, or hands the text it was
 given to `parsePlainDate`. A `Duration` is bounded as Temporal's: years, months, weeks and days
 each below 2^32 in magnitude, and the time part, days included at 24 hours, below 2^53 seconds in
-all.
+all. Each field is an `int`, which holds less than that bound in the small units, so a function
+that would give a duration with a field beyond an `int` panics: `until`, `since` or
+`roundDuration` balancing a long span into nanoseconds, and `negate`, `abs` or `subtract` given a
+field of −2^63.
 
 **Text.** Every value renders as its RFC 9557 string, which is ISO 8601 with the zone in brackets,
 and parses back from it; `String.from`, template strings and `Json.stringify`, which writes a time
