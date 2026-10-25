@@ -225,8 +225,9 @@ outer one, except that no declaration in any scope may shadow a prelude name (se
 is visible from its declaration to the end of the enclosing block; its own initializer may refer to
 it only inside a nested function body, which is how a local function calls itself (section 6).
 Top-level `func`, `type`, and `var` declarations are visible throughout the module regardless of
-order, as a `type` in a block is throughout its block (section 4, Type declarations), but a top-level initializer may refer directly, outside a nested function body, only to the
-`var`s above it (section 10).
+order, as a `type` in a block is throughout its block (section 4, Type declarations), but a
+top-level initializer may refer directly, outside a nested function body, only to the `var`s above
+it (section 10).
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -681,10 +682,10 @@ of one block may refer to each other in any order, and it follows the shadowing 
 As a statement it is `void`. Each declaration has one tag for the whole run, made once and not each
 time the block runs, so every call of `tally` below builds values of one type, which `==` compares
 as usual. Its body may not mention a type parameter of the enclosing function, which would make the
-one tag stand for a different type in each call. A local type is never exported and has no
-functions declared on it, since `export` and `func` appear only at the top level. Its values may
-still leave the block, as an inferred return type or an element of an array; code outside then uses
-them without naming the type.
+one tag stand for a different type in each call, and its name may not be one, which is a syntax
+error like shadowing a prelude name. A local type is never exported and has no functions declared on
+it, since `export` and `func` appear only at the top level. Its values may still leave the block, as
+the inferred return type of `origin` below, and code outside then uses them without naming the type.
 
 ```ant
 func tally(words: Array[string]): Array[string] {
@@ -697,6 +698,13 @@ func tally(words: Array[string]): Array[string] {
   }
   Map.values(counts) | Array.sortBy({ -x.n }) | Array.map({ `${x.word}: ${x.n}` })
 }
+
+func origin() {
+  type Origin = { x: int, y: int }
+  Origin{ x: 0, y: 0 }
+}
+
+var o = origin()                           // o.x is 0; Origin cannot be named here
 
 func wrap[T](v: T): Array[T] {
   type Box = { value: T }                  // compile error: Box cannot mention T of wrap
@@ -1140,9 +1148,10 @@ next()    // 2
 ### Functions on types
 
 `func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`. The call
-is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared at
-the top level of the same module and may be a record, a named primitive type, or an alias, including an alias of a
-union. A type's namespace is therefore closed, and the prelude's types cannot be extended.
+is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared
+at the top level of the same module and may be a record, a named primitive type, or an alias,
+including an alias of a union. A type's namespace is therefore closed, and the prelude's types
+cannot be extended.
 
 The function is an ordinary function. It need not take the type as a parameter, which is how
 `Point.origin()` and `UserId.parse(s)` are written; it is a value like any other; and named
@@ -2398,8 +2407,8 @@ so it sees later assignments to the variables it captured, and a closure made in
 initializer sees that `var` once it is bound. The initializer runs first, so a call that reaches the
 variable before it is bound panics, as for a top-level `var`. Each iteration of a `for` opens a
 fresh scope for the loop variable. A `type` in a block is bound when the block starts, so it is
-visible throughout the block, and every time to the one tag or constructor its declaration made when
-the module was loaded.
+visible throughout the block, and every time to the same tag or constructor: one per declaration
+for the whole run.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
