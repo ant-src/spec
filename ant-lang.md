@@ -2037,6 +2037,9 @@ puts its result in the match's place, as written, with no expansion.
 
 Lazy sequences (section 5, Loops). Every function here returns a new `Seq` without running the
 source; `Iter.toArray` and `for` run it. A sequence may be run more than once if its source allows.
+The `yield` an `Iter` function passes to its source behaves as the one `for` passes (section 12):
+it takes one call at a time, and panics when called after it returned `false` or after the source
+returned.
 
 ```
 Iter.range(from: int, to: int): Seq[int]                       // from inclusive, to exclusive; empty when to <= from
@@ -2433,7 +2436,11 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or
   `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or
   after the sequence function has returned, panics; a `return` or a panic in the body propagates
-  through the sequence function like any other call. A destructuring on the left reads the named
+  through the sequence function like any other call. A sequence may call `yield` from goroutines
+  of its own: the body then runs for one call at a time, and a call waits while another runs it.
+  A `yield` called from inside the body, on the goroutine running it, runs the body again within
+  that run. So a body that waits for a goroutine blocked in a `yield` of the same loop deadlocks.
+  A destructuring on the left reads the named
   fields of each element, which must be a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function
   body, lambda, `go` block, or `defer` block, running the deferred blocks of every block they exit.
