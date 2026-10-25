@@ -1382,6 +1382,7 @@ func loadConfig(path: string): Result[Config, Error] {
 }
 
 var config = try (loadConfig("app.json") | Result.wrapErr("load config"))
+println(config)
 ```
 
 On a truncated `app.json` the script ends with the message
@@ -1396,10 +1397,11 @@ Messages follow one convention, so that the joined text reads as one line:
 - A message is lowercase and has no closing punctuation, since it may end up inside a longer one.
 - A context names the operation and the argument that matters, `parse app.json`, not
   `failed to parse the config!`. Words like "error" and "failed" add nothing to an error.
-- A function adds the arguments it knows. The library's messages name the file, address, or URL
-  they concern (`stdlib.md`), so a caller of `File.read` does not repeat the path.
-- A caller adds what it was doing, which the callee cannot know, and the target too when the error
-  is a context's reason such as `cancelled`, which names none (section 9, Waiting).
+- A function adds the arguments it knows. A library call that takes a path, an address, or a URL
+  names it in its message (`stdlib.md`), so a caller of `File.read` does not repeat the path.
+- A caller adds what it was doing, which the callee cannot know. It adds the target too when the
+  error comes from a handle, such as `File.readLine` on standard input, or is a context's reason
+  such as `cancelled`, since neither names one (section 9, Waiting).
 
 ### `panic`
 

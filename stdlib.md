@@ -14,10 +14,10 @@ a namespace is a record like an imported module and the bare name would collide 
 with a default may be omitted or named at the call, as for a declared function (section 6, Calling).
 A function that blocks takes a context as its last parameter, `ctx: Context | null = null`, and when
 the context is done gives up with `Err` and the context's reason as the message, as section 9
-(Waiting) has it. An `Err`'s message names the file, address, or URL it concerns, except a context's
-reason, which names none, so a caller adds only what it was doing (section 8, Wrapping errors). The
-namespaces are smaller than the Go packages behind them; a function is added when a program needs
-it, and what is here is complete as written.
+(Waiting) has it. A call that takes a path, an address, or a URL names it in an `Err`'s message. A
+call on a handle, which may have no path, and a context's reason name no target, so the caller adds
+it (section 8, Wrapping errors). The namespaces are smaller than the Go packages behind them; a
+function is added when a program needs it, and what is here is complete as written.
 
 ## File
 
