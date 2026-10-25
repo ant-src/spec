@@ -660,12 +660,17 @@ Url.stringifyQuery(params: Map[string, Array[string]]): string             // k=
 `Parts` divides a reference as RFC 3986 does. `scheme` is the scheme in lower case, without its
 colon. `opaque` is what follows `scheme:` when it is not `//`: `mailto:alice@example.com` parses
 with `scheme` `mailto`, `opaque` `alice@example.com`, and an empty `path`, and without `opaque` that
-reference would lose its content. `user` is the userinfo as written, a password included. `host` and
+reference would lose its content. A single `/` after the colon starts `opaque` too: `x:/a` has no
+authority and `opaque` `/a`, while `x:///a` has an empty authority and `path` `/a`, so each comes
+back as written. `user` is the userinfo as written, a password included. `host` and
 `port` are the two halves of the authority, `port` empty when there is none. `path` is decoded,
-`%20` read as a space; `query` is the raw text after `?`, without it, so `parseQuery` can read it;
+`%20` read as a space, but for `%2F` and `%25`, which stay as written: a `/` that is not a separator
+and a `%` that is no escape keep the path's meaning through a round trip, as `/a%2Fb` and `/a/b`
+are different paths. `query` is the raw text after `?`, without it, so `parseQuery` can read it;
 `fragment` is decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`, escapes in
 `path` or `fragment` that do not decode to UTF-8, or a space in the host. `stringify` assembles the
-parts, escaping what needs it in every part but `query`, which is raw and written as it is, so a
+parts, escaping what needs it in every part but `query` and `opaque`, which are raw and written as
+they are, and in `path` writing `%2F` and `%25` as they are and escaping any other `%`, so a
 program changes a URL by parsing it, replacing a field, and writing it back.
 
 `escape` makes a string safe as one key or value of a query: every character but the unreserved ones
