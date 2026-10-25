@@ -96,7 +96,7 @@ Http.post(url: string, body: string | Bytes, headers: Map[string, string] = Map{
           timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
                                                                                   // request("POST", url, body, headers, timeout, ctx)
 Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Reply,
-           ctx: Context | null = null): Result[void, Error]                       // panics on a response status outside 200 to 599, in the handler's goroutine
+           ctx: Context | null = null): Result[void, Error]                       // panics on a response status outside 200 to 599, or on header names that differ only in case, in the handler's goroutine
 ```
 
 `request` sends one request with `method` as given, `GET`, `PUT`, `DELETE`, or any other token,
@@ -131,8 +131,9 @@ serves until the run is cancelled. The listener is closed once `serve` returns. 
 the listener is closed under it. A handler's panic is reported as a goroutine's panic is, and the
 client gets status 500 with an empty body; a response whose status is outside 200 to 599 is a panic in
 the handler's goroutine, which takes the same path, since a status below 200 is an interim
-response and cannot be sent as the final one. The `Http.Reply` is sent as given, with
-`Content-Length` from the body. In the `Request`, `path` is decoded and `query` is raw, for
+response and cannot be sent as the final one. So is a reply with two header names that differ
+only in case, which name one header, as `request` is `Err` on them. The `Http.Reply` is sent as
+given, with `Content-Length` from the body. In the `Request`, `path` is decoded and `query` is raw, for
 `Url.parseQuery`; the headers hold one string per name, `Host` among them, a repeated header
 joined with `, `; `remote` is `ip:port`. Bodies are read whole, as the client
 reads them. Taking a listener rather than an address is what lets a program know its port, run the
