@@ -341,9 +341,12 @@ in front when negative, and `PT0S` when zero; a `Zone` is its identifier. The fr
 written to its last nonzero digit and omitted when zero, and a year outside 0 to 9999 as a sign
 and six digits.
 
-Parsing takes the date `YYYY-MM-DD`, the time `HH:MM`, `HH:MM:SS` or `HH:MM:SS.F` with up to nine
-digits of fraction, `T` or a space between them, `Z` or an offset `±HH:MM`, a zone in brackets and
-`[u-ca=iso8601]`, each where its type needs it. `parseInstant` needs a date, a time and `Z` or an
+Parsing takes the date `YYYY-MM-DD`, or `±YYYYYY-MM-DD` with a sign and six digits of year, the
+form a year outside 0 to 9999 renders in, the time `HH:MM`, `HH:MM:SS` or `HH:MM:SS.F` with up to
+nine digits of fraction, `T` or a space between them, `Z` or an offset `±HH:MM`, a zone in brackets
+and `[u-ca=iso8601]`, each where its type needs it. Other spellings of ISO 8601 and RFC 9557 are
+`Err`: a lowercase `t` or `z`, a comma before the fraction, an offset `±HH` or `±HHMM`, the
+critical flag `[!...]`, and a leap second `:60`. `parseInstant` needs a date, a time and `Z` or an
 offset, and ignores a bracketed zone. `parseZoned` needs a bracketed zone; with a date alone it
 is the start of that day in the zone, as `startOfDay` is; with no offset it resolves the
 wall-clock time by `disambiguation`, with `Z` it takes the exact moment and shows it
