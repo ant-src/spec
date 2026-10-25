@@ -187,6 +187,8 @@ Path.abs(p: string): Result[string, Error]       // against the working director
 Path.rel(base: string, target: string): Result[string, Error]   // target as a path from base
 ```
 
+`Path.join` of no parts, or of empty ones only, is `.`, as `Path.clean("")` is.
+
 `Path.rel` works on the text, cleaned, and is `Err` when no relative path leads from `base` to
 `target`: when one is absolute and the other is not, when they are on different Windows volumes, or
 when `base` climbs out with `..` further than `target` does, as from `../a` to `b`.
