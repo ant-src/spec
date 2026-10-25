@@ -416,9 +416,12 @@ the checker as in the interpreter. The name binds a function value that carries 
 `UserId is func` holds and `Array.map(raw, UserId)` tags every element. `is UserId` tests the tag,
 so `UserId | string` and `UserId | AccountId` are distinguishable unions. A type parameter the body
 does not mention is allowed: `type Id[T] = string` gives `Id[User]` and `Id[Account]` as distinct
-static types over one tag, and a union of the two is rejected, since they share it. `Ok[T]` and
-`Err[E]` stay records rather than taking this form, because a tag over an arbitrary payload needs a
-field to get the payload out, and a record with one field is exactly that.
+static types over one tag, and a union of the two is rejected, since they share it. Only an
+expected type fixes such a parameter, for the constructor used as a value as for a call of it:
+`var ids: Array[Id[User]] = Array.map(raw, Id)` is fine, and without the annotation `T` is a type
+parameter that nothing fixes (see Inference). `Ok[T]` and `Err[E]` stay records rather than taking
+this form, because a tag over an arbitrary payload needs a field to get the payload out, and a
+record with one field is exactly that.
 
 ### Arrays, maps, and sets
 
@@ -603,13 +606,24 @@ func choose(a: Number, b: Number): Number {
 
 Without a bound, `T` is opaque; `==`, `Map` keys, and `Set` members still work, because they work on
 every type. A bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`,
-`x is string` narrows `x` to `string`. Bounds are the way to accept any array whose elements have a
-given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string
-}]`. Nothing changes at run time; the interpreter never sees a bound.
+`x is string` narrows `x` to `string`. The narrowed `x` is a plain `string` and no longer a `T`, so
+it cannot be returned where a `T` is expected; a copy taken before the test keeps the `T`, as in
+`orDefault` below. Bounds are the way to accept any array whose elements have a given field, since
+type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing
+changes at run time; the interpreter never sees a bound.
 
 ```ant
 func max[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
 func names[T: { name: string }](xs: Array[T]): Array[string] { Array.map(xs, { x.name }) }
+
+func orDefault[T: Ordered](x: T, fallback: T): T {
+  var original = x
+  if x is string {
+    if x == "" { fallback } else { original }   // not x: here it is a string, no longer a T
+  } else {
+    x
+  }
+}
 
 names(people)                     // ok with Array[Person]: T = Person, which has a name
 max(1, 2)                         // int
@@ -699,6 +713,10 @@ A generic call solves its type parameters in a fixed order: from the expected ty
 the non-lambda arguments left to right, then from the lambdas. The expected type goes first because
 type arguments are invariant: `Result.err(NotFound{ id: from })` under an expected
 `Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it.
+A solution from the expected type that breaks the parameter's bound is skipped, and the arguments
+solve that parameter instead: under `var r: int | string = bigger(1, 2)`, with `bigger` from
+Generics, the expected type would set `T` to `int | string`, which is not a single member of
+`Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to `int | string`.
 Lambdas go last so that the other arguments have fixed the type their `x` depends on, which is also
 what lets an editor complete `x.` inside a lambda. A type parameter that nothing fixes is a compile
 error: annotate the result, or use `func` with annotated parameters. Inside a generic function its
@@ -1248,12 +1266,13 @@ where `try` does not apply.
 `try` unwraps a `Result`. Its operand must have a `Result[T, E]` type. On `Ok{ value }` it evaluates
 to the value, of type `T`; on an `Err` it returns a fresh `Err` carrying the same error from the
 enclosing function, typed by that function's return type. The enclosing function must therefore
-return a `Result` whose error type accepts `E`. A `go` or `defer` block has no result, so `try`
-directly inside one is a compile error. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it
-yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section
-7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a
-compile error, since it is not a `Result`; under erasure a second meaning chosen by static type
-would be unsound.
+return a `Result` whose error type accepts `E`, or such a `Result` or `null`, since `Err[E]` is
+assignable to `Result[U, E] | null` too; an inferred return type must come out one of the two. A
+`go` or `defer` block has no result, so `try` directly inside one is a compile error. `try` reads
+only the outer tag, so on an `Ok[Ok[int]]` it yields the inner `Ok[int]`. It has no nullable form:
+`x ?? return null` propagates `null` (section 7), and a `Result[T, E] | null` operand needs that
+first. An operand of type parameter type is a compile error, since it is not a `Result`; under
+erasure a second meaning chosen by static type would be unsound.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
