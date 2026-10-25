@@ -1786,13 +1786,13 @@ String.slice(s: string, from: int, to: int): string            // panics as Arra
 String.concat(parts: Array[string]): string
 String.split(s: string, sep: string): Array[string]            // panics if sep is empty
 String.join(parts: Array[string], sep: string): string
-String.repeat(s: string, n: int): string                       // panics if n < 0 or n is above 2^31 − 1
+String.repeat(s: string, n: int): string                       // panics if n < 0, or n or the result's length in bytes is above 2^31 − 1
 String.trim(s: string): string                                 // Unicode white space at both ends
 String.trimStart(s: string): string                            // at the start only
 String.trimEnd(s: string): string                              // at the end only
 String.trimPrefix(s: string, prefix: string): string           // prefix removed once, when present
 String.trimSuffix(s: string, suffix: string): string
-String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; panics if pad is empty or width is above 2^31 − 1
+String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; panics if pad is empty, or width or the result's length in bytes is above 2^31 − 1
 String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; panics as padStart does
 String.contains(s: string, t: string): bool
 String.startsWith(s: string, t: string): bool
@@ -1800,7 +1800,7 @@ String.endsWith(s: string, t: string): bool
 String.indexOf(s: string, t: string): int | null               // first code point index
 String.lastIndexOf(s: string, t: string): int | null           // last code point index
 String.count(s: string, t: string): int                        // non-overlapping occurrences; panics if t is empty
-String.replace(s: string, old: string, new: string): string    // every occurrence; panics if old is empty
+String.replace(s: string, old: string, new: string): string    // every occurrence; panics if old is empty or the result's length in bytes is above 2^31 − 1
 String.replaceFirst(s: string, old: string, new: string): string   // the first occurrence only; panics if old is empty
 String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; panics if sep is empty
 String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
@@ -2498,6 +2498,7 @@ can only panic in the ways the last column lists, which depend on values known a
 | `panic`                                           |                                                                                                                                                                                                                                                       | always                                                                                                                                           |
 | any call                                          |                                                                                                                                                                                                                                                       | the goroutine's call depth exceeds the runtime's limit                                                                                           |
 | a count                                           |                                                                                                                                                                                                                                                       | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold |
+| a result size                                     |                                                                                                                                                                                                                                                       | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                    |
 | `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |                                                                                                                                                  |
 | `select`                                          |                                                                                                                                                                                                                                                       | a send clause is chosen on a closed channel                                                                                                      |
 | `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                 | never                                                                                                                                            |
