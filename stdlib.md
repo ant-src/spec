@@ -350,13 +350,16 @@ and six digits.
 Parsing takes the date `YYYY-MM-DD`, or `±YYYYYY-MM-DD` with a sign and six digits of year, the
 form a year outside 0 to 9999 renders in, the time `HH:MM`, `HH:MM:SS` or `HH:MM:SS.F` with up to
 nine digits of fraction, `T` or a space between them, `Z` or an offset `±HH:MM`, a zone in brackets
-and `[u-ca=iso8601]`, each where its type needs it. Other spellings of ISO 8601 and RFC 9557 are
-`Err`: a lowercase `t` or `z`, a comma before the fraction, an offset `±HH` or `±HHMM`, the
-critical flag `[!...]`, and a leap second `:60`. `parseInstant` needs a date, a time and `Z` or an
+and then `[u-ca=iso8601]`, each where its type needs it. Other spellings of ISO 8601 and RFC 9557 are
+`Err`: a lowercase `t` or `z`, a comma before the fraction, an offset `±HH` or `±HHMM`, an offset
+with seconds `±HH:MM:SS`, a `T` before a time with no date, the critical flag `[!...]`, an
+annotation other than the zone and `[u-ca=iso8601]`, the calendar in capitals, and a leap second
+`:60`. `parseInstant` needs a date, a time and `Z` or an
 offset, and ignores a bracketed zone. `parseZoned` needs a bracketed zone; with a date alone it
 is the start of that day in the zone, as `startOfDay` is; with no offset it resolves the
 wall-clock time by `disambiguation`, with `Z` it takes the exact moment and shows it
-in the zone, and with an offset the zone does not have at that time it is `Err`. The plain parsers
+in the zone, and with an offset that is not the zone's at that time, rounded to the minute as the
+string has it, it is `Err`. The plain parsers
 take their own part of a longer string and ignore the rest, so `parsePlainDate` accepts a bare
 date or a full zoned string, `parsePlainTime` a bare time or a date and time, and
 `parsePlainDateTime` a date and time; none accepts `Z` without a bracketed zone, since `Z` names a
