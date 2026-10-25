@@ -174,6 +174,11 @@ and U+2029. `\d`, `\w`, and `\b` are ASCII in both.
 
 ### Line endings
 
+A line break is a line feed `\n`, a carriage return and line feed `\r\n`, or a carriage return `\r`
+alone, as in JavaScript. Each is one line break wherever this document speaks of a line or a
+newline: it ends a line comment, a plain string or a regular expression literal cannot hold one, and
+the text of a template string keeps it as written.
+
 A newline or a semicolon ends an expression. A newline does not end one when:
 
 - the line ends with a token that cannot end an expression, such as a binary operator, `,`, `(`,

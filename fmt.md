@@ -56,7 +56,7 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
   error positions aside.
 - **Comments.** Every comment is kept, in order, with its text. Only the whitespace before it, the
   indentation of its first line, the spaces and tabs at the end of each of its lines, and its `\r\n`
-  line endings change (4.1).
+  and lone `\r` line endings change (4.1).
 - **Idempotence.** Formatting a formatted file changes nothing.
 - **Locality.** The layout of a line depends only on its own tokens, the brackets it is inside, and
   the author's line breaks around it. Editing one function never reformats another.
@@ -85,10 +85,9 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 
 ### 4.1 Files
 
-- The output is UTF-8 with `\n` line endings. A `\r\n` becomes `\n`, except inside a template
-  string, whose text is kept byte for byte. A lone `\r` is not a line ending: the lexer reads it
-  as a space (section 2), so between tokens it becomes the spacing this section prescribes, and
-  inside a comment it stays.
+- The output is UTF-8 with `\n` line endings. A `\r\n` or a lone `\r`, the other line breaks of
+  section 2, becomes `\n`, in a comment too, except inside a template string, whose text is kept
+  byte for byte.
 - No line ends in spaces or tabs, except inside the text of a template string.
 - The file starts with its first token or comment, and ends with exactly one `\n`.
 - Indentation is two spaces per level and never a tab. A tab anywhere outside a string, the text
