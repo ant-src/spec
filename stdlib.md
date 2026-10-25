@@ -103,8 +103,8 @@ Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Reply,
 `body` as its body, and `headers` as its headers, and reads the whole response. A response of any
 status is `Ok` with that `status`, a redirect included: no redirect is followed, so a 3xx comes
 back with its `Location` header, and a program that wants the next page asks for it. `Err` is a
-failure to get one: a malformed `url`, an empty `method`, no connection, the timeout, or the
-context. The response's headers hold one string per name, a repeated header joined with `, `.
+failure to get one: a malformed `url`, an empty `method`, two header names that differ only in
+case, which name one header, no connection, the timeout, or the context. The response's headers hold one string per name, a repeated header joined with `, `.
 `get` and `post` are `request` with the method filled in.
 
 A body is sent as given: a string as its UTF-8, `Bytes` as they are. A body that arrives, in a
