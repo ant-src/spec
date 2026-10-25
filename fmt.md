@@ -90,9 +90,10 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
   byte for byte.
 - No line ends in spaces or tabs, except inside the text of a template string.
 - The file starts with its first token or comment, and ends with exactly one `\n`.
-- Indentation is two spaces per level and never a tab. A tab anywhere outside a string, the text
-  of a template, a regular expression literal, or a comment becomes the spacing this section
-  prescribes.
+- Indentation is two spaces per level and never a tab, except on a line that starts inside a
+  template string, whose text and interpolations keep their indentation as written (4.9). Any other
+  tab outside a string, the text of a template, a regular expression literal, or a comment becomes
+  the spacing this section prescribes.
 
 ### 4.2 Blank lines
 
@@ -341,8 +342,8 @@ expression, as TypeScript formatters do: its tokens take the spacing of 4.7, wit
 
 An interpolation adds no line breaks and removes none. Its code is not reindented, since the lines
 of a multi-line template belong to the string: a line break the author wrote inside `${...}` stays
-where it is, with its indentation as written. Comments inside an interpolation are kept as 4.8
-says.
+where it is, with its indentation as written, tabs included; only the spaces and tabs before the
+line break go (4.1). Comments inside an interpolation are kept as 4.8 says.
 
 ## 5. What `ant fmt` does not do
 
