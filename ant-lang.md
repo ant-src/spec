@@ -2389,8 +2389,8 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   tag and `==` fields; tagged primitives have the same tag and equal payloads; time values have the
   same tag and equal fields, as `stdlib.md` lists them per type; patterns have the same normalized
   source and flags; arrays have the same length and `==` elements in order; maps have the same key
-  set and `==` values per key; sets have the same members; functions, tags, and sync objects are the
-  same object. A pair of values already under comparison counts as equal (section 4). Values of
+  set and `==` values per key; sets have the same members; functions, tags, sync objects, and
+  `Random` generators are the same object. A pair of values already under comparison counts as equal (section 4). Values of
   different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
 - **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `Bytes`, `func`, `Array`,
   `Map`, `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any
@@ -2407,8 +2407,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   already has that field. An index target on an array must be an `int` in range; on a map it inserts
   or replaces. An array destructuring target requires an array with at least as many elements as its
   positions, and stores element by element left to right, with a rest position receiving a new array
-  of the remainder. Compound assignment reads the target, applies the operator, and stores. The
-  value is `void`.
+  of the remainder. Compound assignment reads the target before the right side evaluates, then
+  applies the operator and stores: with `x` at `1`, `x += f()` where `f` sets `x` to `10` and
+  returns `5` leaves `x` at `6`. The value is `void`.
 - **Destructuring in `var` and `for`.** A record destructuring requires a record with every named
   field. An array destructuring requires an array with at least as many elements as its fixed
   positions; extra elements are ignored, and a rest binder receives a new array of the remainder.
