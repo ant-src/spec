@@ -710,6 +710,10 @@ A generic call solves its type parameters in a fixed order: from the expected ty
 the non-lambda arguments left to right, then from the lambdas. The expected type goes first because
 type arguments are invariant: `Result.err(NotFound{ id: from })` under an expected
 `Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it.
+A solution from the expected type that breaks the parameter's bound is skipped, and the arguments
+solve that parameter instead: under `var r: int | string = bigger(1, 2)`, with `bigger` from
+Generics, the expected type would set `T` to `int | string`, which is not a single member of
+`Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to `int | string`.
 Lambdas go last so that the other arguments have fixed the type their `x` depends on, which is also
 what lets an editor complete `x.` inside a lambda. A type parameter that nothing fixes is a compile
 error: annotate the result, or use `func` with annotated parameters. Inside a generic function its
