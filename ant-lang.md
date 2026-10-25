@@ -1248,12 +1248,13 @@ where `try` does not apply.
 `try` unwraps a `Result`. Its operand must have a `Result[T, E]` type. On `Ok{ value }` it evaluates
 to the value, of type `T`; on an `Err` it returns a fresh `Err` carrying the same error from the
 enclosing function, typed by that function's return type. The enclosing function must therefore
-return a `Result` whose error type accepts `E`. A `go` or `defer` block has no result, so `try`
-directly inside one is a compile error. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it
-yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section
-7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a
-compile error, since it is not a `Result`; under erasure a second meaning chosen by static type
-would be unsound.
+return a `Result` whose error type accepts `E`, or such a `Result` or `null`, since `Err[E]` is
+assignable to `Result[U, E] | null` too; an inferred return type must come out one of the two. A
+`go` or `defer` block has no result, so `try` directly inside one is a compile error. `try` reads
+only the outer tag, so on an `Ok[Ok[int]]` it yields the inner `Ok[int]`. It has no nullable form:
+`x ?? return null` propagates `null` (section 7), and a `Result[T, E] | null` operand needs that
+first. An operand of type parameter type is a compile error, since it is not a `Result`; under
+erasure a second meaning chosen by static type would be unsound.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
