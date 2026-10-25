@@ -199,7 +199,11 @@ RwMutex.withWrite(b.lock, {
 ```
 
 An empty list is `()`, `[]`, or `{}`, with nothing inside, unless it holds a comment, in which case
-it is broken and the comment takes the place of an item.
+it is broken and its closing bracket starts a line. A comment right after the opening bracket that
+ends its source line, as in `[ // none` or `[ /* none */` followed by a line break, stays on the
+bracket's line, as a trailing comment does. Every other comment takes the place of an item on a line
+of its own, one level deeper, so `f(/* none */)` becomes `f(`, `  /* none */`, `)` on three lines;
+only a comment that ends its source line after another comment stays on that one's line.
 
 ### 4.5 Continuation lines
 
