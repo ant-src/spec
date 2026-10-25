@@ -668,6 +668,13 @@ A type may refer to itself through a record, array, map, set, or function type, 
 `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of
 plain aliases, is a compile error.
 
+A generic alias that refers to itself, directly or through other aliases, passes its own type
+parameters unchanged and in order, so that every level is the same instantiation:
+`type Nest[T] = Array[Nest[T]] | Box[T]` is fine. A compile error at the declaration is
+`type N[A, B] = Array[N[B, Box[A]]] | Map[string, A | B]`, since `N[int, string]` would hold
+`N[string, Box[int]]`, which holds `N[Box[int], Box[string]]`, whose `A | B` repeats a tag (see
+Unions).
+
 A type name is also the namespace of the functions declared on it (section 6, Functions on types).
 It is an expression only as the head of a record literal, as the target of `is`, as the left side of
 `.` naming one of its functions, or, for a named primitive type, as its constructor. Anywhere else
