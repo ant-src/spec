@@ -467,12 +467,14 @@ days do not line up. Between two `ZonedDateTime`s in one zone, days are the zone
 
 `round` rounds to a multiple of `increment` of `smallestUnit` by `mode`, the number rounded
 being the nanoseconds since the start of the day for the wall-clock types and since the epoch for
-an `Instant`. `increment` must divide the count of `smallestUnit` in the next larger unit, 24
-hours, 60 minutes, 60 seconds or 1000 of a subsecond unit, and be smaller than it; for `Day` it is
-1. On a `ZonedDateTime` rounding to `Day` chooses between the start of its day and the start of
-the next by the fraction of the real day that has passed; rounding to a smaller unit works on the
-wall clock and places the result in the zone as `with` does, keeping the offset when the zone has
-it.
+an `Instant`. For the wall-clock types `increment` must divide the count of `smallestUnit` in the
+next larger unit, 24 hours, 60 minutes, 60 seconds or 1000 of a subsecond unit, and be smaller than
+it; for `Day` it is 1. For an `Instant` it must divide the count of `smallestUnit` in a day, 24
+hours, 1440 minutes and so on, and may be all of it, as in Temporal's `Instant.round`, so
+`Time.round(i, Time.Hour{}, 24)` rounds to a midnight of UTC. On a `ZonedDateTime` rounding to
+`Day` chooses between the start of its day and the start of the next by the fraction of the real
+day that has passed; rounding to a smaller unit works on the wall clock and places the result in
+the zone as `with` does, keeping the offset when the zone has it.
 
 `compare` orders by instant for `Instant` and `ZonedDateTime`, so two zoned values at one moment
 in different zones compare as `0` though they are not `==`, and by fields for the plain types.
@@ -510,9 +512,10 @@ with a fraction, `PT1H30M` in hours being `1.5`. `roundDuration` balances `d` so
 `largestUnit` exceeds its next unit, and rounds the result to a multiple of `increment` of
 `smallestUnit` by `mode`, dropping the smaller fields: `largestUnit` alone balances, `PT90M` to
 `Hour` being `PT1H30M`; `smallestUnit` alone rounds; `largestUnit` defaults to the larger of `d`'s
-largest nonzero unit and `smallestUnit`. For a time unit `increment` follows the rule of `round`;
-for a day or a calendar unit any increment is allowed when `largestUnit` is `smallestUnit`, so a
-duration rounds to a multiple of seven days or of two months, and panics otherwise. The rounding modes
+largest nonzero unit and `smallestUnit`. For a time unit `increment` follows the rule of `round`
+for the wall-clock types; for a day or a calendar unit any increment is allowed when `largestUnit`
+is `smallestUnit`, so a duration rounds to a multiple of seven days or of two months, and panics
+otherwise. The rounding modes
 are Temporal's nine: `Ceil` toward positive infinity, `Floor` toward negative, `Expand` away from
 zero, `Trunc` toward zero, the four `Half` forms to the nearest multiple with a tie resolved as the
 plain form says, and `HalfEven` to the nearest with a tie to the even multiple; `HalfExpand`, the
