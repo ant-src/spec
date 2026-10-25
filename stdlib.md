@@ -410,12 +410,13 @@ Time.with[T: Time.Wall](t: T, year: int | null = null, month: int | null = null,
                         second: int | null = null, millisecond: int | null = null,
                         microsecond: int | null = null, nanosecond: int | null = null,
                         disambiguation: Time.Disambiguation = Time.Compatible{}): T
-                                                    // panics on a field the type lacks
+                                                    // panics on a field the type lacks, or a month or day below 1
 ```
 
 `with` returns `t` with the named fields replaced and the rest kept, and constrains the result:
 `month: 13` is December and `day: 31` in April is April 30, as Temporal's `overflow: "constrain"`
-has it. A `PlainDate` takes the three date fields and a `PlainTime` the six time fields; another
+has it. A month or a day below 1 panics, as Temporal throws there, while a time field below 0 is
+constrained to 0, as Temporal's is. A `PlainDate` takes the three date fields and a `PlainTime` the six time fields; another
 field panics. On a `ZonedDateTime` the new wall-clock time is placed in the zone with the value's
 own offset when the zone has that offset at the new time, and by `disambiguation` otherwise, so
 `Time.with(t, day: 3)` from November 2 in New York keeps `-04:00` and from November 4 keeps
