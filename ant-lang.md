@@ -603,13 +603,24 @@ func choose(a: Number, b: Number): Number {
 
 Without a bound, `T` is opaque; `==`, `Map` keys, and `Set` members still work, because they work on
 every type. A bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`,
-`x is string` narrows `x` to `string`. Bounds are the way to accept any array whose elements have a
-given field, since type arguments are invariant and `Array[Person]` is not an `Array[{ name: string
-}]`. Nothing changes at run time; the interpreter never sees a bound.
+`x is string` narrows `x` to `string`. The narrowed `x` is a plain `string` and no longer a `T`, so
+it cannot be returned where a `T` is expected; a copy taken before the test keeps the `T`, as in
+`orDefault` below. Bounds are the way to accept any array whose elements have a given field, since
+type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing
+changes at run time; the interpreter never sees a bound.
 
 ```ant
 func max[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
 func names[T: { name: string }](xs: Array[T]): Array[string] { Array.map(xs, { x.name }) }
+
+func orDefault[T: Ordered](x: T, fallback: T): T {
+  var original = x
+  if x is string {
+    if x == "" { fallback } else { original }   // not x: here it is a string, no longer a T
+  } else {
+    x
+  }
+}
 
 names(people)                     // ok with Array[Person]: T = Person, which has a name
 max(1, 2)                         // int
