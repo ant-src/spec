@@ -4,9 +4,10 @@ Companion to `ant-lang.md`. The core library, which every program needs, is sect
 specification. The namespaces here talk to the world outside the program, and they follow one rule:
 every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
 panics on bad input, with these exceptions. `Json.stringify` panics on a value that contains itself
-or `Bytes`, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O, panic where the
-core library would, on an argument that cannot be, as `int8(300)` does. The comment of each such
-function says when it panics. Blocking calls block only the calling goroutine (section 9).
+or one with no JSON form, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O,
+panic where the core library would, on an argument that cannot be, as `int8(300)` does. The comment
+of each such function says when it panics. Blocking calls block only the calling goroutine
+(section 9).
 
 A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`,
 since a namespace is a record like an imported module and the bare name would collide with it. A
@@ -64,7 +65,7 @@ line and the body after it as bytes. `readChunk` returns as soon as there is any
 least one byte and at most `max`, and waits only while there is nothing; it is the read for a stream
 whose pieces have no fixed size. `readExactly` waits for all `n` bytes, the read for a protocol that
 announces a length, and is `Err` with the message `unexpected end of file` when the input ends after
-some of them; `n` of 0 gives empty `Bytes` without reading, at the end of the file too. A `max` below 1 or an `n` below 0 is `Err`.
+some of them, which are discarded, since they are no whole message; `n` of 0 gives empty `Bytes` without reading, at the end of the file too. A `max` below 1 or an `n` below 0 is `Err`.
 `writeChunk` writes the bytes as they are, as `writeText` writes text as UTF-8.
 
 A handle is also a connection from `Net`, and the reads and writes are the same. A context
@@ -102,8 +103,8 @@ Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Reply,
 `body` as its body, and `headers` as its headers, and reads the whole response. A response of any
 status is `Ok` with that `status`, a redirect included: no redirect is followed, so a 3xx comes
 back with its `Location` header, and a program that wants the next page asks for it. `Err` is a
-failure to get one: a malformed `url`, an empty `method`, no connection, the timeout, or the
-context. The response's headers hold one string per name, a repeated header joined with `, `.
+failure to get one: a malformed `url`, an empty `method`, two header names that differ only in
+case, which name one header, no connection, the timeout, or the context. The response's headers hold one string per name, a repeated header joined with `, `.
 `get` and `post` are `request` with the method filled in.
 
 A body is sent as given: a string as its UTF-8, `Bytes` as they are. A body that arrives, in a
@@ -185,6 +186,8 @@ Path.isAbs(p: string): bool
 Path.abs(p: string): Result[string, Error]       // against the working directory
 Path.rel(base: string, target: string): Result[string, Error]   // target as a path from base
 ```
+
+`Path.join` of no parts, or of empty ones only, is `.`, as `Path.clean("")` is.
 
 `Path.rel` works on the text, cleaned, and is `Err` when no relative path leads from `base` to
 `target`: when one is absolute and the other is not, when they are on different Windows volumes, or
@@ -586,7 +589,7 @@ order, and a read of standard input flushes it first, so a prompt is seen before
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value or on Bytes
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value or on one with no JSON form
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -597,6 +600,15 @@ record, and propagate errors with `try`, passing the path along so an error can 
 `$.servers[2].port`. Typed decoding through reflection is deferred; the design is in the repository
 history at commit 81525d2.
 
+`parse` reads one JSON text as RFC 8259 defines it, with white space around the value and nothing
+else. An object that repeats a key is a map with the key in its first place and its last value, so
+`{"a": 1, "b": 2, "a": 3}` is `Map{ "a": 3.0, "b": 2.0 }`. Arrays and objects nest at most 10000
+deep, which no document needs, and deeper nesting is `Err`, as is a number too large for a
+`float64`, such as `1e400`; a number too small for one is `0.0` or the nearest value it has. The
+message of a text that stops before its value does is `unexpected end of JSON input`; of one that
+goes on after its value, `unexpected text after the JSON value`; and of any other malformed text,
+what was expected and what was found, with the line and column where it was found.
+
 A `\u` escape of a surrogate pair in a JSON string is the one code point the pair encodes, and a
 surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text from outside does
 (section 11 of `ant-lang.md`, String).
@@ -605,7 +617,10 @@ surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text 
 infinities, which JSON cannot carry, as `null`. A value that contains itself has no JSON form, so
 `Json.stringify` panics with `cyclic value` where `String.from` would print `...`. Nor has `Bytes`,
 which JSON carries only in an encoding its reader must know, so `Json.stringify` panics on it and a
-program writes `Encoding.toBase64(b)` in its place.
+program writes `Encoding.toBase64(b)` in its place. Nor has a function, `void`, a type, or a
+reference such as a channel, a `Random`, a `Mutex`, or a `File.Handle`, whose state JSON cannot
+carry, and `Json.stringify` panics on each wherever it is in the value, a map key included, with a
+message that names it, such as `Channel has no JSON form`.
 
 ## Csv
 
@@ -621,7 +636,7 @@ lines included, trims nothing, reads a line break inside a quoted field as `\n` 
 drops an empty line, and is `Err` on a quote inside an unquoted
 field or a quoted field that never closes, naming the line. `stringify` quotes a field when it
 holds the separator, a quote, or a line break, or begins with white space, and ends every row with
-`\n`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
+`\n`; a row of one empty field is written `""`, since an empty line is no row to `parse`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
 the program, not of the data, so another value panics in both functions, checked before any row is
 read or written. With a separator, `stringify` cannot fail, since it writes to a string, so it
 returns a `string`.
@@ -659,12 +674,17 @@ Url.stringifyQuery(params: Map[string, Array[string]]): string             // k=
 `Parts` divides a reference as RFC 3986 does. `scheme` is the scheme in lower case, without its
 colon. `opaque` is what follows `scheme:` when it is not `//`: `mailto:alice@example.com` parses
 with `scheme` `mailto`, `opaque` `alice@example.com`, and an empty `path`, and without `opaque` that
-reference would lose its content. `user` is the userinfo as written, a password included. `host` and
+reference would lose its content. A single `/` after the colon starts `opaque` too: `x:/a` has no
+authority and `opaque` `/a`, while `x:///a` has an empty authority and `path` `/a`, so each comes
+back as written. `user` is the userinfo as written, a password included. `host` and
 `port` are the two halves of the authority, `port` empty when there is none. `path` is decoded,
-`%20` read as a space; `query` is the raw text after `?`, without it, so `parseQuery` can read it;
+`%20` read as a space, but for `%2F` and `%25`, which stay as written: a `/` that is not a separator
+and a `%` that is no escape keep the path's meaning through a round trip, as `/a%2Fb` and `/a/b`
+are different paths. `query` is the raw text after `?`, without it, so `parseQuery` can read it;
 `fragment` is decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`, escapes in
 `path` or `fragment` that do not decode to UTF-8, or a space in the host. `stringify` assembles the
-parts, escaping what needs it in every part but `query`, which is raw and written as it is, so a
+parts, escaping what needs it in every part but `query` and `opaque`, which are raw and written as
+they are, and in `path` writing `%2F` and `%25` as they are and escaping any other `%`, so a
 program changes a URL by parsing it, replacing a field, and writing it back.
 
 `escape` makes a string safe as one key or value of a query: every character but the unreserved ones
