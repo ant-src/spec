@@ -1858,8 +1858,11 @@ fraction after `.`, and an optional exponent after `e` or `E` with its own optio
 and returns `null` on a value beyond the range of `float64` and on anything else: white space,
 `_`, a prefix such as `0x`, and `Infinity` and `NaN`, which `String.from` writes but which are not
 numbers to parse. `fromInt` writes an unsigned
-value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` of `NaN`
-or an infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
+value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` rounds
+the binary value of `x`, not the decimal it was written as: the `float64` nearest `1.005` is a
+little below it, so `String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign, so
+`String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinity renders as
+`String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
 string would give; there is no format string.
 
@@ -1914,8 +1917,9 @@ template strings.
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
   value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
-  below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. The
-  non-finite values render as `NaN`, `Infinity`, and `-Infinity`.
+  below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. `-0.0`
+  keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values render
+  as `NaN`, `Infinity`, and `-Infinity`.
 - A string renders as itself at the top level and quoted with escapes inside a container. Inside
   the quotes, `"` and `\` are escaped, `\n`, `\t`, and `\r` are written so, and every other code
   point that `String.isPrint` rejects, such as a control character, a non-breaking space, a
