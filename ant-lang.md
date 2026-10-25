@@ -952,7 +952,9 @@ while !done { done = step() }
 A sequence is a function that pushes elements to a callback, as in Go: `Seq[T]` is the prelude alias
 `func(func(T): bool): void`. `for x in seq` calls `seq` with a `yield` function. Each call of
 `yield` runs the body once and returns `true`, or `false` after a `break`, after which the sequence
-must return. `return` and panics in the body propagate through the sequence as through any call.
+must return. `return` and panics in the body propagate through the sequence as through any call,
+and a panic in the body ends the loop: a sequence that catches it may not call `yield` again, nor
+return as though the loop had finished (section 12).
 Writing a sequence is an ordinary loop that calls `yield`, so user types and lazy ranges need no
 other protocol.
 
@@ -2466,7 +2468,7 @@ WaitGroup.wait(wg: WaitGroup, ctx: Context | null = null): void   // blocks unti
 Once.new(): Once
 Once.do[T](once: Once, f: func(): T): void                     // runs f the first time only and discards its value; later calls wait for it
 Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value; it panics if that run was left by a return before f gave one
-                                                               // for both: if f panics, the once is complete and every call, waiting or later, panics with the same message
+                                                               // for both: if f panics, the once is complete and every call, waiting or later, panics with the same panic, its trace included
 
 Cond.new(m: Mutex): Cond
 Cond.wait(c: Cond): void                                       // releases m, waits, reacquires; panics if m is not locked
@@ -2679,9 +2681,14 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   the members the same way. Over a string it yields each code point as a one-character string, and
   over `Bytes` each byte as a `byte`. Over a function it calls the function with a fresh `yield`
   function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or
-  `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or
-  after the sequence function has returned, panics; a `return` or a panic in the body propagates
-  through the sequence function like any other call. A sequence may call `yield` from goroutines
+  `false` when the body ended with `break`. A `return` or a panic in the body propagates through
+  the sequence function like any other call, and ends the loop. The loop also ends when the
+  sequence function returns or a panic leaves it. Calling `yield` again after it returned `false`,
+  or after the loop has ended, panics. A sequence function that returns after a panic left a run
+  of the body on the loop's goroutine, which it can only have done by catching it with
+  `Panic.catch`, makes the loop panic with a message that names the body's, so a sequence cannot
+  hide a bug in the body; one that raises the panic again with `Panic.raise` passes it on as it
+  is. A panic in a run on another goroutine ends that goroutine, as any panic does. A sequence may call `yield` from goroutines
   of its own: the body then runs for one call at a time, and a call waits while another runs it.
   A `yield` called from inside the body, on the goroutine running it, runs the body again within
   that run. So a body that waits for a goroutine blocked in a `yield` of the same loop deadlocks.
@@ -2746,7 +2753,7 @@ can only panic in the ways the last column lists, which depend on values known a
 | record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |                                                                                                                                                  |
 | array literal                                     | a spread operand is not an array                                                                                                                                                                                                                      |                                                                                                                                                  |
 | `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                 |                                                                                                                                                  |
-| `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                           | a sequence calls `yield` after it returned `false` or after the sequence returned                                                                |
+| `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                           | a sequence calls `yield` after it returned `false` or after the loop ended; a sequence returns after catching a panic of the body                |
 | destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                           | the array has fewer elements than the fixed positions                                                                                            |
 | variable                                          | no scope binds the name                                                                                                                                                                                                                               |                                                                                                                                                  |
 | `_`                                               | read                                                                                                                                                                                                                                                  |                                                                                                                                                  |
