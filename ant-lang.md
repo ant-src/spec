@@ -1304,8 +1304,8 @@ type Result[T, E] = Ok[T] | Err[E]
 
 `Result.ok(value)` and `Result.err(error)` are plain functions that build the two records;
 `Ok{ value: 1 }` is the same value as `Result.ok(1)`. The error type is whatever the author chooses.
-The standard library uses `Error`, a record `{ message: string }`; user code often declares a tagged
-union of its own.
+The standard library uses `Error`, a record `{ message: string }` that context can be added to (see
+Wrapping errors); user code often declares a tagged union of its own.
 
 ```ant
 type EmptyInput = {}
@@ -1362,8 +1362,44 @@ func loadConfig(path: string): Result[Config, Error] {
 first stage and pipes the value onward. To propagate the error of a whole pipeline, parenthesize it:
 `try (xs | Array.map(parse) | Result.all())`.
 
-Besides the two constructors, `Result` provides `Result.map`, `Result.mapErr`, `Result.unwrap`
-(panics on an error), `Result.unwrapOr`, and `Result.isOk` (section 11).
+Besides the two constructors, `Result` provides `Result.map`, `Result.mapErr`, `Result.wrapErr`,
+`Result.unwrap` (panics on an error), `Result.unwrapOr`, `Result.isOk`, and `Result.all`
+(section 11).
+
+### Wrapping errors
+
+`Error.wrap(e, context)` returns a new `Error` whose message is `context`, `: `, and the message of
+`e`, as Go's `fmt.Errorf("%s: %w")` writes it; `e` is untouched, and an empty `context` is joined
+like any other. `Result.wrapErr(r, context)` returns `r` itself when it is an `Ok`, and an `Err`
+holding `Error.wrap(r.error, context)` when it is an `Err`. Under `try`, a `wrapErr` stage is
+parenthesized together with the call it wraps, as any pipeline is (see `try`):
+
+```ant
+func loadConfig(path: string): Result[Config, Error] {
+  var text = try File.read(path)
+  var json = try (Json.parse(text) | Result.wrapErr(`parse ${path}`))
+  Result.ok(Config.fromJson(json))
+}
+
+var config = try (loadConfig("app.json") | Result.wrapErr("load config"))
+```
+
+On a truncated `app.json` the script ends with the message
+`load config: parse app.json: unexpected end of JSON input` (section 10, Scripts). A wrapped error
+keeps only text: it is a fresh record, so `Record.same` with the original is false, and there is no
+chain of causes to walk. An error that code branches on is a type of its own (see `Result`), where
+a cause is an ordinary field, and `Result.mapErr` turns it into an `Error` when a person is to read
+it.
+
+Messages follow one convention, so that the joined text reads as one line:
+
+- A message is lowercase and has no closing punctuation, since it may end up inside a longer one.
+- A context names the operation and the argument that matters, `parse app.json`, not
+  `failed to parse the config!`. Words like "error" and "failed" add nothing to an error.
+- A function adds the arguments it knows. The library's messages name the file, address, or URL
+  they concern (`stdlib.md`), so a caller of `File.read` does not repeat the path.
+- A caller adds what it was doing, which the callee cannot know, and the target too when the error
+  is a context's reason such as `cancelled`, which names none (section 9, Waiting).
 
 ### `panic`
 
@@ -1703,8 +1739,9 @@ script body, so `return` and `try` in its top-level initializers, outside a lamb
 errors. Command-line arguments come from `Os.args()`.
 
 The exit status is `0` when the script body ends with its last item or returns anything but an
-`Err`; `1` when it returns an `Err`, after its deferred blocks have run and `String.from` of the
-error's `error` field and a newline have been written to standard error, or when the main goroutine
+`Err`; `1` when it returns an `Err`, after its deferred blocks have run and the `Err`'s `error`
+field and a newline have been written to standard error, an `Error` as its `message` alone and any
+other error through `String.from`, or when the main goroutine
 panics; and `2` when the program could not be loaded because of a syntax error, an import cycle, a
 missing module, or an import of a script. `try` and `Result.unwrap` both end a script on an `Err`:
 `try` as an expected failure, reported as the error alone, and `unwrap` as a bug, reported as a
@@ -1740,7 +1777,7 @@ Besides the namespaces below, the prelude declares these names in every module:
 type Ok[T] = { value: T }
 type Err[E] = { error: E }
 type Result[T, E] = Ok[T] | Err[E]
-type Error = { message: string }                 // the library's error type
+type Error = { message: string }                 // the library's error type; see Result, Error, and Record
 type Entry[K, V] = { key: K, value: V }          // yielded by maps
 type Indexed[T] = { index: int, value: T }       // yielded by Array.entries
 type Seq[T] = func(func(T): bool): void          // a sequence: pushes elements to yield until it returns false
@@ -2325,7 +2362,7 @@ Random.shuffle(Random.new(42), xs)
 xs                                                        // [6, 8, 10, 4, 3, 1, 5, 9, 2, 7]
 ```
 
-### Result and Record
+### Result, Error, and Record
 
 ```
 Result.ok[T, E](value: T): Result[T, E]
@@ -2336,12 +2373,17 @@ Result.mapErr[T, E, F](r: Result[T, E], f: func(E): F): Result[T, F]
 Result.unwrap[T, E](r: Result[T, E]): T                        // panics if r is an Err
 Result.unwrapOr[T, E](r: Result[T, E], fallback: T): T
 Result.all[T, E](rs: Array[Result[T, E]]): Result[Array[T], E]   // the first Err, or Ok of every value
+Result.wrapErr[T](r: Result[T, Error], context: string): Result[T, Error]   // r when Ok; else an Err of Error.wrap(r.error, context)
+
+Error.wrap(e: Error, context: string): Error                   // Error{ message: `${context}: ${e.message}` }, a new record
 
 Record.same[T: {}](a: T, b: T): bool                           // identity; {} bounds T to any record
 ```
 
 `Result.ok` and the others are functions declared on the `Result` type (section 6), so `Result`
-names the alias in a type and its functions in an expression. `Record` is a namespace.
+names the alias in a type and its functions in an expression; `Error.wrap` is declared on `Error`
+likewise, and `Error{ message: "..." }` is still a literal (section 8, Wrapping errors). `Record` is
+a namespace.
 
 ### Synchronization
 

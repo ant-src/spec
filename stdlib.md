@@ -9,14 +9,15 @@ panic where the core library would, on an argument that cannot be, as `int8(300)
 of each such function says when it panics. Blocking calls block only the calling goroutine
 (section 9).
 
-A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`,
-since a namespace is a record like an imported module and the bare name would collide with it. A
-parameter with a default may be omitted or named at the call, as for a declared function
-(section 6, Calling). A function that blocks takes a context as its last parameter,
-`ctx: Context | null = null`, and when the context is done gives up with `Err` and the context's
-reason as the message, as section 9 (Waiting) has it. The namespaces are smaller than the Go
-packages behind them; a function is added when a program needs it, and what is here is complete
-as written.
+A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`, since
+a namespace is a record like an imported module and the bare name would collide with it. A parameter
+with a default may be omitted or named at the call, as for a declared function (section 6, Calling).
+A function that blocks takes a context as its last parameter, `ctx: Context | null = null`, and when
+the context is done gives up with `Err` and the context's reason as the message, as section 9
+(Waiting) has it. An `Err`'s message names the file, address, or URL it concerns, except a context's
+reason, which names none, so a caller adds only what it was doing (section 8, Wrapping errors). The
+namespaces are smaller than the Go packages behind them; a function is added when a program needs
+it, and what is here is complete as written.
 
 ## File
 
