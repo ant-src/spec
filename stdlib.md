@@ -4,9 +4,10 @@ Companion to `ant-lang.md`. The core library, which every program needs, is sect
 specification. The namespaces here talk to the world outside the program, and they follow one rule:
 every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
 panics on bad input, with these exceptions. `Json.stringify` panics on a value that contains itself
-or `Bytes`, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O, panic where the
-core library would, on an argument that cannot be, as `int8(300)` does. The comment of each such
-function says when it panics. Blocking calls block only the calling goroutine (section 9).
+or one with no JSON form, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O,
+panic where the core library would, on an argument that cannot be, as `int8(300)` does. The comment
+of each such function says when it panics. Blocking calls block only the calling goroutine
+(section 9).
 
 A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`,
 since a namespace is a record like an imported module and the bare name would collide with it. A
@@ -574,7 +575,7 @@ order, and a read of standard input flushes it first, so a prompt is seen before
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value or on Bytes
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value or on one with no JSON form
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -602,7 +603,10 @@ surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text 
 infinities, which JSON cannot carry, as `null`. A value that contains itself has no JSON form, so
 `Json.stringify` panics with `cyclic value` where `String.from` would print `...`. Nor has `Bytes`,
 which JSON carries only in an encoding its reader must know, so `Json.stringify` panics on it and a
-program writes `Encoding.toBase64(b)` in its place.
+program writes `Encoding.toBase64(b)` in its place. Nor has a function, `void`, a type, or a
+reference such as a channel, a `Random`, a `Mutex`, or a `File.Handle`, whose state JSON cannot
+carry, and `Json.stringify` panics on each wherever it is in the value, a map key included, with a
+message that names it, such as `Channel has no JSON form`.
 
 ## Csv
 
