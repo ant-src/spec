@@ -72,7 +72,8 @@ The license comment is followed by a blank line and is not a `//!` line, so it d
 ### Identifiers and keywords
 
 An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`.
-Case carries no meaning. `_` on its own is a write-only identifier: it can be bound or assigned
+Identifiers are case-sensitive, so `value` and `Value` are two names, but case means nothing else:
+unlike in Go, it does not decide what a module exports. `_` on its own is a write-only identifier: it can be bound or assigned
 wherever a name can, which discards the value. Reading it is a compile error in `ant check` and a
 panic in `ant run`.
 
@@ -114,11 +115,17 @@ true        false         null
 
 An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowed between digits. A
 float literal has digits on both sides of the point, an exponent, or both; `.5`, `1.`, and `1.x` are
-errors, since a digit followed by a point always begins a float. There are no literal suffixes: an
+errors, since a digit followed by a point always begins a float. The prefixes and the `e` of an
+exponent are lowercase, so `0XFF`, `0B1`, and `1E9` are errors; hexadecimal digits may be either
+case. A decimal integer, or the digits before a float's point, start with `0` only when they are
+`0`: `0`, `0.5`, and `0e3` are fine, while `007` and `00.5` are errors, since other languages read
+`007` as octal. There are no literal suffixes: an
 integer literal is always an `int` and a float literal is always a `float64`. `1` is never a float;
 write `1.0`. Other numeric types are reached through a conversion, as in `byte(255)` or
 `float32(1.5)`. An integer literal that does not fit an `int` is a syntax error, so the most
-negative `int` is written `Math.minInt`.
+negative `int` is written `Math.minInt`. So is a float literal out of the range of `float64`: one so
+large that it would round to infinity, such as `1e400`, or one whose digits are not all zero but
+that would round to `0.0`, such as `1e-400`.
 
 The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, whose hexadecimal value
 must be a Unicode scalar value: at most `10FFFF` and not a surrogate. A plain string stays on one
@@ -160,12 +167,19 @@ RE2 has no lookahead, lookbehind, or backreferences, so a JavaScript pattern tha
 `(?!`, `(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct; `\1` through
 `\9` are the backreferences, while `\10` and up are octal escapes, as RE2 reads them. JavaScript's
 `\u0041` is a syntax error whose message names `\x{0041}`. `(?<name>...)` names a group as in
-JavaScript. Inside `\Q...\E`, where RE2 takes every character as itself, `\/` is two characters,
-while the normalization of section 11 takes it for `/`; write `/` there. A few patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
+JavaScript. Inside `\Q...\E`, where RE2 takes every character as itself up to the first `\E`, a
+`\/` is the two characters `\` and `/`, and a `/` still ends the literal, so a `/` to match there is
+written by closing and reopening the span around it: `/\Qa\E\/\Qb\E/` matches `a/b`. A few
+patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
 `\v` or the Unicode spaces, and `.` excludes only `\n`, where JavaScript also excludes `\r`, U+2028,
 and U+2029. `\d`, `\w`, and `\b` are ASCII in both.
 
 ### Line endings
+
+A line break is a line feed `\n`, a carriage return and line feed `\r\n`, or a carriage return `\r`
+alone, as in JavaScript. Each is one line break wherever this document speaks of a line or a
+newline: it ends a line comment, a plain string or a regular expression literal cannot hold one, and
+the text of a template string keeps it as written.
 
 A newline or a semicolon ends an expression. A newline does not end one when:
 
@@ -175,7 +189,9 @@ A newline or a semicolon ends an expression. A newline does not end one when:
 
 Nothing else is inferred. A line that starts with `(` or `[` begins a new statement, so `a` followed
 by `(b)` on the next line is two statements, not a call. A `return` at the end of a line returns
-`void`, which the checker rejects in a function with another return type. A trailing comment changes
+`void`, which the checker rejects in a function with another return type. It ends its statement
+even when the next line starts with `.`, `?.`, `|`, or `else`, so that line begins a statement of its
+own, which is a syntax error since none of those tokens can start one. A trailing comment changes
 none of this.
 
 Inside parentheses, square brackets, and braces that are not a block, newlines are ignored. Calls,
@@ -822,7 +838,8 @@ directly follows an identifier path, a literal, or a closing `)` or `]`. A `{` d
 operator or an opening bracket starts a lambda. A record or map literal in a header would put `{`
 after an identifier path, so it must be parenthesized, as in Go:
 `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a
-newline would end the header expression (section 2).
+newline would end the header expression (section 2). That holds inside parentheses too, where
+newlines are otherwise ignored: `(if c` followed by `{ 1 } else { 2 })` on the next line is an error.
 
 ### `if`
 
@@ -924,9 +941,9 @@ select {
 }
 ```
 
-A clause is a head and a block, one clause per line. A head is one of five blocking calls of
-section 11 and `stdlib.md`, written as the call would be and not performed: `Channel.receive(c)`,
-`Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
+A clause is a head and a block, one clause per line; a `;` between clauses is a syntax error. A
+head is one of five blocking calls of section 11 and `stdlib.md`, written as the call would be and
+not performed: `Channel.receive(c)`, `Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
 before a head binds the call's result in the block: a receive binds `T | null`, `null` when the
 channel is closed, a send binds `bool`, and a binding on a head that returns `void` is a compile
 error. A head takes no context, since the context is its own clause, and a head given one is a
@@ -966,7 +983,8 @@ five, and a `{` on a line after its head are each a syntax error.
 `{ x, y }` binds the fields `x` and `y`, and `{ x: px }` binds the field `x` as `px`; fields not
 mentioned are ignored. An array destructuring `[a, b]` binds elements by position and ignores extra
 elements, and `[head, ...tail]` binds the rest as a new array. Each position holds a name, `_` to
-discard, or another destructuring, so they nest.
+discard, or another destructuring, so they nest. A destructuring has at least one field or position,
+so `var [] = xs` and `var {} = r` are syntax errors.
 
 Destructuring is binding plus indexing, and it fails the way indexing does. An array with fewer
 elements than the fixed positions panics, as `xs[1]` would on a one-element array. A nested record
@@ -1268,11 +1286,14 @@ to the value, of type `T`; on an `Err` it returns a fresh `Err` carrying the sam
 enclosing function, typed by that function's return type. The enclosing function must therefore
 return a `Result` whose error type accepts `E`, or such a `Result` or `null`, since `Err[E]` is
 assignable to `Result[U, E] | null` too; an inferred return type must come out one of the two. A
-`go` or `defer` block has no result, so `try` directly inside one is a compile error. `try` reads
-only the outer tag, so on an `Ok[Ok[int]]` it yields the inner `Ok[int]`. It has no nullable form:
-`x ?? return null` propagates `null` (section 7), and a `Result[T, E] | null` operand needs that
-first. An operand of type parameter type is a compile error, since it is not a `Result`; under
-erasure a second meaning chosen by static type would be unsound.
+`go` or `defer` block has no result, so `try` directly inside one is a compile error. Outside every
+boundary (section 5), in a top-level initializer outside a lambda, there is no function to return
+from, so `try` there is a syntax error, as `return` is; a parameter default evaluates in the called
+function, which a `try` in it returns from. `try` reads only the outer tag, so on an `Ok[Ok[int]]`
+it yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null`
+(section 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter
+type is a compile error, since it is not a `Result`; under erasure a second meaning chosen by
+static type would be unsound.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
@@ -2024,12 +2045,16 @@ A pattern is its source and its flags. `Regex.compile` takes the flags as a stri
 letters a literal takes, in any order, and is `Err` on any other letter or a repeated one. The
 source is normalized: a `\/` loses its backslash, since RE2 reads `\/` and `/` alike, a line break
 becomes `\n` or `\r` and an empty source becomes `(?:)`, which RE2 reads the same, and the flags
-are sorted. Two patterns are `==` when their normalized sources and flags are, so `/a/i == /a/i`,
+are sorted. The text of a `\Q...\E` span, which RE2 takes as itself, is kept as written, line breaks
+and `\/` included; a span left open at the end gets its `\E`, and a span closed and reopened around
+a single `/` or line break, written as itself or escaped, as in `\Qa\E\/\Qb\E`, becomes one span
+holding that character, `\Qa/b\E`. Two patterns are `==` when their normalized sources and flags are, so `/a/i == /a/i`,
 `/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`, `Regex.compile("a/b") == /a\/b/`,
 `Regex.compile("a\nb") == /a\nb/` and `Regex.compile("") == /(?:)/` all hold, and
 `Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as a literal that reads back to it: every `/`
-of the normalized source written `\/`, so `/(?:)/` for the empty pattern, as JavaScript renders
-it. `Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a
+of the normalized source written `\/` and every line break `\n` or `\r`, so `/(?:)/` for the empty
+pattern, as JavaScript renders it; inside a `\Q...\E` span the span is closed and reopened around
+each, as `\E\/\Q`, `\E\n\Q`, or `\E\r\Q`. `Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a
 string.
 
 A `Match` is one match of the whole pattern: `text` is the matched text, `start` and `end` are its

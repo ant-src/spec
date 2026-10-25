@@ -15,7 +15,8 @@ ant doc <file.ant>          a module's doc and its exported declarations
 ant doc <file.ant> <name>   one exported declaration of a module: Point, Point.distance
 ```
 
-A name is `Name` or `Owner.name`, matched as identifiers are, without regard to case. A `var` that
+A name is `Name` or `Owner.name`. `ant doc` looks it up without regard to case, so `array.MAP` finds
+`Array.map`, although identifiers in a program are case-sensitive (section 2). A `var` that
 destructures has no name of its own: a module lists it, but a name does not find it. An argument
 that ends in `.ant` is a module path; every other first argument is a prelude name. `ant doc` reads
 only the file it is given: it does not follow imports and does not run the checker, so a module with
