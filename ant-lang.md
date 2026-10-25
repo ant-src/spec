@@ -416,9 +416,12 @@ the checker as in the interpreter. The name binds a function value that carries 
 `UserId is func` holds and `Array.map(raw, UserId)` tags every element. `is UserId` tests the tag,
 so `UserId | string` and `UserId | AccountId` are distinguishable unions. A type parameter the body
 does not mention is allowed: `type Id[T] = string` gives `Id[User]` and `Id[Account]` as distinct
-static types over one tag, and a union of the two is rejected, since they share it. `Ok[T]` and
-`Err[E]` stay records rather than taking this form, because a tag over an arbitrary payload needs a
-field to get the payload out, and a record with one field is exactly that.
+static types over one tag, and a union of the two is rejected, since they share it. Only an
+expected type fixes such a parameter, for the constructor used as a value as for a call of it:
+`var ids: Array[Id[User]] = Array.map(raw, Id)` is fine, and without the annotation `T` is a type
+parameter that nothing fixes (see Inference). `Ok[T]` and `Err[E]` stay records rather than taking
+this form, because a tag over an arbitrary payload needs a field to get the payload out, and a
+record with one field is exactly that.
 
 ### Arrays, maps, and sets
 
