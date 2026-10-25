@@ -1687,7 +1687,7 @@ Array.countWhere[T](xs: Array[T], f: func(T): bool): int       // how many eleme
 Array.contains[T](xs: Array[T], v: T): bool                    // by ==
 Array.indexOf[T](xs: Array[T], v: T): int | null               // first index, by ==
 Array.lastIndexOf[T](xs: Array[T], v: T): int | null           // last index, by ==
-Array.min[T: Ordered](xs: Array[T]): T | null                  // null when empty; NaN when any element is NaN
+Array.min[T: Ordered](xs: Array[T]): T | null                  // null when empty; NaN when any element is NaN; -0.0 below 0.0
 Array.max[T: Ordered](xs: Array[T]): T | null
 Array.minBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first element with the least key
 Array.maxBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first with the greatest
@@ -1805,13 +1805,13 @@ String.slice(s: string, from: int, to: int): string            // panics as Arra
 String.concat(parts: Array[string]): string
 String.split(s: string, sep: string): Array[string]            // panics if sep is empty
 String.join(parts: Array[string], sep: string): string
-String.repeat(s: string, n: int): string                       // panics if n < 0 or n is above 2^31 − 1
+String.repeat(s: string, n: int): string                       // panics if n < 0, or n or the result's length in bytes is above 2^31 − 1
 String.trim(s: string): string                                 // Unicode white space at both ends
 String.trimStart(s: string): string                            // at the start only
 String.trimEnd(s: string): string                              // at the end only
 String.trimPrefix(s: string, prefix: string): string           // prefix removed once, when present
 String.trimSuffix(s: string, suffix: string): string
-String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; panics if pad is empty or width is above 2^31 − 1
+String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; panics if pad is empty, or width or the result's length in bytes is above 2^31 − 1
 String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; panics as padStart does
 String.contains(s: string, t: string): bool
 String.startsWith(s: string, t: string): bool
@@ -1819,7 +1819,7 @@ String.endsWith(s: string, t: string): bool
 String.indexOf(s: string, t: string): int | null               // first code point index
 String.lastIndexOf(s: string, t: string): int | null           // last code point index
 String.count(s: string, t: string): int                        // non-overlapping occurrences; panics if t is empty
-String.replace(s: string, old: string, new: string): string    // every occurrence; panics if old is empty
+String.replace(s: string, old: string, new: string): string    // every occurrence; panics if old is empty or the result's length in bytes is above 2^31 − 1
 String.replaceFirst(s: string, old: string, new: string): string   // the first occurrence only; panics if old is empty
 String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; panics if sep is empty
 String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
@@ -1877,8 +1877,11 @@ fraction after `.`, and an optional exponent after `e` or `E` with its own optio
 and returns `null` on a value beyond the range of `float64` and on anything else: white space,
 `_`, a prefix such as `0x`, and `Infinity` and `NaN`, which `String.from` writes but which are not
 numbers to parse. `fromInt` writes an unsigned
-value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` of `NaN`
-or an infinity renders as `String.from` does. `${String.fromFloat(total, 2)}` and
+value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` rounds
+the binary value of `x`, not the decimal it was written as: the `float64` nearest `1.005` is a
+little below it, so `String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign, so
+`String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinity renders as
+`String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
 string would give; there is no format string.
 
@@ -1933,8 +1936,9 @@ template strings.
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
   value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
-  below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. The
-  non-finite values render as `NaN`, `Infinity`, and `-Infinity`.
+  below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. `-0.0`
+  keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values render
+  as `NaN`, `Infinity`, and `-Infinity`.
 - A string renders as itself at the top level and quoted with escapes inside a container. Inside
   the quotes, `"` and `\` are escaped, `\n`, `\t`, and `\r` are written so, and every other code
   point that `String.isPrint` rejects, such as a control character, a non-breaking space, a
@@ -2056,6 +2060,9 @@ puts its result in the match's place, as written, with no expansion.
 
 Lazy sequences (section 5, Loops). Every function here returns a new `Seq` without running the
 source; `Iter.toArray` and `for` run it. A sequence may be run more than once if its source allows.
+The `yield` an `Iter` function passes to its source behaves as the one `for` passes (section 12):
+it takes one call at a time, and panics when called after it returned `false` or after the source
+returned.
 
 ```
 Iter.range(from: int, to: int): Seq[int]                       // from inclusive, to exclusive; empty when to <= from
@@ -2070,8 +2077,8 @@ Iter.toArray[T](s: Seq[T]): Array[T]
 
 ```
 Math.abs[T: Number](x: T): T                                   // panics on the most negative integer, whose absolute value does not fit
-Math.min[T: Ordered](a: T, b: T): T                            // NaN when either is NaN
-Math.max[T: Ordered](a: T, b: T): T                            // NaN when either is NaN
+Math.min[T: Ordered](a: T, b: T): T                            // NaN when either is NaN; -0.0 below 0.0
+Math.max[T: Ordered](a: T, b: T): T                            // NaN when either is NaN; -0.0 below 0.0
 Math.pow(x: float64, y: float64): float64
 Math.sqrt(x: float64): float64
 Math.floor(x: float64): float64
@@ -2123,7 +2130,9 @@ Bits.wrapMul[T: Integer](a: T, b: T): T
 
 The functions over `float64` follow IEEE 754 and never panic: `Math.log(0.0)` is `-Infinity`,
 `Math.log(-1.0)` and `Math.sqrt(-1.0)` are `NaN`, and `Math.clamp(x, lo, hi)` with a `NaN` `x` is
-`NaN`. The rotations pair with the shifts and panic on a negative count as they do, but a count at
+`NaN`. `Math.min` and `Math.max` hold `-0.0` less than `0.0`, as `Array.min` and `Array.max` do,
+though `-0.0 < 0.0` is `false`: `Math.min(0.0, -0.0)` and `Math.min(-0.0, 0.0)` are both `-0.0`,
+and the two `max` calls are both `0.0`. The rotations pair with the shifts and panic on a negative count as they do, but a count at
 or beyond the width is taken modulo the width, since a rotation by the width is the identity.
 
 ### Random
@@ -2399,8 +2408,8 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   tag and `==` fields; tagged primitives have the same tag and equal payloads; time values have the
   same tag and equal fields, as `stdlib.md` lists them per type; patterns have the same normalized
   source and flags; arrays have the same length and `==` elements in order; maps have the same key
-  set and `==` values per key; sets have the same members; functions, tags, and sync objects are the
-  same object. A pair of values already under comparison counts as equal (section 4). Values of
+  set and `==` values per key; sets have the same members; functions, tags, sync objects, and
+  `Random` generators are the same object. A pair of values already under comparison counts as equal (section 4). Values of
   different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
 - **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `Bytes`, `func`, `Array`,
   `Map`, `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any
@@ -2417,8 +2426,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   already has that field. An index target on an array must be an `int` in range; on a map it inserts
   or replaces. An array destructuring target requires an array with at least as many elements as its
   positions, and stores element by element left to right, with a rest position receiving a new array
-  of the remainder. Compound assignment reads the target, applies the operator, and stores. The
-  value is `void`.
+  of the remainder. Compound assignment reads the target before the right side evaluates, then
+  applies the operator and stores: with `x` at `1`, `x += f()` where `f` sets `x` to `10` and
+  returns `5` leaves `x` at `6`. The value is `void`.
 - **Destructuring in `var` and `for`.** A record destructuring requires a record with every named
   field. An array destructuring requires an array with at least as many elements as its fixed
   positions; extra elements are ignored, and a rest binder receives a new array of the remainder.
@@ -2436,7 +2446,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   value or is closed, a send when its channel can take the value, `Context.wait` when the context
   is done, `WaitGroup.wait` when the counter is zero, `Time.sleep` when the time has passed; with
   an `else` clause it does not wait, and `else` is taken when no head can proceed at once. One of
-  the heads that can proceed is performed, chosen at random among them, its result is bound when
+  the heads that can proceed is performed, chosen uniformly at random, its result is bound when
   the clause binds, and its block is evaluated; the value is the block's. A send performed on a
   closed channel panics.
 - **`for x in e`.** `e` must be an array, a map, a set, a string, `Bytes`, or a function. Over an
@@ -2450,7 +2460,11 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or
   `false` when the body ended with `break`. Calling `yield` again after it returned `false`, or
   after the sequence function has returned, panics; a `return` or a panic in the body propagates
-  through the sequence function like any other call. A destructuring on the left reads the named
+  through the sequence function like any other call. A sequence may call `yield` from goroutines
+  of its own: the body then runs for one call at a time, and a call waits while another runs it.
+  A `yield` called from inside the body, on the goroutine running it, runs the body again within
+  that run. So a body that waits for a goroutine blocked in a `yield` of the same loop deadlocks.
+  A destructuring on the left reads the named
   fields of each element, which must be a record with those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function
   body, lambda, `go` block, or `defer` block, running the deferred blocks of every block they exit.
@@ -2515,6 +2529,7 @@ can only panic in the ways the last column lists, which depend on values known a
 | `panic`                                           |                                                                                                                                                                                                                                                       | always                                                                                                                                           |
 | any call                                          |                                                                                                                                                                                                                                                       | the goroutine's call depth exceeds the runtime's limit                                                                                           |
 | a count                                           |                                                                                                                                                                                                                                                       | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold |
+| a result size                                     |                                                                                                                                                                                                                                                       | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                    |
 | `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |                                                                                                                                                  |
 | `select`                                          |                                                                                                                                                                                                                                                       | a send clause is chosen on a closed channel                                                                                                      |
 | `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                 | never                                                                                                                                            |
