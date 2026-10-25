@@ -364,7 +364,8 @@ take their own part of a longer string and ignore the rest, so `parsePlainDate` 
 date or a full zoned string, `parsePlainTime` a bare time or a date and time, and
 `parsePlainDateTime` a date and time; none accepts `Z` without a bracketed zone, since `Z` names a
 moment, not a wall-clock time. `parseDuration` takes ISO 8601's `PnYnMnWnDTnHnMnS` with an
-optional leading sign, where only the last time component may carry a fraction. A string in
+optional leading sign, in capitals, where only the last time component may carry a fraction, after
+a point and of up to nine digits; lowercase letters and a comma are `Err`, as above. A string in
 another calendar is `Err`.
 
 **Conversion.**
