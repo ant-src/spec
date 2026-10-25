@@ -622,7 +622,7 @@ lines included, trims nothing, reads a line break inside a quoted field as `\n` 
 drops an empty line, and is `Err` on a quote inside an unquoted
 field or a quoted field that never closes, naming the line. `stringify` quotes a field when it
 holds the separator, a quote, or a line break, or begins with white space, and ends every row with
-`\n`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
+`\n`; a row of one empty field is written `""`, since an empty line is no row to `parse`. A separator is one code point other than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of
 the program, not of the data, so another value panics in both functions, checked before any row is
 read or written. With a separator, `stringify` cannot fail, since it writes to a string, so it
 returns a `string`.
