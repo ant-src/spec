@@ -1261,7 +1261,10 @@ where `try` does not apply.
 to the value, of type `T`; on an `Err` it returns a fresh `Err` carrying the same error from the
 enclosing function, typed by that function's return type. The enclosing function must therefore
 return a `Result` whose error type accepts `E`. A `go` or `defer` block has no result, so `try`
-directly inside one is a compile error. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it
+directly inside one is a compile error. Outside every boundary (section 5), in a top-level
+initializer outside a lambda, there is no function to return from, so `try` there is a syntax error,
+as `return` is; a parameter default evaluates in the called function, which a `try` in it returns
+from. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it
 yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section
 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a
 compile error, since it is not a `Result`; under erasure a second meaning chosen by static type
