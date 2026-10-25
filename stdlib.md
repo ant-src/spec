@@ -344,8 +344,9 @@ and six digits.
 Parsing takes the date `YYYY-MM-DD`, the time `HH:MM`, `HH:MM:SS` or `HH:MM:SS.F` with up to nine
 digits of fraction, `T` or a space between them, `Z` or an offset `±HH:MM`, a zone in brackets and
 `[u-ca=iso8601]`, each where its type needs it. `parseInstant` needs a date, a time and `Z` or an
-offset, and ignores a bracketed zone. `parseZoned` needs a bracketed zone; with no offset it
-resolves the wall-clock time by `disambiguation`, with `Z` it takes the exact moment and shows it
+offset, and ignores a bracketed zone. `parseZoned` needs a bracketed zone; with a date alone it
+is the start of that day in the zone, as `startOfDay` is; with no offset it resolves the
+wall-clock time by `disambiguation`, with `Z` it takes the exact moment and shows it
 in the zone, and with an offset the zone does not have at that time it is `Err`. The plain parsers
 take their own part of a longer string and ignore the rest, so `parsePlainDate` accepts a bare
 date or a full zoned string, `parsePlainTime` a bare time or a date and time, and
