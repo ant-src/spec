@@ -2427,7 +2427,7 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   value or is closed, a send when its channel can take the value, `Context.wait` when the context
   is done, `WaitGroup.wait` when the counter is zero, `Time.sleep` when the time has passed; with
   an `else` clause it does not wait, and `else` is taken when no head can proceed at once. One of
-  the heads that can proceed is performed, chosen at random among them, its result is bound when
+  the heads that can proceed is performed, chosen uniformly at random, its result is bound when
   the clause binds, and its block is evaluated; the value is the block's. A send performed on a
   closed channel panics.
 - **`for x in e`.** `e` must be an array, a map, a set, a string, `Bytes`, or a function. Over an
