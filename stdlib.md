@@ -502,7 +502,8 @@ is a `ZonedDateTime`, whose days have their daylight-saving hours. A `PlainDateT
 `relativeTo` counts as its date; its time is ignored, as in Temporal. `addDuration` sums two
 durations without years, months or weeks, days at 24 hours, and balances the result up to the larger
 of the two largest units given, so `PT90M` plus `PT30M` is `PT120M` and `P1D` plus `PT25H` is
-`P2DT1H`. `compareDuration` orders by length. `total` is the whole duration in `unit` as a number
+`P2DT1H`. `compareDuration` orders by length; two durations with the same fields are `0` without
+`relativeTo`, as in Temporal. `total` is the whole duration in `unit` as a number
 with a fraction, `PT1H30M` in hours being `1.5`. `roundDuration` balances `d` so that no field below
 `largestUnit` exceeds its next unit, and rounds the result to a multiple of `increment` of
 `smallestUnit` by `mode`, dropping the smaller fields: `largestUnit` alone balances, `PT90M` to
