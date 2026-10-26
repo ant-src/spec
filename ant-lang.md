@@ -1003,12 +1003,13 @@ rule above finds: a `{` after a `)` ends a header.
 The heads' operands evaluate first, in order, once. Then the `select` waits until one head can
 proceed, performs it, binds its result, and runs its block, whose value is the value of the
 `select`. A head can proceed when its channel holds a value or is closed, when its channel can take
-the value, when its context is done, when its group's counter is zero, or when its time has passed.
-When several can proceed at once, one is chosen at random, so no source starves. A `select` without
-`else` whose heads can never proceed waits until the run is cancelled, as any wait does. A closed
-channel's receive is always ready, so a loop that keeps one in its `select` spins until the block
-leaves the loop on `null`. A send chosen on a closed channel panics, as `Channel.send` does (section
-12).
+the value or is closed, when its context is done, when its group's counter is zero, or when its time
+has passed. When several can proceed at once, one is chosen uniformly at random, each time anew; no
+order among them is promised and no bound on how long one waits. A `select` without `else` whose
+heads can never proceed waits until the run is cancelled, as any wait does. A closed channel's
+receive is always ready, so a loop that keeps one in its `select` spins until the block leaves the
+loop on `null`. A closed channel's send is always ready too, and when it is chosen it panics, as
+`Channel.send` does (section 12), so a `select` with `else` panics rather than taking `else`.
 
 A `select` is an expression: its blocks are checked against the expected type, or it has the union
 of their types with `never` dropped, as an `if`. A block's `return`, `break`, and `continue` act on
@@ -2676,12 +2677,12 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   `void`.
 - **`select`.** The operands of every head evaluate in order; each must have the kind its call
   takes. Then the goroutine waits until a head can proceed: a receive when its channel holds a value
-  or is closed, a send when its channel can take the value, `Context.wait` when the context is done,
-  `WaitGroup.wait` when the counter is zero, `Time.sleep` when the time has passed; with an `else`
-  clause it does not wait, and `else` is taken when no head can proceed at once. One of the heads
-  that can proceed is performed, chosen uniformly at random, its result is bound when the clause
-  binds, and its block is evaluated; the value is the block's. A send performed on a closed channel
-  panics.
+  or is closed, a send when its channel can take the value or is closed, `Context.wait` when the
+  context is done, `WaitGroup.wait` when the counter is zero, `Time.sleep` when the time has passed;
+  with an `else` clause it does not wait, and `else` is taken when no head can proceed at once. One
+  of the heads that can proceed is performed, chosen uniformly at random, its result is bound when
+  the clause binds, and its block is evaluated; the value is the block's. A send performed on a
+  closed channel panics.
 - **`for x in e`.** `e` must be an array, a map, a set, a string, `Bytes`, or a function. Over an
   array it iterates by index from zero while the index is below the current length, so elements
   appended during the loop are visited and removed ones are not. Over a map it visits the entries as
