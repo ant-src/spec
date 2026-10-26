@@ -281,7 +281,9 @@ of a record type is not a literal's, so it takes the spacing of the token before
 A comment on a line of its own is indented to the level of the code that follows it in the same
 block or list, or, when it is the last thing before a closing bracket, one level deeper than that
 bracket. A run of such comments moves together. Only the first line of a block comment is
-reindented; its other lines are kept as written, trailing spaces removed.
+reindented; its other lines are kept as written, trailing spaces removed. A `#!` first line (section
+2 of `ant-lang.md`) stays the first line, kept as written with its trailing spaces removed, and the
+comments and module doc after it are laid out as anywhere else.
 
 A comment after code on the same line is a trailing comment. Trailing comments on consecutive lines
 of the same indentation form a run, and the comments of a run start in one column: one space after

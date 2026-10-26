@@ -33,6 +33,11 @@ syntax error at that byte, so a string literal holds only scalar values (section
 
 Block comments do not nest.
 
+A file's first line may start with `#!`, from its first byte, as in `#!/usr/bin/env ant`. The lexer
+skips that line up to its line break, so a script can be run as a command (section 10), and the
+module doc lines below may follow it. A `#!` anywhere else, after a space or on a later line, is a
+syntax error.
+
 A doc comment is a run of line comments, each alone on its line, on consecutive lines, followed by a
 line break and then directly by a top-level `var`, `func`, or `type` declaration, or by the `export`
 that starts one, with nothing between but white space. It documents that declaration. A blank line,
@@ -1834,6 +1839,11 @@ only a `return`, written or reached through `try` or `?? return`, gives it a res
 `void` or an `Err`, which the checker enforces, so `return 5` is a compile error. A library has no
 script body, so `return` and `try` in its top-level initializers, outside a lambda, are syntax
 errors. Command-line arguments come from `Os.args()`.
+
+`ant file.ant`, with any arguments after it, is `ant run file.ant`. So a script whose first line is
+`#!/usr/bin/env ant` (section 2) and that may be executed runs as `./file.ant`, and its arguments
+reach `Os.args()` as they would through `ant run`. A library may have the line too, and runs as any
+library given to `ant run` does.
 
 The exit status is `0` when the script body ends with its last item or returns anything but an
 `Err`; `1` when it returns an `Err`, after its deferred blocks have run and the `Err`'s `error`
