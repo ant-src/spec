@@ -159,8 +159,12 @@ is **flat**.
 A flat list adds no line breaks. Its items are separated by `, `, and a trailing comma is removed. A
 line break the author wrote inside an item stays, indented as 4.5 says.
 
-A broken list puts each item on its own line, one level deeper than the line that holds the opening
-bracket, and the closing bracket starts a line at the level of the line that holds the opening one.
+A broken list keeps its items on the lines the author put them on. The first item starts a line one
+level deeper than the line that holds the opening bracket. Each later item starts a new line at that
+level where the author wrote a line break before it, and otherwise follows the item before it on its
+line, after `, `. The closing bracket starts a line at the level of the line that holds the opening
+one. A list written one item per line stays that way, and a row the author wrote, such as a flag and
+its value or a row of a matrix, stays a row: `ant fmt` neither splits it nor fills it up to a width.
 The last item is followed by a comma wherever the grammar allows a trailing comma there (section 2,
 Line endings). It does not after the single expression of a parenthesized expression or an index,
 since `(a,)` and `xs[i,]` do not parse, nor after the rest position `...name` of a destructuring,
@@ -176,6 +180,8 @@ var accounts = Map{ ada: Account{ id: "ada", balance: 100 },
   bob: Account{ id: "bob", balance: 20 } }
 connect("example.com",
         tls: false)
+var args = ["-o", "IdentitiesOnly=yes",
+    "-p",   "2222"]
 
 // after
 var accounts = Map{
@@ -186,6 +192,10 @@ connect(
   "example.com",
   tls: false,
 )
+var args = [
+  "-o", "IdentitiesOnly=yes",
+  "-p", "2222",
+]
 ```
 
 Because a newline inside an item does not break the list, a call whose last argument is a broken
@@ -348,7 +358,9 @@ line break go (4.1). Comments inside an interpolation are kept as 4.8 says.
 
 ## 5. What `ant fmt` does not do
 
-- It does not wrap long lines or join short ones; line breaks are the author's (section 3).
+- It does not wrap long lines or join short ones; line breaks are the author's (section 3). In a
+  broken list it moves the first item off the opening bracket's line and the closing bracket onto a
+  line of its own (4.4), but it never splits or fills a row of items.
 - It does not sort imports, declarations, or record fields.
 - It does not remove redundant parentheses, simplify expressions, or rename anything.
 - It does not align anything except runs of trailing comments (4.8).
