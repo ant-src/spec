@@ -597,7 +597,7 @@ and `Os.stdin()` is at end of file.
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value or on one with no JSON form
+Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value, on one with no JSON form, or on a map key that is not a string
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -627,8 +627,18 @@ infinities, which JSON cannot carry, as `null`. A value that contains itself has
 which JSON carries only in an encoding its reader must know, so `Json.stringify` panics on it and a
 program writes `Encoding.toBase64(b)` in its place. Nor has a function, `void`, a type, or a
 reference such as a channel, a `Random`, a `Mutex`, or a `File.Handle`, whose state JSON cannot
-carry, and `Json.stringify` panics on each wherever it is in the value, a map key included, with a
-message that names it, such as `Channel has no JSON form`.
+carry, and `Json.stringify` panics on each wherever it is in the value, with a message that names
+it, such as `Channel has no JSON form`.
+
+A map becomes an object, and a JSON property name is a string, so every key of a map must be a
+`string` or a named primitive over `string`, written without its tag as its values are:
+`Map{ UserId("u-1"): 1 }` is `{"u-1":1}`. Any other key panics with
+`a map key must be a string, got int`, naming the key's type, since turning `1` into `"1"` or `[1]`
+into `"[1]"` gives text that `Json.parse` reads back as something else; a program converts the keys
+itself, to the strings it means. Two keys that give one name, `UserId("a")` and `"a"` in a map keyed
+by `UserId | string`, panic too, with
+`map keys UserId("a") and "a" both give the property name "a"`, so the text never repeats a property
+name.
 
 ## Csv
 
