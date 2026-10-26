@@ -33,21 +33,22 @@ syntax error at that byte, so a string literal holds only scalar values (section
 
 Block comments do not nest.
 
-A doc comment is a run of line comments, each alone on its line, on consecutive lines, followed by
-a line break and then directly by a top-level `var`, `func`, or `type` declaration, or by the
-`export` that starts one, with nothing between but white space. It documents that declaration. A
-blank line, a block comment, a module doc line, or a comment that follows code on its line ends the
-run, so a comment separated from a declaration by a blank line documents nothing, and neither does
-a trailing comment on the line before it; in `var a = 1; var b = 2`, a doc comment above the line
-documents only `a`. The doc is the run's text with each line's `//`, the one space after it when
-present, and its trailing white space removed.
+A doc comment is a run of line comments, each alone on its line, on consecutive lines, followed by a
+line break and then directly by a top-level `var`, `func`, or `type` declaration, or by the `export`
+that starts one, with nothing between but white space. It documents that declaration. A blank line,
+a block comment, a module doc line, or a comment that follows code on its line ends the run, so a
+comment separated from a declaration by a blank line documents nothing, and neither does a trailing
+comment on the line before it; in `var a = 1; var b = 2`, a doc comment above the line documents
+only `a`. The doc is the run's text with each line's `//`, the one space after it when present, and
+its trailing white space removed.
 
 A line comment that starts with `//!` is a module doc line, and the module doc lines of a file
 document the module (section 10). They come before its first `import` or declaration, each alone on
 its line, on consecutive lines: other comments may come before and after them, such as a license,
-but not between. A `//!` comment anywhere else is a syntax error, after code or apart from the
-other module doc lines, so a module has one doc and it is where a reader looks first. The doc is the lines' text with each line's `//!`, the one space after it when present,
-and its trailing white space removed.
+but not between. A `//!` comment anywhere else is a syntax error, after code or apart from the other
+module doc lines, so a module has one doc and it is where a reader looks first. The doc is the
+lines' text with each line's `//!`, the one space after it when present, and its trailing white
+space removed.
 
 Doc comments and module docs mean nothing to `ant check` or `ant run`; editors and `ant doc` read
 them, and `doc.md` gives their conventions.
@@ -73,9 +74,9 @@ The license comment is followed by a blank line and is not a `//!` line, so it d
 
 An identifier starts with an ASCII letter or `_` and continues with ASCII letters, digits, or `_`.
 Identifiers are case-sensitive, so `value` and `Value` are two names, but case means nothing else:
-unlike in Go, it does not decide what a module exports. `_` on its own is a write-only identifier: it can be bound or assigned
-wherever a name can, which discards the value. Reading it is a compile error in `ant check` and a
-panic in `ant run`.
+unlike in Go, it does not decide what a module exports. `_` on its own is a write-only identifier:
+it can be bound or assigned wherever a name can, which discards the value. Reading it is a compile
+error in `ant check` and a panic in `ant run`.
 
 Keywords:
 
@@ -119,13 +120,12 @@ errors, since a digit followed by a point always begins a float. The prefixes an
 exponent are lowercase, so `0XFF`, `0B1`, and `1E9` are errors; hexadecimal digits may be either
 case. A decimal integer, or the digits before a float's point, start with `0` only when they are
 `0`: `0`, `0.5`, and `0e3` are fine, while `007` and `00.5` are errors, since other languages read
-`007` as octal. There are no literal suffixes: an
-integer literal is always an `int` and a float literal is always a `float64`. `1` is never a float;
-write `1.0`. Other numeric types are reached through a conversion, as in `byte(255)` or
-`float32(1.5)`. An integer literal that does not fit an `int` is a syntax error, so the most
-negative `int` is written `Math.minInt`. So is a float literal out of the range of `float64`: one so
-large that it would round to infinity, such as `1e400`, or one whose digits are not all zero but
-that would round to `0.0`, such as `1e-400`.
+`007` as octal. There are no literal suffixes: an integer literal is always an `int` and a float
+literal is always a `float64`. `1` is never a float; write `1.0`. Other numeric types are reached
+through a conversion, as in `byte(255)` or `float32(1.5)`. An integer literal that does not fit an
+`int` is a syntax error, so the most negative `int` is written `Math.minInt`. So is a float literal
+out of the range of `float64`: one so large that it would round to infinity, such as `1e400`, or one
+whose digits are not all zero but that would round to `0.0`, such as `1e-400`.
 
 The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, whose hexadecimal value
 must be a Unicode scalar value: at most `10FFFF` and not a surrogate. A plain string stays on one
@@ -143,18 +143,18 @@ literal stays on one line. `//` and `/*` begin comments, so an empty pattern and
 starts with `*` cannot be written as literals; an empty pattern is `Regex.compile("")`. The flags
 are `i`, `m`, and `s`, each at most once, in any order: `i` ignores case, `m` makes `^` and `$`
 match at line ends, and `s` lets `.` match a line break. JavaScript's other flags are syntax errors
-whose message names the Ant way: `g` is `Regex.findAll` or `Regex.replace`, `y` is a `^` anchor on
-a `String.slice`, and `u`, `v`, and `d` are how Ant already behaves. The literal evaluates to a
+whose message names the Ant way: `g` is `Regex.findAll` or `Regex.replace`, `y` is a `^` anchor on a
+`String.slice`, and `u`, `v`, and `d` are how Ant already behaves. The literal evaluates to a
 `Regex.Pattern`.
 
 `/` begins a regular expression unless the last token before it, skipping line breaks, is an
 operand: an identifier, a literal of any kind, `true`, `false`, `null`, `void`, `)`, `]`, or `}`.
 After an operand, `/` is division and `/=` is the compound assignment. `return`, `break`, and
 `continue` can end a line (see Line endings) but are not operands, so `return /x/` returns a
-pattern. When there is no previous token, at the start of a file or of a `${...}` interpolation,
-`/` begins a pattern. The rule reads one token back, so the grammar keeps its one token of
-lookahead, and no program written before the literal existed changes meaning: every `/` that begins
-a pattern follows a token after which division was a syntax error.
+pattern. When there is no previous token, at the start of a file or of a `${...}` interpolation, `/`
+begins a pattern. The rule reads one token back, so the grammar keeps its one token of lookahead,
+and no program written before the literal existed changes meaning: every `/` that begins a pattern
+follows a token after which division was a syntax error.
 
 ```ant
 var r = (total
@@ -163,16 +163,16 @@ var ok = Regex.test(/^ant$/i, s)  // a pattern: the last token is (
 x /= 2                            // an assignment
 ```
 
-RE2 has no lookahead, lookbehind, or backreferences, so a JavaScript pattern that uses `(?=`,
-`(?!`, `(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct; `\1` through
-`\9` are the backreferences, while `\10` and up are octal escapes, as RE2 reads them. JavaScript's
-`\u0041` is a syntax error whose message names `\x{0041}`. `(?<name>...)` names a group as in
-JavaScript. Inside `\Q...\E`, where RE2 takes every character as itself up to the first `\E`, a
-`\/` is the two characters `\` and `/`, and a `/` still ends the literal, so a `/` to match there is
-written by closing and reopening the span around it: `/\Qa\E\/\Qb\E/` matches `a/b`. A few
-patterns are valid in both and match differently: `\s` is `[\t\n\f\r ]`, without
-`\v` or the Unicode spaces, and `.` excludes only `\n`, where JavaScript also excludes `\r`, U+2028,
-and U+2029. `\d`, `\w`, and `\b` are ASCII in both.
+RE2 has no lookahead, lookbehind, or backreferences, so a JavaScript pattern that uses `(?=`, `(?!`,
+`(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct; `\1` through `\9` are
+the backreferences, while `\10` and up are octal escapes, as RE2 reads them. JavaScript's `\u0041`
+is a syntax error whose message names `\x{0041}`. `(?<name>...)` names a group as in JavaScript.
+Inside `\Q...\E`, where RE2 takes every character as itself up to the first `\E`, a `\/` is the two
+characters `\` and `/`, and a `/` still ends the literal, so a `/` to match there is written by
+closing and reopening the span around it: `/\Qa\E\/\Qb\E/` matches `a/b`. A few patterns are valid
+in both and match differently: `\s` is `[\t\n\f\r ]`, without `\v` or the Unicode spaces, and `.`
+excludes only `\n`, where JavaScript also excludes `\r`, U+2028, and U+2029. `\d`, `\w`, and `\b`
+are ASCII in both.
 
 ### Line endings
 
@@ -189,8 +189,8 @@ A newline or a semicolon ends an expression. A newline does not end one when:
 
 Nothing else is inferred. A line that starts with `(` or `[` begins a new statement, so `a` followed
 by `(b)` on the next line is two statements, not a call. A `return` at the end of a line returns
-`void`, which the checker rejects in a function with another return type. It ends its statement
-even when the next line starts with `.`, `?.`, `|`, or `else`, so that line begins a statement of its
+`void`, which the checker rejects in a function with another return type. It ends its statement even
+when the next line starts with `.`, `?.`, `|`, or `else`, so that line begins a statement of its
 own, which is a syntax error since none of those tokens can start one. A trailing comment changes
 none of this.
 
@@ -433,8 +433,8 @@ the checker as in the interpreter. The name binds a function value that carries 
 `UserId is func` holds and `Array.map(raw, UserId)` tags every element. `is UserId` tests the tag,
 so `UserId | string` and `UserId | AccountId` are distinguishable unions. A type parameter the body
 does not mention is allowed: `type Id[T] = string` gives `Id[User]` and `Id[Account]` as distinct
-static types over one tag, and a union of the two is rejected, since they share it. Only an
-expected type fixes such a parameter, for the constructor used as a value as for a call of it:
+static types over one tag, and a union of the two is rejected, since they share it. Only an expected
+type fixes such a parameter, for the constructor used as a value as for a call of it:
 `var ids: Array[Id[User]] = Array.map(raw, Id)` is fine, and without the annotation `T` is a type
 parameter that nothing fixes (see Inference). `Ok[T]` and `Err[E]` stay records rather than taking
 this form, because a tag over an arbitrary payload needs a field to get the payload out, and a
@@ -469,9 +469,9 @@ entry may become unreachable. Section 11 covers the operations.
 `Set[T]` holds each `==` value at most once, and is otherwise a map without values: members compare
 the way keys do, so a record or an array can be one, it keeps insertion order, and a member is
 hashed when it is added, so mutating it afterwards is the same program error. A set has no literal
-and no indexing. `Set.of` builds one from an array, `Set.has` asks for a member, and `for` visits the
-members in order. Two sets are `==` when they have the same members, in any order, as two maps are
-when they have the same entries.
+and no indexing. `Set.of` builds one from an array, `Set.has` asks for a member, and `for` visits
+the members in order. Two sets are `==` when they have the same members, in any order, as two maps
+are when they have the same entries.
 
 ### Unions
 
@@ -772,8 +772,8 @@ and a later `s = Suspended{ reason: "x" }` is a compile error unless the declara
 A generic call solves its type parameters in a fixed order: from the expected type first, then from
 the non-lambda arguments left to right, then from the lambdas. The expected type goes first because
 type arguments are invariant: `Result.err(NotFound{ id: from })` under an expected
-`Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it.
-A solution from the expected type that breaks the parameter's bound is skipped, and the arguments
+`Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it. A
+solution from the expected type that breaks the parameter's bound is skipped, and the arguments
 solve that parameter instead: under `var r: int | string = bigger(1, 2)`, with `bigger` from
 Generics, the expected type would set `T` to `int | string`, which is not a single member of
 `Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to `int | string`.
@@ -792,11 +792,11 @@ var zs = []                               // compile error: annotate
 Every function parameter is annotated, except lambda parameters. A lambda needs an expected function
 type with zero or one parameter; its result type is synthesized from the body, and when the expected
 result mentions an unsolved type parameter, as `U` in `Array.map` or `Array[U]` in `Array.flatMap`,
-the body solves it. A function's return type is inferred from
-its body unless the function is exported or recursive. Exported functions state it so that a
-module's interface reads without its bodies. Recursion is found on demand: the checker infers a
-callee's type when it meets a call, and meeting a function whose inference is already in progress is
-a compile error asking for an annotation.
+the body solves it. A function's return type is inferred from its body unless the function is
+exported or recursive. Exported functions state it so that a module's interface reads without its
+bodies. Recursion is found on demand: the checker infers a callee's type when it meets a call, and
+meeting a function whose inference is already in progress is a compile error asking for an
+annotation.
 
 The branches of an `if` are each checked against the expected type when there is one. Otherwise the
 expression has the union of the branch types, with `never` dropped, so
@@ -820,18 +820,18 @@ target's sub-expressions, such as the index in `xs[i()] = f()`, before the right
 
 From tightest to loosest binding:
 
-| Level          | Operators                    | Notes                                                                                                                    |
-| -------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| postfix        | `a.b` `a?.b` `a[i]` `f(x)`   |                                                                                                                          |
-| prefix         | `-a` `!a` `try a`            |                                                                                                                          |
+| Level          | Operators                    | Notes                                                                                                                                                                                             |
+| -------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| postfix        | `a.b` `a?.b` `a[i]` `f(x)`   |                                                                                                                                                                                                   |
+| prefix         | `-a` `!a` `try a`            |                                                                                                                                                                                                   |
 | multiplicative | `*` `/` `%`                  | integer `/` truncates toward zero; `%` is the truncated remainder with the dividend's sign, for floats too; a `/` that does not follow an operand begins a regular expression literal (section 2) |
-| additive       | `+` `-`                      | `+` also concatenates strings                                                                                            |
-| comparison     | `<` `<=` `>` `>=` `is`       | numbers and strings; `is` tests a union member                                                                           |
-| equality       | `==` `!=`                    | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4) |
-| logical        | `&&` then `\|\|`             | short-circuit, `bool` only                                                                                               |
-| null           | `??`                         | cannot mix with `&&` or `\|\|` without parentheses                                                                       |
-| pipe           | `\|`                         | left associative; in a type, `\|` is a union (section 4)                                                                 |
-| assignment     | `=` `+=` `-=` `*=` `/=` `%=` | type `void`                                                                                                              |
+| additive       | `+` `-`                      | `+` also concatenates strings                                                                                                                                                                     |
+| comparison     | `<` `<=` `>` `>=` `is`       | numbers and strings; `is` tests a union member                                                                                                                                                    |
+| equality       | `==` `!=`                    | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4)                                                                          |
+| logical        | `&&` then `\|\|`             | short-circuit, `bool` only                                                                                                                                                                        |
+| null           | `??`                         | cannot mix with `&&` or `\|\|` without parentheses                                                                                                                                                |
+| pipe           | `\|`                         | left associative; in a type, `\|` is a union (section 4)                                                                                                                                          |
+| assignment     | `=` `+=` `-=` `*=` `/=` `%=` | type `void`                                                                                                                                                                                       |
 
 There is no `===`, no `+` between different types, and no truthiness: a condition must be a `bool`.
 An arithmetic or comparison operator needs both operands of the same type, and that type must be a
@@ -869,8 +869,8 @@ the last expression. A block that ends in a declaration or assignment has type `
 Braces mean one of three things, decided by the token before them:
 
 - After a type name, including `Map`, they build a value of that type.
-- After `func(...)`, `else`, `go`, or `defer`, at the end of an `if`, `while`, or `for` header,
-  and at the end of a `select` clause's head, they are a block.
+- After `func(...)`, `else`, `go`, or `defer`, at the end of an `if`, `while`, or `for` header, and
+  at the end of a `select` clause's head, they are a block.
 - Anywhere else they are a lambda (section 6).
 
 So `{}` after one of those keywords is an empty block of type `void`, and elsewhere it is a lambda
@@ -883,7 +883,8 @@ operator or an opening bracket starts a lambda. A record or map literal in a hea
 after an identifier path, so it must be parenthesized, as in Go:
 `if u == (User{ name: "ada" }) { ... }`. The `{` must sit on the same line as the header, because a
 newline would end the header expression (section 2). That holds inside parentheses too, where
-newlines are otherwise ignored: `(if c` followed by `{ 1 } else { 2 })` on the next line is an error.
+newlines are otherwise ignored: `(if c` followed by `{ 1 } else { 2 })` on the next line is an
+error.
 
 ### `if`
 
@@ -928,11 +929,11 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 `for` iterates over an array, a map, a set, a string, `Bytes`, or a sequence function; over a map it
 yields each `Entry`, over a set each member, over a string each code point as a one-character
-string, and over `Bytes` each byte as a `byte`.
-Each iteration binds a fresh variable, so a closure created in the body keeps that iteration's
-value. `while` repeats while a condition holds. Both have type `void`, except that a `while` whose
-condition is the literal `true` and whose body contains no `break` has type `never`, since only
-`return` or a panic can leave it. `break` and `continue` work as in JavaScript, without labels.
+string, and over `Bytes` each byte as a `byte`. Each iteration binds a fresh variable, so a closure
+created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have
+type `void`, except that a `while` whose condition is the literal `true` and whose body contains no
+`break` has type `never`, since only `return` or a panic can leave it. `break` and `continue` work
+as in JavaScript, without labels.
 
 ```ant
 for user in users {
@@ -952,14 +953,13 @@ while !done { done = step() }
 A sequence is a function that pushes elements to a callback, as in Go: `Seq[T]` is the prelude alias
 `func(func(T): bool): void`. `for x in seq` calls `seq` with a `yield` function. Each call of
 `yield` runs the body once and returns `true`, or `false` after a `break`, after which the sequence
-must return. `return` and panics in the body propagate through the sequence as through any call,
-and a panic in the body ends the loop: a sequence that catches it may not call `yield` again, nor
-return as though the loop had finished (section 12). The body runs on the loop's goroutine, since
-only there can a `return` or a `try` in it leave the function the loop is in, so a sequence calls
-`yield` on that goroutine alone; one whose elements come from goroutines of its own has them send
-the elements on a channel and yields what `Channel.values` receives.
-Writing a sequence is an ordinary loop that calls `yield`, so user types and lazy ranges need no
-other protocol.
+must return. `return` and panics in the body propagate through the sequence as through any call, and
+a panic in the body ends the loop: a sequence that catches it may not call `yield` again, nor return
+as though the loop had finished (section 12). The body runs on the loop's goroutine, since only
+there can a `return` or a `try` in it leave the function the loop is in, so a sequence calls `yield`
+on that goroutine alone; one whose elements come from goroutines of its own has them send the
+elements on a channel and yields what `Channel.values` receives. Writing a sequence is an ordinary
+loop that calls `yield`, so user types and lazy ranges need no other protocol.
 
 ```ant
 func evens(limit: int): Seq[int] {
@@ -990,30 +990,30 @@ select {
 }
 ```
 
-A clause is a head and a block, one clause per line; a `;` between clauses is a syntax error. A
-head is one of five blocking calls of section 11 and `stdlib.md`, written as the call would be and
-not performed: `Channel.receive(c)`, `Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or `Time.sleep(d)`. `var x =`
-before a head binds the call's result in the block: a receive binds `T | null`, `null` when the
-channel is closed, a send binds `bool`, and a binding on a head that returns `void` is a compile
-error. A head takes no context, since the context is its own clause, and a head given one is a
-compile error. An `else` block, written last, runs when no head can proceed at once, so a `select`
-with `else` never waits. The block begins at the head's `{`, which the header rule above finds: a
-`{` after a `)` ends a header.
+A clause is a head and a block, one clause per line; a `;` between clauses is a syntax error. A head
+is one of five blocking calls of section 11 and `stdlib.md`, written as the call would be and not
+performed: `Channel.receive(c)`, `Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or
+`Time.sleep(d)`. `var x =` before a head binds the call's result in the block: a receive binds
+`T | null`, `null` when the channel is closed, a send binds `bool`, and a binding on a head that
+returns `void` is a compile error. A head takes no context, since the context is its own clause, and
+a head given one is a compile error. An `else` block, written last, runs when no head can proceed at
+once, so a `select` with `else` never waits. The block begins at the head's `{`, which the header
+rule above finds: a `{` after a `)` ends a header.
 
 The heads' operands evaluate first, in order, once. Then the `select` waits until one head can
 proceed, performs it, binds its result, and runs its block, whose value is the value of the
-`select`. A head can proceed when its channel holds a value or is closed, when its channel can
-take the value, when its context is done, when its group's counter is zero, or when its time has
-passed. When several can proceed at once, one is chosen at random, so no source starves. A
-`select` without `else` whose heads can never proceed waits until the run is cancelled, as any
-wait does. A closed channel's receive is always ready, so a loop that keeps one in its `select`
-spins until the block leaves the loop on `null`. A send chosen on a closed channel panics, as
-`Channel.send` does (section 12).
+`select`. A head can proceed when its channel holds a value or is closed, when its channel can take
+the value, when its context is done, when its group's counter is zero, or when its time has passed.
+When several can proceed at once, one is chosen at random, so no source starves. A `select` without
+`else` whose heads can never proceed waits until the run is cancelled, as any wait does. A closed
+channel's receive is always ready, so a loop that keeps one in its `select` spins until the block
+leaves the loop on `null`. A send chosen on a closed channel panics, as `Channel.send` does (section
+12).
 
-A `select` is an expression: its blocks are checked against the expected type, or it has the
-union of their types with `never` dropped, as an `if`. A block's `return`, `break`, and
-`continue` act on the function or loop around the `select`, since the block belongs to that body;
-a bound variable is a local of its block and narrows there.
+A `select` is an expression: its blocks are checked against the expected type, or it has the union
+of their types with `never` dropped, as an `if`. A block's `return`, `break`, and `continue` act on
+the function or loop around the `select`, since the block belongs to that body; a bound variable is
+a local of its block and narrows there.
 
 ```ant
 var event: Event = select {
@@ -1022,9 +1022,9 @@ var event: Event = select {
 }
 ```
 
-A `select` needs at least one head. A body with no clause or with `else` alone, two `else`
-clauses, an `else` that is not last, a binding on `else`, a head that is not a call of one of the
-five, and a `{` on a line after its head are each a syntax error.
+A `select` needs at least one head. A body with no clause or with `else` alone, two `else` clauses,
+an `else` that is not last, a binding on `else`, a head that is not a call of one of the five, and a
+`{` on a line after its head are each a syntax error.
 
 ### Destructuring
 
@@ -1154,10 +1154,10 @@ next()    // 2
 ### Functions on types
 
 `func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`. The call
-is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared
-at the top level of the same module and may be a record, a named primitive type, or an alias,
-including an alias of a union. A type's namespace is therefore closed, and the prelude's types
-cannot be extended.
+is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared at
+the top level of the same module and may be a record, a named primitive type, or an alias, including
+an alias of a union. A type's namespace is therefore closed, and the prelude's types cannot be
+extended.
 
 The function is an ordinary function. It need not take the type as a parameter, which is how
 `Point.origin()` and `UserId.parse(s)` are written; it is a value like any other; and named
@@ -1257,13 +1257,13 @@ reassign it. Bind it to a local first, or use `?.` or `??`. A top-level `var` of
 including an imported one, never narrows either, because any call may reassign it; read it into a
 local first in the same way.
 
-A script's top-level `var`s are different: a script cannot be imported, so only its own code
-assigns them, and they are locals of the script body (section 10). They narrow in its top-level
-code like any local, and the script's `func` declarations are nested bodies under the rule below.
-A `func` declaration does not get that rule's exception for a local never assigned after its
-declaration: it is hoisted and has no position, so it may run before the test that narrowed the
-variable. A lambda, a `go` block, or a `defer` block written in the script's top-level code is
-created where it stands and gets the exception as anywhere else.
+A script's top-level `var`s are different: a script cannot be imported, so only its own code assigns
+them, and they are locals of the script body (section 10). They narrow in its top-level code like
+any local, and the script's `func` declarations are nested bodies under the rule below. A `func`
+declaration does not get that rule's exception for a local never assigned after its declaration: it
+is hoisted and has no position, so it may run before the test that narrowed the variable. A lambda,
+a `go` block, or a `defer` block written in the script's top-level code is created where it stands
+and gets the exception as anywhere else.
 
 Narrowing is limited to locals because a local can go stale in only one way, by reassignment: a
 record's tag never changes and a reference never becomes `null` on its own. Another goroutine can
@@ -1346,14 +1346,14 @@ enclosing function, typed by that function's return type. The enclosing function
 return a `Result` whose error type accepts `E`, or such a `Result` or `null`, since `Err[E]` is
 assignable to `Result[U, E] | null` too; an inferred return type must come out one of the two. A
 `go` or `defer` block has no result, so `try` directly inside one is a compile error. Outside every
-boundary (section 5), in a library's top-level initializer outside a lambda, there is no function
-to return from, so `try` there is a syntax error, as `return` is; in a script's top-level code it
-returns from the script body (section 10); a parameter default evaluates in the called
-function, which a `try` in it returns from. `try` reads only the outer tag, so on an `Ok[Ok[int]]`
-it yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null`
-(section 7), and a `Result[T, E] | null` operand needs that first. An operand of type parameter
-type is a compile error, since it is not a `Result`; under erasure a second meaning chosen by
-static type would be unsound.
+boundary (section 5), in a library's top-level initializer outside a lambda, there is no function to
+return from, so `try` there is a syntax error, as `return` is; in a script's top-level code it
+returns from the script body (section 10); a parameter default evaluates in the called function,
+which a `try` in it returns from. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it yields
+the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section 7), and
+a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a compile
+error, since it is not a `Result`; under erasure a second meaning chosen by static type would be
+unsound.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
@@ -1368,8 +1368,8 @@ first stage and pipes the value onward. To propagate the error of a whole pipeli
 `try (xs | Array.map(parse) | Result.all())`.
 
 Besides the two constructors, `Result` provides `Result.map`, `Result.mapErr`, `Result.wrapErr`,
-`Result.unwrap` (panics on an error), `Result.unwrapOr`, `Result.isOk`, and `Result.all`
-(section 11).
+`Result.unwrap` (panics on an error), `Result.unwrapOr`, `Result.isOk`, and `Result.all` (section
+11).
 
 ### Wrapping errors
 
@@ -1393,8 +1393,8 @@ println(config)
 On a truncated `app.json` the script ends with the message
 `load config: parse app.json: unexpected end of JSON input` (section 10, Scripts). A wrapped error
 keeps only text: it is a fresh record, so `Record.same` with the original is false, and there is no
-chain of causes to walk. An error that code branches on is a type of its own (see `Result`), where
-a cause is an ordinary field, and `Result.mapErr` turns it into an `Error` when a person is to read
+chain of causes to walk. An error that code branches on is a type of its own (see `Result`), where a
+cause is an ordinary field, and `Result.mapErr` turns it into an `Error` when a person is to read
 it.
 
 Messages follow one convention, so that the joined text reads as one line:
@@ -1438,8 +1438,8 @@ func copy(src: string, dst: string): Result[void, Error] {
 ### Catching a panic
 
 `Panic.catch(f)` calls `f` with no argument and returns `Ok` of its value. When a panic leaves `f`,
-it returns an `Err` holding the panic instead, once the deferred blocks inside `f` have run. A
-panic is a record of two prelude types:
+it returns an `Err` holding the panic instead, once the deferred blocks inside `f` have run. A panic
+is a record of two prelude types:
 
 ```
 type Panic = { message: string, trace: Array[Panic.Frame] }
@@ -1492,10 +1492,10 @@ The main goroutine is the one that loads the program and runs its script (sectio
 exits when the script body ends, regardless of other goroutines.
 
 The host can end a run before that: the `ant` command on an interrupt the program did not ask for
-(`stdlib.md`, `Os.interrupt`), a Go program by cancelling the context it gave `Run`. Every
-goroutine then ends at its next call or loop iteration, a blocking call returns with the reason
-`cancelled`, and the process exits after a short grace. That is an end, not an event a program
-handles; the interrupt a program asks for is the event.
+(`stdlib.md`, `Os.interrupt`), a Go program by cancelling the context it gave `Run`. Every goroutine
+then ends at its next call or loop iteration, a blocking call returns with the reason `cancelled`,
+and the process exits after a short grace. That is an end, not an event a program handles; the
+interrupt a program asks for is the event.
 
 ### Synchronization
 
@@ -1529,8 +1529,8 @@ func fetchAll(urls: Array[string]): Array[Result[Http.Response, Error]] {
 
 ### Waiting
 
-A context becomes done once: when a call cancels it, when its deadline passes, or when its parent
-is done. Every context descends from the run's, so a cancelled run ends every wait. Every blocking
+A context becomes done once: when a call cancels it, when its deadline passes, or when its parent is
+done. Every context descends from the run's, so a cancelled run ends every wait. Every blocking
 library call takes a context as its last parameter, `ctx: Context | null = null`, and gives up when
 the context is done. What giving up means follows the call's return type: a `Result` is `Err` with
 the context's reason as its message, a value-or-null is `null`, and a `void` call returns early, so
@@ -1542,8 +1542,8 @@ var ctx = Context.new(Time.duration(seconds: 2))
 var reply = Channel.receive(replies, ctx) ?? return Result.err(Error{ message: "no reply" })
 ```
 
-A goroutine that waits on several channels writes a `select` (section 5) in a loop, one clause
-per source, and a transition is the block's own `return` or `break`:
+A goroutine that waits on several channels writes a `select` (section 5) in a loop, one clause per
+source, and a transition is the block's own `return` or `break`:
 
 ```ant
 func generating(s: Session, ctx: Context): void {
@@ -1569,8 +1569,8 @@ func generating(s: Session, ctx: Context): void {
 When the producers are the program's own, one channel can carry them all: a mailbox whose element
 type is a union of the events, and a loop over it with an `is` chain. Every event then reaches
 whatever state is current, in arrival order across all sources, and a state defers what it cannot
-handle. The first of several things is the mailbox's shape too: a goroutine per source, one
-receive, and a context that stops the rest.
+handle. The first of several things is the mailbox's shape too: a goroutine per source, one receive,
+and a context that stops the rest.
 
 ```ant
 type Line = { text: string }
@@ -1595,9 +1595,9 @@ func lineOrTimeout(input: File.Handle, wait: Time.Duration): Line | Timeout {
 
 A worker pool is a channel of jobs that each worker drains with `Channel.values`, a channel of
 results, and a `WaitGroup` that says when to close it. A future is a channel of capacity one. A
-ticker is `Time.ticker` (`stdlib.md`), a channel that a `select` reads beside the others. A goroutine that should stop checks
-`Context.isDone` between steps and passes the context into its waits; one that ignores its context
-runs until the run ends.
+ticker is `Time.ticker` (`stdlib.md`), a channel that a `select` reads beside the others. A
+goroutine that should stop checks `Context.isDone` between steps and passes the context into its
+waits; one that ignores its context runs until the run ends.
 
 ### Data races
 
@@ -1618,7 +1618,7 @@ particular result:
 An implementation may also detect a race and end the program with a report and exit status 1, since
 the state of a racy program is not worth continuing.
 
-*Implementation note.* The guarantee costs one word per value, so that a variable, field, or element
+_Implementation note._ The guarantee costs one word per value, so that a variable, field, or element
 store is a single machine word and cannot tear, plus an atomic header load per array operation with
 `push` and `pop` under a lock, and one lock per map or set operation, shared between reads, since a
 read during a resize is not safe with mutations alone locked. An implementation in a language whose
@@ -1641,8 +1641,8 @@ sense of Go's memory model:
   returns.
 - All operations on all `Atomic` objects form one total order, and a `store` happens before every
   `load` that observes it.
-- A send on a channel happens before the receive that takes its value, and a close happens before
-  a receive that returns `null` because of it; a clause of `select` is a send or a receive.
+- A send on a channel happens before the receive that takes its value, and a close happens before a
+  receive that returns `null` because of it; a clause of `select` is a send or a receive.
 - `Context.cancel`, and the passing of a deadline, happen before the return of every wait the
   context ends.
 
@@ -1763,8 +1763,8 @@ it that way, and both commands enforce them:
   first top-level statement.
 - `export` in a script is a syntax error.
 
-So importing a module never runs program logic, though a library's `var` initializers may still
-call anything.
+So importing a module never runs program logic, though a library's `var` initializers may still call
+anything.
 
 ```ant
 //! Counts the lines of the files given as arguments.
@@ -1792,12 +1792,12 @@ errors. Command-line arguments come from `Os.args()`.
 The exit status is `0` when the script body ends with its last item or returns anything but an
 `Err`; `1` when it returns an `Err`, after its deferred blocks have run and the `Err`'s `error`
 field and a newline have been written to standard error, an `Error` as its `message` alone and any
-other error through `String.from`, or when the main goroutine
-panics; and `2` when the program could not be loaded because of a syntax error, an import cycle, a
-missing module, or an import of a script. `try` and `Result.unwrap` both end a script on an `Err`:
-`try` as an expected failure, reported as the error alone, and `unwrap` as a bug, reported as a
-panic with its stack trace. `Os.exit` ends the process with any status and skips deferred blocks. A
-library given to `ant run` is initialized, and the program exits with `0`.
+other error through `String.from`, or when the main goroutine panics; and `2` when the program could
+not be loaded because of a syntax error, an import cycle, a missing module, or an import of a
+script. `try` and `Result.unwrap` both end a script on an `Err`: `try` as an expected failure,
+reported as the error alone, and `unwrap` as a bug, reported as a panic with its stack trace.
+`Os.exit` ends the process with any status and skips deferred blocks. A library given to `ant run`
+is initialized, and the program exits with `0`.
 
 ## 11. Standard library
 
@@ -1920,8 +1920,8 @@ Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 `Array.sum` returns `null` on an empty array rather than zero because the interpreter never knows
 `T` and so cannot produce the zero of the right kind (section 4, Checking and running). Write
 `Array.sum(xs) ?? 0.0`. `Array.min` and `Array.max` return `null` on an empty array for the same
-reason. `minBy` and `maxBy` scan from the left and replace the element they hold only when a key
-is strictly less, or greater, than its key by `<`, so of equal keys the first wins and a `NaN` key
+reason. `minBy` and `maxBy` scan from the left and replace the element they hold only when a key is
+strictly less, or greater, than its key by `<`, so of equal keys the first wins and a `NaN` key
 never replaces one. `Array.chunk([1, 2, 3, 4, 5], 2)` is `[[1, 2], [3, 4], [5]]`, and
 `Array.chunk([], 2)` is `[]`.
 
@@ -1952,11 +1952,11 @@ Map.same[K, V](m: Map[K, V], n: Map[K, V]): bool               // identity
 
 ### Set
 
-`Set[T]` is a hash set keyed by `==` that keeps insertion order (section 4). Adding a member that
-is already there changes nothing, so it keeps its position; a member removed and added again goes
-to the end. A function that builds a set from others keeps the order of its first argument. There
-is no literal and no `Set.new`: the empty set is `Set.of([])`, whose element type comes from the
-expected type, as for `[]`.
+`Set[T]` is a hash set keyed by `==` that keeps insertion order (section 4). Adding a member that is
+already there changes nothing, so it keeps its position; a member removed and added again goes to
+the end. A function that builds a set from others keeps the order of its first argument. There is no
+literal and no `Set.new`: the empty set is `Set.of([])`, whose element type comes from the expected
+type, as for `[]`.
 
 ```
 Set.of[T](xs: Array[T]): Set[T]                                // the first of each == value, in order
@@ -1973,8 +1973,8 @@ Set.isSubset[T](a: Set[T], b: Set[T]): bool                    // every member o
 Set.same[T](a: Set[T], b: Set[T]): bool                        // identity
 ```
 
-`Set.add` and `Set.remove` say whether they changed the set, so a loop that keeps the first of
-each value needs no separate test:
+`Set.add` and `Set.remove` say whether they changed the set, so a loop that keeps the first of each
+value needs no separate test:
 
 ```ant
 var seen: Set[string] = Set.of([])
@@ -1989,22 +1989,22 @@ A `string` is immutable and stored as UTF-8. There is no `s[i]`: indexing by cod
 so a loop over indices would be quadratic, and indexing by byte would be a trap. Lengths, indices,
 and slices count code points, `for` iterates them (section 5), `String.chars` gives them as an array
 to index, `String.toCodePoints` gives them as integers, and `String.toBytes` gives the bytes. There
-is no character type: a character is a string of one code point. What a reader sees as one
-character can be several code points, such as an `e` followed by a combining accent, or a family
-emoji joined from three people; `String.graphemes` splits text into those units, and
-`String.normalize` brings the two spellings of `é` to one.
+is no character type: a character is a string of one code point. What a reader sees as one character
+can be several code points, such as an `e` followed by a combining accent, or a family emoji joined
+from three people; `String.graphemes` splits text into those units, and `String.normalize` brings
+the two spellings of `é` to one.
 
 Every string holds only scalar values. Text that reaches a program as a `string` from outside it, a
 file, standard input, a network peer, an argument, the environment, or a child process, is decoded
 as UTF-8 with each maximal subpart of an ill-formed sequence replaced by U+FFFD, as Unicode
 recommends and the WHATWG Encoding standard does: the bytes `FF FE` become two U+FFFD, and `E2 82`,
-a euro sign cut short, one. A program that must keep the bytes as they were reads them as
-`Bytes`, which a file, a handle, an HTTP body, and a child's output also give, and
-`String.fromBytes` tells it whether they are text.
-What the host gives only as text has no such form: `Os.args`, `Os.env`, `Os.environ`, and the names
-`File.list` and `File.walk` return. A file name that is not UTF-8, which some file systems allow,
-comes back with U+FFFD in it, and a path built from that name does not reach the file. Two names
-that differ only in such bytes become one, so `Os.environ` then holds one of the two variables.
+a euro sign cut short, one. A program that must keep the bytes as they were reads them as `Bytes`,
+which a file, a handle, an HTTP body, and a child's output also give, and `String.fromBytes` tells
+it whether they are text. What the host gives only as text has no such form: `Os.args`, `Os.env`,
+`Os.environ`, and the names `File.list` and `File.walk` return. A file name that is not UTF-8, which
+some file systems allow, comes back with U+FFFD in it, and a path built from that name does not
+reach the file. Two names that differ only in such bytes become one, so `Os.environ` then holds one
+of the two variables.
 
 ```
 type Cut = { before: string, after: string }                   // the two sides of String.cut
@@ -2074,22 +2074,22 @@ The padding of `padStart` and `padEnd` is `pad` repeated and cut to the code poi
 `String.padStart("7", 4, "ab")` is `"aba7"`, and a string already at or beyond `width` comes back
 unchanged. `String.lines` splits the text `File.read` gives at every `\n`, drops a `\r` just before
 one, and omits the piece after the last `\n` when it is empty: `"a\r\nb\n"` gives `["a", "b"]`,
-`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is `String.Cut{ before: "k",
-after: "v=w" }`. The class tests take a string because Ant has no character type: `for c in s`
-yields one-code-point strings, so `String.isDigit(c)` tests a character, and `String.isDigit(s)`
-tests that a whole field is digits. Each names the Unicode general categories or property it
-follows. A decimal digit is one in any script, `٣` among them, while `toInt` reads only `0` to `9`
-and the letters of a base above ten, `a` to `z`, which it accepts in either case; so
-`String.isDigit("٣")` is `true` and `String.toInt("٣")` is `null`. A number that does not fit an
-`int` is `null` too. `toFloat` reads ASCII decimal digits with an optional sign, an optional
-fraction after `.`, and an optional exponent after `e` or `E` with its own optional sign, so `-1.5`,
-`.5`, `5.`, and `1e+3` are numbers; it rounds to the nearest `float64`, so a tiny value is `0.0`,
-and returns `null` on a value beyond the range of `float64` and on anything else: white space,
-`_`, a prefix such as `0x`, and `Infinity` and `NaN`, which `String.from` writes but which are not
-numbers to parse. `fromInt` writes an unsigned
-value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` rounds
-the binary value of `x`, not the decimal it was written as: the `float64` nearest `1.005` is a
-little below it, so `String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign, so
+`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is
+`String.Cut{ before: "k", after: "v=w" }`. The class tests take a string because Ant has no
+character type: `for c in s` yields one-code-point strings, so `String.isDigit(c)` tests a
+character, and `String.isDigit(s)` tests that a whole field is digits. Each names the Unicode
+general categories or property it follows. A decimal digit is one in any script, `٣` among them,
+while `toInt` reads only `0` to `9` and the letters of a base above ten, `a` to `z`, which it
+accepts in either case; so `String.isDigit("٣")` is `true` and `String.toInt("٣")` is `null`. A
+number that does not fit an `int` is `null` too. `toFloat` reads ASCII decimal digits with an
+optional sign, an optional fraction after `.`, and an optional exponent after `e` or `E` with its
+own optional sign, so `-1.5`, `.5`, `5.`, and `1e+3` are numbers; it rounds to the nearest
+`float64`, so a tiny value is `0.0`, and returns `null` on a value beyond the range of `float64` and
+on anything else: white space, `_`, a prefix such as `0x`, and `Infinity` and `NaN`, which
+`String.from` writes but which are not numbers to parse. `fromInt` writes an unsigned value as the
+number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` rounds the binary value
+of `x`, not the decimal it was written as: the `float64` nearest `1.005` is a little below it, so
+`String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign, so
 `String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinity renders as
 `String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
@@ -2125,36 +2125,35 @@ Turkish and Lithuanian, which depend on the language, are not applied, so `Strin
 `"i\u{307}"`, an `i` and a combining dot. `foldCase` maps every case variant of a string to one
 form, so it is the key for grouping or deduplicating text without regard to case:
 `String.foldCase("Straße")` and `String.foldCase("STRASSE")` are both `"strasse"`. Neither it nor
-`==` normalizes: `"\u{E9}" == "e\u{301}"` is `false`, and text that can arrive in either spelling
-is compared or keyed after `String.normalize(s, "NFC")`. `normalize` takes the four forms of
-Unicode's UAX #15. `NFD` splits an accent from its letter, so dropping the code points that
-`isMark` accepts strips accents; `NFKD` also replaces compatibility characters, such as `ﬁ` with
-`fi`.
+`==` normalizes: `"\u{E9}" == "e\u{301}"` is `false`, and text that can arrive in either spelling is
+compared or keyed after `String.normalize(s, "NFC")`. `normalize` takes the four forms of Unicode's
+UAX #15. `NFD` splits an accent from its letter, so dropping the code points that `isMark` accepts
+strips accents; `NFKD` also replaces compatibility characters, such as `ﬁ` with `fi`.
 
 Code point indices can cut through what a reader sees as one character. `String.slice` can end
 inside an emoji, and reversing `String.chars` moves an accent onto another letter and turns the flag
-🇨🇭 into two loose letter symbols. `String.graphemes("👨‍👩‍👧e\u{301}")` is the two strings `"👨‍👩‍👧"`
-and `"e\u{301}"`, so text cut, reversed, or counted for display goes through `graphemes`. Grapheme
+🇨🇭 into two loose letter symbols. `String.graphemes("👨‍👩‍👧e\u{301}")` is the two strings `"👨‍👩‍👧"` and
+`"e\u{301}"`, so text cut, reversed, or counted for display goes through `graphemes`. Grapheme
 splitting, normalization, case mapping, the class tests, and the rendering of `String.from` follow
 the Unicode version `String.unicodeVersion` names. A code point that a later version assigns is
 unassigned, `"Cn"`, until the implementation moves to that version, and `String.from` writes it as
 an escape inside quotes until then.
 
-`String.from` renders any value. `print`, `println` and template strings use it, so this is the format a
-program's output has. It is the only function the language calls implicitly, and only inside
-template strings.
+`String.from` renders any value. `print`, `println` and template strings use it, so this is the
+format a program's output has. It is the only function the language calls implicitly, and only
+inside template strings.
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
   value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
   below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. `-0.0`
-  keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values render
-  as `NaN`, `Infinity`, and `-Infinity`.
-- A string renders as itself at the top level and quoted with escapes inside a container. Inside
-  the quotes, `"` and `\` are escaped, `\n`, `\t`, and `\r` are written so, and every other code
-  point that `String.isPrint` rejects, such as a control character, a non-breaking space, a
-  zero-width joiner, or a bidirectional override, is written `\u{...}` in lower-case hexadecimal
-  without leading zeros, as `\u{7f}`. The rendering shows every code point that is there and reads
-  back as a literal, which an emoji joined from several shows too: `String.from(["👨‍👩‍👧"])` is
+  keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values render as
+  `NaN`, `Infinity`, and `-Infinity`.
+- A string renders as itself at the top level and quoted with escapes inside a container. Inside the
+  quotes, `"` and `\` are escaped, `\n`, `\t`, and `\r` are written so, and every other code point
+  that `String.isPrint` rejects, such as a control character, a non-breaking space, a zero-width
+  joiner, or a bidirectional override, is written `\u{...}` in lower-case hexadecimal without
+  leading zeros, as `\u{7f}`. The rendering shows every code point that is there and reads back as a
+  literal, which an emoji joined from several shows too: `String.from(["👨‍👩‍👧"])` is
   `["👨\u{200d}👩\u{200d}👧"]`. `bool`, `null`, and `void` render as their literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
   call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
@@ -2233,28 +2232,28 @@ Regex.flags(p: Regex.Pattern): string                          // "", or some of
 A pattern is its source and its flags. `Regex.compile` takes the flags as a string of the same
 letters a literal takes, in any order, and is `Err` on any other letter or a repeated one. The
 source is normalized: a `\/` loses its backslash, since RE2 reads `\/` and `/` alike, a line break
-becomes `\n` or `\r` and an empty source becomes `(?:)`, which RE2 reads the same, and the flags
-are sorted. The text of a `\Q...\E` span, which RE2 takes as itself, is kept as written, line breaks
-and `\/` included; a span left open at the end gets its `\E`, and a span closed and reopened around
-a single `/` or line break, written as itself or escaped, as in `\Qa\E\/\Qb\E`, becomes one span
-holding that character, `\Qa/b\E`. Two patterns are `==` when their normalized sources and flags are, so `/a/i == /a/i`,
-`/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`, `Regex.compile("a/b") == /a\/b/`,
-`Regex.compile("a\nb") == /a\nb/` and `Regex.compile("") == /(?:)/` all hold, and
-`Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as a literal that reads back to it: every `/`
-of the normalized source written `\/` and every line break `\n` or `\r`, so `/(?:)/` for the empty
-pattern, as JavaScript renders it; inside a `\Q...\E` span the span is closed and reopened around
-each, as `\E\/\Q`, `\E\n\Q`, or `\E\r\Q`. `Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a
-string.
+becomes `\n` or `\r` and an empty source becomes `(?:)`, which RE2 reads the same, and the flags are
+sorted. The text of a `\Q...\E` span, which RE2 takes as itself, is kept as written, line breaks and
+`\/` included; a span left open at the end gets its `\E`, and a span closed and reopened around a
+single `/` or line break, written as itself or escaped, as in `\Qa\E\/\Qb\E`, becomes one span
+holding that character, `\Qa/b\E`. Two patterns are `==` when their normalized sources and flags
+are, so `/a/i == /a/i`, `/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`,
+`Regex.compile("a/b") == /a\/b/`, `Regex.compile("a\nb") == /a\nb/` and
+`Regex.compile("") == /(?:)/` all hold, and `Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as
+a literal that reads back to it: every `/` of the normalized source written `\/` and every line
+break `\n` or `\r`, so `/(?:)/` for the empty pattern, as JavaScript renders it; inside a `\Q...\E`
+span the span is closed and reopened around each, as `\E\/\Q`, `\E\n\Q`, or `\E\r\Q`.
+`Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a string.
 
 A `Match` is one match of the whole pattern: `text` is the matched text, `start` and `end` are its
 code point indices into `s`, so `String.slice(s, m.start, m.end)` is `m.text`, `groups[0]` is the
-whole match and `groups[n]` the `n`th group, `null` when the group took no part, and `named` has
-an entry for each named group, in the pattern's order, `null` likewise. `findAll` takes successive
+whole match and `groups[n]` the `n`th group, `null` when the group took no part, and `named` has an
+entry for each named group, in the pattern's order, `null` likewise. `findAll` takes successive
 matches from the left without overlap, and skips an empty match that abuts the match before it.
-`split` returns the pieces of `s` between the matches, so a pattern that never matches gives
-`[s]`; with an empty `s` it gives `[""]`, whatever the pattern. An empty match at the start or at
-the end of `s` adds no empty piece, as JavaScript's `split` has it, so `Regex.split(/a*/, "baaab")`
-is `["b", "b"]`.
+`split` returns the pieces of `s` between the matches, so a pattern that never matches gives `[s]`;
+with an empty `s` it gives `[""]`, whatever the pattern. An empty match at the start or at the end
+of `s` adds no empty piece, as JavaScript's `split` has it, so `Regex.split(/a*/, "baaab")` is
+`["b", "b"]`.
 
 The `i` flag folds case one code point at a time, as RE2 does, so `/k/i` matches the Kelvin sign
 `K`, but `/straße/i` does not match `"STRASSE"`, which `String.equalFold` accepts. Text compared
@@ -2274,10 +2273,10 @@ puts its result in the match's place, as written, with no expansion.
 
 Lazy sequences (section 5, Loops). Every function here returns a new `Seq` without running the
 source; `Iter.toArray` and `for` run it. A sequence may be run more than once if its source allows.
-The `yield` an `Iter` function passes to its source behaves as the one `for` passes (section 12):
-it panics when called on a goroutine other than the one running the source, after it returned
-`false`, or after the source returned, and after a call on another goroutine the `Iter` function
-panics at the next call or once the source returns.
+The `yield` an `Iter` function passes to its source behaves as the one `for` passes (section 12): it
+panics when called on a goroutine other than the one running the source, after it returned `false`,
+or after the source returned, and after a call on another goroutine the `Iter` function panics at
+the next call or once the source returns.
 
 ```
 Iter.range(from: int, to: int): Seq[int]                       // from inclusive, to exclusive; empty when to <= from
@@ -2346,9 +2345,10 @@ Bits.wrapMul[T: Integer](a: T, b: T): T
 The functions over `float64` follow IEEE 754 and never panic: `Math.log(0.0)` is `-Infinity`,
 `Math.log(-1.0)` and `Math.sqrt(-1.0)` are `NaN`, and `Math.clamp(x, lo, hi)` with a `NaN` `x` is
 `NaN`. `Math.min` and `Math.max` hold `-0.0` less than `0.0`, as `Array.min` and `Array.max` do,
-though `-0.0 < 0.0` is `false`: `Math.min(0.0, -0.0)` and `Math.min(-0.0, 0.0)` are both `-0.0`,
-and the two `max` calls are both `0.0`. The rotations pair with the shifts and panic on a negative count as they do, but a count at
-or beyond the width is taken modulo the width, since a rotation by the width is the identity.
+though `-0.0 < 0.0` is `false`: `Math.min(0.0, -0.0)` and `Math.min(-0.0, 0.0)` are both `-0.0`, and
+the two `max` calls are both `0.0`. The rotations pair with the shifts and panic on a negative count
+as they do, but a count at or beyond the width is taken modulo the width, since a rotation by the
+width is the identity.
 
 ### Random
 
@@ -2376,17 +2376,17 @@ change what these return. Arithmetic is on `uint64` and wraps modulo 2^64; `rotl
 by `k` bits.
 
 - **State and draw.** A generator holds four words `s0`, `s1`, `s2`, `s3`, and a draw is one step of
-  `xoshiro256**` (Blackman and Vigna, 2018). Its value is `rotl(s1 * 5, 7) * 9`, and then, with `t =
-  s1 << 17`, the words become `s2 ^= s0`, `s3 ^= s1`, `s1 ^= s2`, `s0 ^= s3`, `s2 ^= t`, and `s3 =
-  rotl(s3, 45)`, in that order.
+  `xoshiro256**` (Blackman and Vigna, 2018). Its value is `rotl(s1 * 5, 7) * 9`, and then, with
+  `t = s1 << 17`, the words become `s2 ^= s0`, `s3 ^= s1`, `s1 ^= s2`, `s0 ^= s3`, `s2 ^= t`, and
+  `s3 = rotl(s3, 45)`, in that order.
 - **Seeding.** `Random.new` fills `s0` to `s3`, in order, with four outputs of SplitMix64 started
   from the seed's two's complement bits as `x`. Each output adds `0x9E3779B97F4A7C15` to `x`, takes
-  `z = x`, then `z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9`, `z = (z ^ (z >> 27)) *
-  0x94D049BB133111EB`, and is `z ^ (z >> 31)`. SplitMix64 maps distinct values of `x` to distinct
-  outputs, so at most one word is zero, and `xoshiro256**` needs only that not all four are. Without
-  a seed, or with `null`, `Random.new` fills the words from the source `Crypto.randomBytes` reads
-  (`stdlib.md`) instead, reading again in the case, one in 2^256, that all four are zero, so its
-  values differ from run to run as `Math.random`'s do.
+  `z = x`, then `z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9`,
+  `z = (z ^ (z >> 27)) * 0x94D049BB133111EB`, and is `z ^ (z >> 31)`. SplitMix64 maps distinct
+  values of `x` to distinct outputs, so at most one word is zero, and `xoshiro256**` needs only that
+  not all four are. Without a seed, or with `null`, `Random.new` fills the words from the source
+  `Crypto.randomBytes` reads (`stdlib.md`) instead, reading again in the case, one in 2^256, that
+  all four are zero, so its values differ from run to run as `Math.random`'s do.
 - **`float`** is one draw `d` as `(d >> 11) * 2^-53`, the top 53 bits as a fraction, exact in a
   `float64`. **`bool`** is whether the top bit of one draw is 1.
 - **`int`** takes `n = to - from` as a `uint64`, which every pair of `int` bounds fits, and the mask
@@ -2439,9 +2439,9 @@ Record.same[T: {}](a: T, b: T): bool                           // identity; {} b
 
 `Result.ok` and the others are functions declared on the `Result` type (section 6), so `Result`
 names the alias in a type and its functions in an expression; `Error.wrap` is declared on `Error`
-likewise, and `Error{ message: "..." }` is still a literal (section 8, Wrapping errors). `Panic.catch`
-and `Panic.raise` are declared on `Panic`, and `Panic.Frame` is a type in its namespace, as
-`String.Cut` is in `String`'s (section 8, Catching a panic). `Record` is a namespace.
+likewise, and `Error{ message: "..." }` is still a literal (section 8, Wrapping errors).
+`Panic.catch` and `Panic.raise` are declared on `Panic`, and `Panic.Frame` is a type in its
+namespace, as `String.Cut` is in `String`'s (section 8, Catching a panic). `Record` is a namespace.
 
 ### Synchronization
 
@@ -2502,20 +2502,20 @@ Channel.length[T](c: Channel[T]): int                                    // valu
 Channel.values[T](c: Channel[T], ctx: Context | null = null): Seq[T]     // every value until closed, or until ctx ends
 ```
 
-A context's timeout converts as `Http.request`'s does, days at 24 hours and the smaller units
-exact, but a calendar unit or a duration that is not positive makes it panic, since `Context.new` is
+A context's timeout converts as `Http.request`'s does, days at 24 hours and the smaller units exact,
+but a calendar unit or a duration that is not positive makes it panic, since `Context.new` is
 computation. A child of a done parent is done at once with the parent's reason. `Context.wait` is
 how a main goroutine waits for the interrupt while a server runs.
 
 An unbuffered channel hands a value over directly: `send` returns when a receiver has taken it. A
 buffered one holds `capacity` values and blocks a sender beyond that. Closing lets receivers drain
 what is buffered and then get `null`; a later `send` panics, since a value with no receiver is the
-sender's bug. `Channel.new` fixes `T` from nothing, so a declaration annotates: `var jobs:
-Channel[Job] = Channel.new()`. `Channel.receive` conflates a `null` value with the end of the
-channel when `T` includes `null`, as `Map.get` and `Array.pop` do; a program with such a `T` wraps
-the value, and `Context.isDone(ctx)` tells a cancellation from a close. A wait on several channels
-at once, or on a channel and a context, a group or a timer, is a `select` (section 5), which takes
-nothing from any channel until its choice is made.
+sender's bug. `Channel.new` fixes `T` from nothing, so a declaration annotates:
+`var jobs: Channel[Job] = Channel.new()`. `Channel.receive` conflates a `null` value with the end of
+the channel when `T` includes `null`, as `Map.get` and `Array.pop` do; a program with such a `T`
+wraps the value, and `Context.isDone(ctx)` tells a cancellation from a close. A wait on several
+channels at once, or on a channel and a context, a group or a timer, is a `select` (section 5),
+which takes nothing from any channel until its choice is made.
 
 ## 12. Dynamic semantics
 
@@ -2529,22 +2529,22 @@ value-dependent rows of that table, and a data race (section 9).
 
 Every value has a kind, fixed when the value is created:
 
-| Kind                             | Values                                                                                                                                                                                                                                         |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the ten numeric kinds            | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it                                                                                                                              |
-| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                |
-| array                            | a growable sequence of values                                                                                                                                                                                                                  |
-| map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                           |
-| set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                      |
-| record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                    |
-| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                    |
-| func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)  |
+| Kind                             | Values                                                                                                                                                                                                                                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the ten numeric kinds            | `int8` … `uint64`, `float32`, `float64`; a number carries its width, because overflow and conversion depend on it                                                                                                                                                                                              |
+| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                                                                                |
+| array                            | a growable sequence of values                                                                                                                                                                                                                                                                                  |
+| map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                                                                                           |
+| set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                                                                                      |
+| record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                                                                                    |
+| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                                                                                    |
+| func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)                                                                  |
 | tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
-| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, or `Context`                                                                                                                                                              |
-| time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                               |
-| bytes                            | an immutable sequence of bytes (section 11, Bytes), which `==` compares by content                                                                                                                                                              |
-| regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                    |
-| random                           | a `Random` generator of section 11: four `uint64` words that each draw changes                                                                                                                                                                  |
+| sync                             | a `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, or `Context`                                                                                                                                                                                                                           |
+| time                             | a `Zone`, `Instant`, `ZonedDateTime`, `PlainDate`, `PlainTime`, `PlainDateTime`, or `Duration` of `stdlib.md`: the tag of its type plus the fields that type fixes, which `==` compares by value                                                                                                               |
+| bytes                            | an immutable sequence of bytes (section 11, Bytes), which `==` compares by content                                                                                                                                                                                                                             |
+| regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                                                                                   |
+| random                           | a `Random` generator of section 11: four `uint64` words that each draw changes                                                                                                                                                                                                                                 |
 
 Arrays, maps, sets, records, functions, sync objects, and generators are references: a variable
 holds a reference, and copying the variable copies the reference. Numbers, booleans, strings,
@@ -2561,8 +2561,8 @@ so it sees later assignments to the variables it captured, and a closure made in
 initializer sees that `var` once it is bound. The initializer runs first, so a call that reaches the
 variable before it is bound panics, as for a top-level `var`. Each iteration of a `for` opens a
 fresh scope for the loop variable. A `type` in a block is bound when the block starts, so it is
-visible throughout the block, and every time to the same tag or constructor: one per declaration
-for the whole run.
+visible throughout the block, and every time to the same tag or constructor: one per declaration for
+the whole run.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
@@ -2636,8 +2636,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   same tag and equal fields, as `stdlib.md` lists them per type; patterns have the same normalized
   source and flags; arrays have the same length and `==` elements in order; maps have the same key
   set and `==` values per key; sets have the same members; functions, tags, sync objects, and
-  `Random` generators are the same object. A pair of values already under comparison counts as equal (section 4). Values of
-  different kinds are unequal, so `x == null` is simply `false` for a non-null `x`.
+  `Random` generators are the same object. A pair of values already under comparison counts as equal
+  (section 4). Values of different kinds are unequal, so `x == null` is simply `false` for a
+  non-null `x`.
 - **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `Bytes`, `func`, `Array`,
   `Map`, `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any
   other path evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a
@@ -2669,13 +2670,13 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **`while`.** Evaluates the condition, which must be a `bool`, before each iteration. The value is
   `void`.
 - **`select`.** The operands of every head evaluate in order; each must have the kind its call
-  takes. Then the goroutine waits until a head can proceed: a receive when its channel holds a
-  value or is closed, a send when its channel can take the value, `Context.wait` when the context
-  is done, `WaitGroup.wait` when the counter is zero, `Time.sleep` when the time has passed; with
-  an `else` clause it does not wait, and `else` is taken when no head can proceed at once. One of
-  the heads that can proceed is performed, chosen uniformly at random, its result is bound when
-  the clause binds, and its block is evaluated; the value is the block's. A send performed on a
-  closed channel panics.
+  takes. Then the goroutine waits until a head can proceed: a receive when its channel holds a value
+  or is closed, a send when its channel can take the value, `Context.wait` when the context is done,
+  `WaitGroup.wait` when the counter is zero, `Time.sleep` when the time has passed; with an `else`
+  clause it does not wait, and `else` is taken when no head can proceed at once. One of the heads
+  that can proceed is performed, chosen uniformly at random, its result is bound when the clause
+  binds, and its block is evaluated; the value is the block's. A send performed on a closed channel
+  panics.
 - **`for x in e`.** `e` must be an array, a map, a set, a string, `Bytes`, or a function. Over an
   array it iterates by index from zero while the index is below the current length, so elements
   appended during the loop are visited and removed ones are not. Over a map it visits the entries as
@@ -2685,30 +2686,28 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   the members the same way. Over a string it yields each code point as a one-character string, and
   over `Bytes` each byte as a `byte`. Over a function it calls the function with a fresh `yield`
   function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or
-  `false` when the body ended with `break`. A `return` or a panic in the body propagates through
-  the sequence function like any other call, and ends the loop. The loop also ends when the
-  sequence function returns or a panic leaves it. Calling `yield` again after it returned `false`,
-  or after the loop has ended, panics. A sequence function that returns after a panic left a run
-  of the body, which it can only have done by catching it with `Panic.catch`, makes the loop panic
-  with a message that names the body's, so a sequence cannot hide a bug in the body; one that
-  raises the panic again with `Panic.raise` passes it on as it is. `yield` runs the body only on
-  the loop's goroutine: a call from another goroutine panics in that goroutine without running
-  it, and after such a call the loop panics at the next call of `yield` on its goroutine, at a
-  `return` out of the body, or once the sequence function returns, so the loop neither goes on nor
-  ends as though it had seen every element. A `yield` called from inside the body runs the body
-  again within that run. A destructuring on the left reads the named fields of each element,
-  which must be a record with those fields. The value is `void`.
+  `false` when the body ended with `break`. A `return` or a panic in the body propagates through the
+  sequence function like any other call, and ends the loop. The loop also ends when the sequence
+  function returns or a panic leaves it. Calling `yield` again after it returned `false`, or after
+  the loop has ended, panics. A sequence function that returns after a panic left a run of the body,
+  which it can only have done by catching it with `Panic.catch`, makes the loop panic with a message
+  that names the body's, so a sequence cannot hide a bug in the body; one that raises the panic
+  again with `Panic.raise` passes it on as it is. `yield` runs the body only on the loop's
+  goroutine: a call from another goroutine panics in that goroutine without running it, and after
+  such a call the loop panics at the next call of `yield` on its goroutine, at a `return` out of the
+  body, or once the sequence function returns, so the loop neither goes on nor ends as though it had
+  seen every element. A `yield` called from inside the body runs the body again within that run. A
+  destructuring on the left reads the named fields of each element, which must be a record with
+  those fields. The value is `void`.
 - **`break`, `continue`.** Leave or restart the innermost enclosing loop within the same function
   body, script body, lambda, `go` block, or `defer` block, running the deferred blocks of every
   block they exit.
-- **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body,
-  script body, lambda, `go` block, or `defer` block, running the deferred blocks of every block it
-  exits. The value a script body returns sets the exit status (section 10).
-  Directly inside a `go` or `defer` block it has no operand (section 5), so it ends the block with
-  `void`.
+- **`return e`.** Evaluates `e`, or `void`, and leaves the innermost enclosing function body, script
+  body, lambda, `go` block, or `defer` block, running the deferred blocks of every block it exits.
+  The value a script body returns sets the exit status (section 10). Directly inside a `go` or
+  `defer` block it has no operand (section 5), so it ends the block with `void`.
 - **`try e`.** The value must be a record tagged `Ok` or `Err`. `Ok` yields its `value` field; `Err`
-  returns a new `Err` record with the same `error` field from the enclosing function or script
-  body.
+  returns a new `Err` record with the same `error` field from the enclosing function or script body.
 - **Lambda and anonymous `func`.** Create a function value that captures the current scopes.
 - **`defer { ... }`.** Registers the block with the innermost enclosing block. The value is `void`.
 - **`go { ... }`.** Starts a new goroutine that evaluates the block, and yields `void` at once.
@@ -2738,8 +2737,8 @@ with a report. The program ends when the script body ends, whatever other gorout
 
 ### Runtime panics
 
-The complete list. The checker rules out every panic in the middle column, so a checked program
-can only panic in the ways the last column lists, which depend on values known at run time.
+The complete list. The checker rules out every panic in the middle column, so a checked program can
+only panic in the ways the last column lists, which depend on values known at run time.
 
 | Operation                                         | Panics when (ruled out by the checker)                                                                                                                                                                                                                | Panics when (possible in a checked program)                                                                                                                                                                                     |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -2,10 +2,10 @@
 
 Draft 0.1 · October 2026
 
-`ant doc` prints the signature and doc comment of a declaration, from the standard library or from
-a module. It is what an editor shows on hover, in a terminal. This document is the contract of the
-command and the conventions of the comments it prints; section numbers in it refer to
-`ant-lang.md`, where section 2 defines a doc comment.
+`ant doc` prints the signature and doc comment of a declaration, from the standard library or from a
+module. It is what an editor shows on hover, in a terminal. This document is the contract of the
+command and the conventions of the comments it prints; section numbers in it refer to `ant-lang.md`,
+where section 2 defines a doc comment.
 
 ## 1. Command
 
@@ -51,10 +51,10 @@ conventions the standard library follows, and editors may rely on:
   in a completion list, so it stands on its own. It ends at the first period followed by a space or
   a line break.
 - **A module doc** starts with a summary of the module in its own terms, since the name a module
-  goes by is the one each importer gives it: `//! Geometry computes distances and areas on the
-  plane.` It goes on to what a reader of the whole module needs: its main types, how its functions
-  fit together, an example of use. A script's doc says what the program does and how
-  to run it.
+  goes by is the one each importer gives it:
+  `//! Geometry computes distances and areas on the plane.` It goes on to what a reader of the whole
+  module needs: its main types, how its functions fit together, an example of use. A script's doc
+  says what the program does and how to run it.
 - **Paragraphs** are separated by an empty comment line, `//` or `//!` with nothing after it.
 - **Code** is a run of lines indented by at least one space beyond the comment's own one, which an
   editor shows in a monospaced block, as Ant:
