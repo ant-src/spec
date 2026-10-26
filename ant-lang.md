@@ -1431,9 +1431,14 @@ func copy(src: string, dst: string): Result[void, Error] {
   defer { File.close(input) }
   var output = try File.create(dst)
   defer { File.close(output) }
-  File.pipe(input, output)
+  try File.pipe(input, output)
+  File.close(output)
 }
 ```
+
+The last line closes `output` explicitly, since a write can fail when the buffer is flushed and a
+deferred block's value is discarded; the deferred close then does nothing. `input` is only read, so
+its deferred close is enough.
 
 ### Catching a panic
 

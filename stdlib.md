@@ -51,7 +51,7 @@ File.readExactly(f: File.Handle, n: int, ctx: Context | null = null): Result[Byt
 File.writeChunk(f: File.Handle, bytes: Bytes): Result[void, Error]
 File.flush(f: File.Handle): Result[void, Error]            // writes out what is buffered
 File.pipe(src: File.Handle, dst: File.Handle, ctx: Context | null = null): Result[void, Error]   // copies the rest of src to dst
-File.close(f: File.Handle): void                           // flushes; nothing on a standard stream
+File.close(f: File.Handle): Result[void, Error]            // flushes, then closes; Ok on a standard stream and on a closed handle
 ```
 
 `File.list` returns names and `File.walk` paths: `walk` descends into every directory below `dir`,
@@ -80,6 +80,13 @@ context; and `File.close` from any goroutine ends a read or a write in progress 
 write to a connection is flushed as a write to a standard stream is, since the other end is waiting
 for it, and `File.pipe` flushes what it copied even when its context ended it; `File.flush` is for
 files.
+
+A write to a file can succeed into the buffer and fail when the buffer is written out, so
+`File.close` reports what the flush and the close report, and a program that promises its output
+checks it, as `try File.close(output)`. A deferred close cannot report, since a deferred block's
+value is discarded. So a function that writes a file ends with an explicit close, and the deferred
+close of the same handle, there for the paths that leave early, then does nothing and is `Ok`, as
+every close after the first is.
 
 ## Http
 
@@ -580,8 +587,8 @@ The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.
 `File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new.
 `Os.stdout()`, `print` and `println` write to one buffer, so their output interleaves in program
 order, and a read of standard input flushes it first, so a prompt is seen before the program waits.
-`File.close` on a stream does nothing. In the REPL standard input belongs to the REPL, and
-`Os.stdin()` is at end of file.
+`File.close` on a stream does nothing and is `Ok`. In the REPL standard input belongs to the REPL,
+and `Os.stdin()` is at end of file.
 
 ## Json
 
