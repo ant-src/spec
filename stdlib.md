@@ -597,7 +597,7 @@ and `Os.stdin()` is at end of file.
 type Value = null | bool | float64 | string | Array[Value] | Map[string, Value]
 
 Json.parse(text: string): Result[Json.Value, Error]
-Json.stringify[T](value: T): string                     // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value, on one with no JSON form, or on a map key that is not a string
+Json.stringify[T](value: T, indent: string = ""): string   // records as objects without their tag, as String.from would; a set as an array of its members; a time value as its string; panics on a cyclic value, on one with no JSON form, or on a map key that is not a string
 ```
 
 `Json.Value` is a recursive alias through an array and a map, which section 4 allows. Numbers parse
@@ -639,6 +639,24 @@ itself, to the strings it means. Two keys that give one name, `UserId("a")` and 
 by `UserId | string`, panic too, with
 `map keys UserId("a") and "a" both give the property name "a"`, so the text never repeats a property
 name.
+
+With an empty `indent`, the default, the text is one line with nothing between its tokens. With any
+other, each member of an array or object goes on a line of its own, indented by `indent` once per
+level of nesting, the closing bracket goes on a line of its own at its opening bracket's level, and
+`": "` follows a property name. An empty array or object stays `[]` or `{}`, and the text ends
+without a newline, as in JavaScript and Go. `indent` is a string so that a tab can be one, and
+`Json.stringify` panics on one that is not all spaces and tabs, since anything else would not be
+JSON.
+
+```ant
+Json.stringify(Map{ "id": "x1", "tags": ["a"] }, indent: "  ")
+// {
+//   "id": "x1",
+//   "tags": [
+//     "a"
+//   ]
+// }
+```
 
 ## Csv
 
