@@ -321,8 +321,9 @@ var bad = int8(300)               // panic: out of range
 ### Records
 
 A record type lists named fields. A record literal names the type and lists the fields, as in Go.
-Fields are mutable, and there is no `readonly` or frozen form: strings are the only immutable
-values, and goroutines share records under the sync objects of section 9.
+Fields are mutable, and there is no `readonly` or frozen form. Strings, `Bytes`, time values, and
+patterns are immutable; records, arrays, maps, and sets are not, and goroutines share them under the
+sync objects of section 9.
 
 ```ant
 type Point = { x: float64, y: float64 }
@@ -1683,8 +1684,11 @@ sense of Go's memory model:
   returns.
 - All operations on all `Atomic` objects form one total order, and a `store` happens before every
   `load` that observes it.
-- A send on a channel happens before the receive that takes its value, and a close happens before a
-  receive that returns `null` because of it; a clause of `select` is a send or a receive.
+- A send on a channel happens before the receive that takes its value completes, and a close happens
+  before a receive that returns `null` because of it. On a channel of capacity 0, a receive happens
+  before the send it takes from completes. On a channel of capacity `c` above 0, the `k`th receive
+  happens before the `k + c`th send completes, so a buffered channel can count, as a semaphore does.
+  A clause of `select` that is performed is a send or a receive.
 - `Context.cancel`, and the passing of a deadline, happen before the return of every wait the
   context ends.
 
@@ -1858,9 +1862,19 @@ carry a default, which a call omits or names as for a declared function (section
 whose result the library ignores is typed with a type parameter, never with `void`, so any lambda
 fits; the library discards the value itself. A function marked `mutates` changes its first argument
 and returns `void`, the removed element, or whether it changed anything; every other function leaves
-its arguments untouched and returns a new value. A function that can panic on a particular value
-says so in its comment, as in "panics if n < 0" or "panics on overflow". Every function also panics
-when an argument has a kind it does not take (section 12).
+its arguments untouched and returns a new value.
+
+A function that takes an array or a map and a callback reads the elements or entries once, when it
+is called, and calls the callback on those. A callback that changes the collection changes it, but
+not what the call visits: `Array.map(a, { Array.push(a, x + 10); x * 2 })` on `[1, 2, 3]` is
+`[2, 4, 6]`, and a later element set or removed by the callback is visited with the value it had at
+the call. A `for` loop reads its collection as it goes instead (section 5), and so does a sequence,
+which reads its source each time it runs, so `Iter.fromArray(a)` sees what was pushed to `a` before
+or during the run.
+
+A function that can panic on a particular value says so in its comment, as in "panics if n < 0" or
+"panics on overflow". Every function also panics when an argument has a kind it does not take
+(section 12).
 
 ### Prelude
 
@@ -2279,13 +2293,14 @@ sorted. The text of a `\Q...\E` span, which RE2 takes as itself, is kept as writ
 `\/` included; a span left open at the end gets its `\E`, and a span closed and reopened around a
 single `/` or line break, written as itself or escaped, as in `\Qa\E\/\Qb\E`, becomes one span
 holding that character, `\Qa/b\E`. Two patterns are `==` when their normalized sources and flags
-are, so `/a/i == /a/i`, `/a/si == /a/is`, `Regex.compile("a+", "i") == /a+/i`,
-`Regex.compile("a/b") == /a\/b/`, `Regex.compile("a\nb") == /a\nb/` and
-`Regex.compile("") == /(?:)/` all hold, and `Regex.source(/a\/b/)` is `"a/b"`. A pattern renders as
-a literal that reads back to it: every `/` of the normalized source written `\/` and every line
-break `\n` or `\r`, so `/(?:)/` for the empty pattern, as JavaScript renders it; inside a `\Q...\E`
-span the span is closed and reopened around each, as `\E\/\Q`, `\E\n\Q`, or `\E\r\Q`.
-`Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as a string.
+are, so `/a/i == /a/i`, `/a/si == /a/is`, `Regex.compile("a+", "i") == Ok{ value: /a+/i }`,
+`Regex.compile("a/b") == Ok{ value: /a\/b/ }`, `Regex.compile("a\nb") == Ok{ value: /a\nb/ }` and
+`Regex.compile("") == Ok{ value: /(?:)/ }` all hold, and `Regex.source(/a\/b/)` is `"a/b"`. A
+pattern renders as a literal that reads back to it: every `/` of the normalized source written `\/`
+and every line break `\n` or `\r`, so `/(?:)/` for the empty pattern, as JavaScript renders it;
+inside a `\Q...\E` span the span is closed and reopened around each, as `\E\/\Q`, `\E\n\Q`, or
+`\E\r\Q`. `Json.stringify` writes that rendering as a JSON string, and `Json.parse` gives it back as
+a string.
 
 A `Match` is one match of the whole pattern: `text` is the matched text, `start` and `end` are its
 code point indices into `s`, so `String.slice(s, m.start, m.end)` is `m.text`, `groups[0]` is the
