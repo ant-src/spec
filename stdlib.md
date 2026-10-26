@@ -86,7 +86,8 @@ A write to a file can succeed into the buffer and fail when the buffer is writte
 checks it, as `try File.close(output)`. A deferred close cannot report, since a deferred block's
 value is discarded. So a function that writes a file ends with an explicit close, and the deferred
 close of the same handle, there for the paths that leave early, then does nothing and is `Ok`, as
-every close after the first is.
+every close after the first is. The handle is closed even when `File.close` is `Err`, so a write
+after it is `Err` and a second close does nothing.
 
 ## Http
 
