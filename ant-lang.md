@@ -378,14 +378,13 @@ var v = Vec{ ...p }                        // a Vec with the fields of p
 
 Records, arrays, maps, and sets are reference values: assigning or passing one shares it, and a
 change made through one name is visible through every other. `==` compares structure, never
-identity. Two records are equal when they carry the same tag and their fields are equal. Arrays
-compare by length and elements, maps by key set and values, sets by members, primitives, time values
-(`stdlib.md`), and regular expression patterns (section 11) by value, and functions, sync objects,
-and generators by identity. The comparison recurses with `==` over every run-time field, including
-fields the static type does not mention, so it agrees with `String.from` and `Json.stringify`. A
-pair of values already under comparison counts as equal, so cyclic structures compare in finite
-time. Identity is a library call: `Record.same`, `Array.same`, `Map.same`, and `Set.same` report
-whether two names refer to one value.
+identity. Two records are equal when they carry the same tag and their fields are equal; the table
+of Kinds gives what `==` compares for every other type, which is identity only for functions, tags,
+sync objects, generators, handles, and listeners. The comparison recurses with `==` over every
+run-time field, including fields the static type does not mention, so it agrees with `String.from`
+and `Json.stringify`. A pair of values already under comparison counts as equal, so cyclic
+structures compare in finite time. Identity is a library call: `Record.same`, `Array.same`,
+`Map.same`, and `Set.same` report whether two names refer to one value.
 
 ```ant
 var p = Point{ x: 1.0, y: 2.0 }
@@ -473,6 +472,39 @@ and no indexing. `Set.of` builds one from an array, `Set.has` asks for a member,
 the members in order. Two sets are `==` when they have the same members, in any order, as two maps
 are when they have the same entries.
 
+### Kinds
+
+Every value carries a kind, and some carry a tag (section 12). This table is the one list of what
+each type's values are at run time; the rules on unions, `is`, `==`, and rendering below and in
+sections 5, 11, and 12 follow it. The `is` column is what `is` accepts for the type, which is also
+the type's discriminator in a union; a type with none cannot be tested by `is`.
+
+| Type                                                                            | Kind                         | `is`                       | `==` compares                        | `String.from`                              |
+| ------------------------------------------------------------------------------- | ---------------------------- | -------------------------- | ------------------------------------ | ------------------------------------------ |
+| `int8` … `uint64`, `float32`, `float64`, `int`, `byte`                          | the numeric kind of its name | its name                   | the value; IEEE 754 for floats       | `42`, `1.5`                                |
+| `bool`                                                                          | `bool`                       | `bool`                     | the value                            | `true`                                     |
+| `string`                                                                        | `string`                     | `string`                   | the code points                      | itself; quoted inside a container          |
+| `null`                                                                          | `null`                       | `null`                     | nothing; all are equal               | `null`                                     |
+| `void`                                                                          | `void`                       | `void`                     | nothing; all are equal               | `void`                                     |
+| `Bytes`                                                                         | bytes                        | `Bytes`                    | the bytes                            | `Bytes(89 50)`                             |
+| `Array[T]`                                                                      | array                        | `Array`                    | the length and the elements in order | `[1, 2]`                                   |
+| `Map[K, V]`                                                                     | map                          | `Map`                      | the key set and the value per key    | `Map{ "a": 1 }`                            |
+| `Set[T]`                                                                        | set                          | `Set`                      | the members                          | `Set.of([1, 2])`                           |
+| a named record type                                                             | record                       | its name, which is the tag | the tag and the fields               | `Point{ x: 1.0, y: 2.0 }`                  |
+| an anonymous record type                                                        | record                       | none                       | as for the record's tag              | as for the record's tag                    |
+| a named primitive type                                                          | tagged primitive             | its name, which is the tag | the tag and the payload              | `UserId("u-1")`                            |
+| a function type                                                                 | func                         | `func`                     | identity                             | `func`; a constructor as its type's name   |
+| a time type of `stdlib.md`                                                      | time                         | its name, `Time.Instant`   | the tag and the fields               | an RFC 9557 string, or a zone's identifier |
+| `Regex.Pattern`                                                                 | regex                        | `Regex.Pattern`            | the normalized source and the flags  | `/a\/b/i`                                  |
+| `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, `Context` | sync                         | none                       | identity                             | its type's name, `Mutex`                   |
+| `Random`                                                                        | random                       | none                       | identity                             | `Random`                                   |
+| `File.Handle`, `Net.Listener`                                                   | resource                     | none                       | identity                             | its type's name, `File.Handle`             |
+| a type parameter                                                                | its argument's               | none                       | as for its argument                  | as for its argument                        |
+
+A tag, the value a `type` declaration binds, is not a type in this table: no annotation names it. It
+compares by identity and renders as its type's name. Section 11 gives the full rendering of numbers,
+strings, and containers, and `stdlib.md` that of time values.
+
 ### Unions
 
 `A | B` is a type whose values belong to `A` or to `B`. In a type, `|` builds a union; in an
@@ -491,12 +523,9 @@ func describe(id: Id): string {
 A nullable type is written `T | null` (section 7).
 
 The members of a union must be distinguishable at run time, because `is` has only kinds and tags to
-look at. Each member has a discriminator:
-
-- the kind, for `bool`, `string`, `null`, `void`, and each of the ten numeric kinds;
-- the word array, map, set, or func, type arguments not counting; or
-- the tag, for a named record or primitive type, for a time type of `stdlib.md`, or for
-  `Regex.Pattern`, whose values carry the tag of their type as records do.
+look at. A member's discriminator is its `is` column in the table of Kinds: the kind for a
+primitive, `null`, `void`, and `Bytes`; the word `Array`, `Map`, `Set`, or `func`, type arguments
+not counting; and the tag for a named record or primitive type, a time type, and `Regex.Pattern`.
 
 A union may contain each discriminator at most once, so `Array[int] | Array[string]` is a compile
 error and `Array[int | string]` is the type to write, while `int | float64` is fine. The rule
@@ -532,9 +561,9 @@ written. `type Either[A, B] = A | B` is allowed, since two type parameters may s
 `Either[Box[int], Box[string]]` repeats a tag and `Either[Box[int], { value: string }]` is the
 `Mixed` type above, so both are compile errors at the use.
 
-A sync type has no discriminator either, because `is` does not accept one (section 5). A union may
-contain at most one sync type, and it is narrowed by testing the other members: after `m != null`,
-an `m` of type `Mutex | null` is a `Mutex`.
+The sync types, `Random`, `File.Handle`, and `Net.Listener` have no discriminator either, because
+`is` does not accept them. A union may contain at most one of them, and it is narrowed by testing
+the other members: after `m != null`, an `m` of type `Mutex | null` is a `Mutex`.
 
 ### Tagged unions
 
@@ -904,12 +933,13 @@ its `{` would otherwise begin the body: `if p == (Point{ x: 1 }) { ... }` and
 
 ### `is`
 
-`x is T` is `true` when the value of `x` belongs to `T`. `T` is a named record or primitive type, a
-time type of `stdlib.md`, `Regex.Pattern`, a primitive kind, `null`, `Array`, `Map`, `Set`, or
-`func`, written without type arguments, because the runtime has only tags and kinds to look at. An
-alias is not accepted. With `type Id = int | string`, the checker sees `Id` as the union, while the
-runtime would see a tag no value carries. So `x is Id` is a compile error that says to test the
-members, and a panic in an unchecked program.
+`x is T` is `true` when the value of `x` belongs to `T`. `T` is a name from the `is` column of the
+table of Kinds (section 4), written without type arguments, because the runtime has only tags and
+kinds to look at: a primitive kind, `null`, `void`, `Bytes`, `Array`, `Map`, `Set`, `func`, a named
+record or primitive type, a time type, or `Regex.Pattern`. An alias is not accepted. With
+`type Id = int | string`, the checker sees `Id` as the union, while the runtime would see a tag no
+value carries. So `x is Id` is a compile error that says to test the members, and a panic in an
+unchecked program.
 
 The static type of `x` must be a union with `T` as a member, or an anonymous record type to which
 the named record type `T` is assignable. In the second case the test narrows `x` to the one
@@ -2169,9 +2199,9 @@ inside template strings.
 - A named primitive renders as its constructor call, `UserId("u-1")`.
 - `Bytes` renders as `Bytes(89 50 4e 47)`, two lower-case hexadecimal digits per byte separated by
   spaces, and `Bytes()` when empty.
-- Functions render as `func`, a constructor and a tag as their type's name, sync objects and
-  generators as their namespace name, and time values as `stdlib.md` says: an RFC 9557 string, or a
-  zone's identifier.
+- Functions render as `func`, a constructor and a tag as their type's name, sync objects,
+  generators, handles, and listeners as their type's name, `Mutex`, `Random`, `File.Handle`, or
+  `Net.Listener`, and time values as `stdlib.md` says: an RFC 9557 string, or a zone's identifier.
 - A regular expression pattern renders as a literal that reads back to it, `/a\/b/i`, as the Regex
   section says.
 - A value already being rendered renders as `...`, so cyclic structures terminate.
@@ -2533,7 +2563,8 @@ value-dependent rows of that table, and a data race (section 9).
 
 ### Values
 
-Every value has a kind, fixed when the value is created:
+Every value has a kind, fixed when the value is created. The table of Kinds in section 4 gives the
+kind of each type's values; this one says what each kind holds:
 
 | Kind                             | Values                                                                                                                                                                                                                                                                                                         |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2551,11 +2582,12 @@ Every value has a kind, fixed when the value is created:
 | bytes                            | an immutable sequence of bytes (section 11, Bytes), which `==` compares by content                                                                                                                                                                                                                             |
 | regex                            | a `Regex.Pattern` of section 11: the tag of that type plus the normalized source and the sorted flags, which `==` compares by value; one is built for each literal when its module is loaded                                                                                                                   |
 | random                           | a `Random` generator of section 11: four `uint64` words that each draw changes                                                                                                                                                                                                                                 |
+| resource                         | a `File.Handle` or a `Net.Listener` of `stdlib.md`: an open file, stream, or connection, or a listening socket                                                                                                                                                                                                 |
 
-Arrays, maps, sets, records, functions, sync objects, and generators are references: a variable
-holds a reference, and copying the variable copies the reference. Numbers, booleans, strings,
-`Bytes`, `null`, `void`, tags, time values, and patterns are immutable, so for them the distinction
-never shows.
+Arrays, maps, sets, records, functions, sync objects, generators, and resources are references: a
+variable holds a reference, and copying the variable copies the reference. Numbers, booleans,
+strings, `Bytes`, `null`, `void`, tags, time values, and patterns are immutable, so for them the
+distinction never shows.
 
 ### Names and scopes
 
@@ -2641,9 +2673,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   tag and `==` fields; tagged primitives have the same tag and equal payloads; time values have the
   same tag and equal fields, as `stdlib.md` lists them per type; patterns have the same normalized
   source and flags; arrays have the same length and `==` elements in order; maps have the same key
-  set and `==` values per key; sets have the same members; functions, tags, sync objects, and
-  `Random` generators are the same object. A pair of values already under comparison counts as equal
-  (section 4). Values of different kinds are unequal, so `x == null` is simply `false` for a
+  set and `==` values per key; sets have the same members; functions, tags, sync objects, `Random`
+  generators, and resources are the same object. A pair of values already under comparison counts as
+  equal (section 4). Values of different kinds are unequal, so `x == null` is simply `false` for a
   non-null `x`.
 - **`a is T`.** `T` is resolved by name. `null`, `void`, `bool`, `string`, `Bytes`, `func`, `Array`,
   `Map`, `Set`, the ten numeric names, and their aliases `int` and `byte` test the kind of `a`. Any
