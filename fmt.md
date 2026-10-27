@@ -356,6 +356,23 @@ of a multi-line template belong to the string: a line break the author wrote ins
 where it is, with its indentation as written, tabs included; only the spaces and tabs before the
 line break go (4.1). Comments inside an interpolation are kept as 4.8 says.
 
+### 4.10 HTML expressions
+
+An HTML expression is formatted as a template string is (4.9): its markup, tags and attributes and
+text, is kept byte for byte, line breaks and indentation included, and the code inside each `{...}`
+interpolation, attribute value, or spread is formatted as an expression, with no space after `{` or
+before `}`. A lambda or record literal inside keeps its own inner spaces. An interpolation adds no
+line breaks and removes none, and is not reindented. The lines of markup are not reindented either,
+although the white space rule of `ant-lang.md` section 5 would allow it; that may come later.
+
+```ant
+// before
+<li class={ if x.done {"done"} }>{ x.title+"!" }</li>
+
+// after
+<li class={if x.done { "done" }}>{x.title + "!"}</li>
+```
+
 ## 5. What `ant fmt` does not do
 
 - It does not wrap long lines or join short ones; line breaks are the author's (section 3). In a

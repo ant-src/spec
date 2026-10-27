@@ -168,6 +168,20 @@ var ok = Regex.test(/^ant$/i, s)  // a pattern: the last token is (
 x /= 2                            // an assignment
 ```
 
+`<` begins an HTML expression (section 5) by the same rule: when the last token before it, skipping
+line breaks, is not an operand, and also when it is the first token of a line where a line break
+ends a statement, in a block, a lambda, or a script's top level, where no statement could start with
+`<` before. Inside parentheses and brackets, where line breaks are ignored, the first rule alone
+applies, so `(total` followed by `< limit)` on the next line is a comparison. In both cases the `<`
+must be followed directly by an ASCII letter, which starts a tag name, or by `>`, which starts a
+fragment; any other character there is a syntax error that says a comparison needs a left operand.
+Ant writes type arguments in square brackets, so there is no `<T>` to collide with.
+
+```ant
+var big = n < limit                          // comparison: the token before < is an identifier
+var title = <h1>{post.title}</h1>            // an element: the token before < is =
+```
+
 RE2 has no lookahead, lookbehind, or backreferences, so a JavaScript pattern that uses `(?=`, `(?!`,
 `(?<=`, `(?<!`, or `\1` is a syntax error whose message names the construct; `\1` through `\9` are
 the backreferences, while `\10` and up are octal escapes, as RE2 reads them. JavaScript's `\u0041`
@@ -491,27 +505,28 @@ A kind is what the runtime sees, not a type. Types that share a kind stay distin
 and neither pair is assignable either way. Only the `is` column decides what a program can tell
 apart at run time.
 
-| Type                                                                            | Kind                         | `is`                       | `==` compares                        | `String.from`                              | In a union                                                                   |
-| ------------------------------------------------------------------------------- | ---------------------------- | -------------------------- | ------------------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------- |
-| `int8` … `uint64`, `float32`, `float64`, `int`, `byte`                          | the numeric kind of its name | its name                   | the value; IEEE 754 for floats       | `42`, `1.5`                                | once                                                                         |
-| `bool`                                                                          | `bool`                       | `bool`                     | the value                            | `true`                                     | once                                                                         |
-| `string`                                                                        | `string`                     | `string`                   | the code points                      | itself; quoted inside a container          | once                                                                         |
-| `null`                                                                          | `null`                       | `null`                     | nothing; all are equal               | `null`                                     | once                                                                         |
-| `void`                                                                          | `void`                       | `void`                     | nothing; all are equal               | `void`                                     | once                                                                         |
-| `Bytes`                                                                         | bytes                        | `Bytes`                    | the bytes                            | `Bytes(89 50)`                             | once                                                                         |
-| `Array[T]`                                                                      | array                        | `Array`                    | the length and the elements in order | `[1, 2]`                                   | once, whatever `T`                                                           |
-| `Map[K, V]`                                                                     | map                          | `Map`                      | the key set and the value per key    | `Map{ "a": 1 }`                            | once, whatever `K` and `V`                                                   |
-| `Set[T]`                                                                        | set                          | `Set`                      | the members                          | `Set.of([1, 2])`                           | once, whatever `T`                                                           |
-| a named record type                                                             | record                       | its name, which is the tag | the tag and the fields               | `Point{ x: 1.0, y: 2.0 }`                  | once per tag                                                                 |
-| an anonymous record type                                                        | record                       | none                       | as for the record's tag              | as for the record's tag                    | at most one, and no named record type                                        |
-| a named primitive type                                                          | tagged primitive             | its name, which is the tag | the tag and the payload              | `UserId("u-1")`                            | once per tag                                                                 |
-| a function type                                                                 | func                         | `func`                     | identity                             | `func`; a constructor as its type's name   | once, whatever the signature                                                 |
-| a time type of `stdlib.md`                                                      | time                         | its name, `Time.Instant`   | the tag and the fields               | an RFC 9557 string, or a zone's identifier | once per tag                                                                 |
-| `Regex.Pattern`                                                                 | regex                        | `Regex.Pattern`            | the normalized source and the flags  | `/a\/b/i`                                  | once                                                                         |
-| `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, `Context` | sync                         | none                       | identity                             | its type's name, `Mutex`                   | at most one type of these rows                                               |
-| `Random`                                                                        | random                       | none                       | identity                             | `Random`                                   | at most one type of these rows                                               |
-| `File.Handle`, `Net.Listener`                                                   | resource                     | none                       | identity                             | its type's name, `File.Handle`             | at most one type of these rows                                               |
-| a type parameter                                                                | its argument's               | none                       | as for its argument                  | as for its argument                        | only `null`, `void`, type parameters, and named types without type arguments |
+| Type                                                                            | Kind                         | `is`                       | `==` compares                                | `String.from`                              | In a union                                                                   |
+| ------------------------------------------------------------------------------- | ---------------------------- | -------------------------- | -------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------- |
+| `int8` … `uint64`, `float32`, `float64`, `int`, `byte`                          | the numeric kind of its name | its name                   | the value; IEEE 754 for floats               | `42`, `1.5`                                | once                                                                         |
+| `bool`                                                                          | `bool`                       | `bool`                     | the value                                    | `true`                                     | once                                                                         |
+| `string`                                                                        | `string`                     | `string`                   | the code points                              | itself; quoted inside a container          | once                                                                         |
+| `null`                                                                          | `null`                       | `null`                     | nothing; all are equal                       | `null`                                     | once                                                                         |
+| `void`                                                                          | `void`                       | `void`                     | nothing; all are equal                       | `void`                                     | once                                                                         |
+| `Bytes`                                                                         | bytes                        | `Bytes`                    | the bytes                                    | `Bytes(89 50)`                             | once                                                                         |
+| `Html`                                                                          | html                         | `Html`                     | the nodes: kinds, names, attributes, strings | the markup                                 | once                                                                         |
+| `Array[T]`                                                                      | array                        | `Array`                    | the length and the elements in order         | `[1, 2]`                                   | once, whatever `T`                                                           |
+| `Map[K, V]`                                                                     | map                          | `Map`                      | the key set and the value per key            | `Map{ "a": 1 }`                            | once, whatever `K` and `V`                                                   |
+| `Set[T]`                                                                        | set                          | `Set`                      | the members                                  | `Set.of([1, 2])`                           | once, whatever `T`                                                           |
+| a named record type                                                             | record                       | its name, which is the tag | the tag and the fields                       | `Point{ x: 1.0, y: 2.0 }`                  | once per tag                                                                 |
+| an anonymous record type                                                        | record                       | none                       | as for the record's tag                      | as for the record's tag                    | at most one, and no named record type                                        |
+| a named primitive type                                                          | tagged primitive             | its name, which is the tag | the tag and the payload                      | `UserId("u-1")`                            | once per tag                                                                 |
+| a function type                                                                 | func                         | `func`                     | identity                                     | `func`; a constructor as its type's name   | once, whatever the signature                                                 |
+| a time type of `stdlib.md`                                                      | time                         | its name, `Time.Instant`   | the tag and the fields                       | an RFC 9557 string, or a zone's identifier | once per tag                                                                 |
+| `Regex.Pattern`                                                                 | regex                        | `Regex.Pattern`            | the normalized source and the flags          | `/a\/b/i`                                  | once                                                                         |
+| `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, `Context` | sync                         | none                       | identity                                     | its type's name, `Mutex`                   | at most one type of these rows                                               |
+| `Random`                                                                        | random                       | none                       | identity                                     | `Random`                                   | at most one type of these rows                                               |
+| `File.Handle`, `Net.Listener`                                                   | resource                     | none                       | identity                                     | its type's name, `File.Handle`             | at most one type of these rows                                               |
+| a type parameter                                                                | its argument's               | none                       | as for its argument                          | as for its argument                        | only `null`, `void`, type parameters, and named types without type arguments |
 
 A tag, the value a `type` declaration binds, is not a type in this table: no annotation names it. It
 compares by identity and renders as its type's name. Section 11 gives the full rendering of numbers,
@@ -947,8 +962,8 @@ its `{` would otherwise begin the body: `if p == (Point{ x: 1 }) { ... }` and
 
 `x is T` is `true` when the value of `x` belongs to `T`. `T` is a name from the `is` column of the
 table of Kinds (section 4), written without type arguments, because the runtime has only tags and
-kinds to look at: a primitive kind, `null`, `void`, `Bytes`, `Array`, `Map`, `Set`, `func`, a named
-record or primitive type, a time type, or `Regex.Pattern`. An alias is not accepted. With
+kinds to look at: a primitive kind, `null`, `void`, `Bytes`, `Html`, `Array`, `Map`, `Set`, `func`,
+a named record or primitive type, a time type, or `Regex.Pattern`. An alias is not accepted. With
 `type Id = int | string`, the checker sees `Id` as the union, while the runtime would see a tag no
 value carries. So `x is Id` is a compile error that says to test the members, and a panic in an
 unchecked program.
@@ -1118,6 +1133,236 @@ can only be in a library's top-level initializer. The parser enforces all of thi
 ```ant
 var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
 ```
+
+### HTML expressions
+
+An HTML expression is markup written in code: `<p>Hello, {name}</p>` is a value of the built-in type
+`Html` (section 11), a tree of elements, text, and trusted markup. A string interpolated with
+`{...}` becomes text, which the renderer escapes; an `Html` value is inserted as it is. Where `<`
+begins one is a lexical rule (section 2, Literals).
+
+```ant
+func card(post: Post): Html {
+  <article class="card">
+    <h2>{post.title}</h2>
+    <p>{post.summary}</p>
+  </article>
+}
+```
+
+The feature escapes by default. It does not make every page safe: `Html.unsafe` passes anything
+through, a URL with a safe scheme can still point somewhere hostile, `<meta http-equiv="refresh">`
+and SVG's `<animate attributeName="href" values={...}>` are not checked, and literal text the author
+writes is trusted. Ant does not validate HTML either: content models, such as a `<div>` inside a
+`<p>`, and element or attribute names are the browser's to judge, and a page the browser repairs
+still renders.
+
+**Elements.** An element is a start tag, content, and an end tag that names the same element, or a
+self-closing tag:
+
+```ant
+<p class="lead">Hello, {name}.</p>
+<img src="/logo.png" alt="Ant" />
+```
+
+- A name starts with an ASCII letter and continues with ASCII letters, digits, and `-`, so custom
+  elements such as `my-widget` work. Case is kept as written, for SVG's `foreignObject` element and
+  its `viewBox` attribute. An end tag repeats its start tag's name exactly, so `<div></DIV>` is a
+  syntax error, as are an end tag that names another element, an element never closed, and an end
+  tag with nothing to close.
+- Every fixed list in this section, the void elements, the elements with special content, the
+  attributes that run code, the URL attributes, the boolean attributes, and `key`, is matched
+  ignoring ASCII case, since browsers fold case on HTML names. `<SCRIPT>`, `ONCLICK`, and `Href`
+  follow the same rules as `<script>`, `onclick`, and `href`. The lists follow the WHATWG HTML
+  standard and are named in this section only.
+- A **void element**, one of `area base br col embed hr img input link meta source track wbr`, is
+  written self-closing and renders without the slash: `<br />` gives `<br>`. `<br></br>` is a syntax
+  error. Any other element written self-closing renders with an end tag: `<div />` gives
+  `<div></div>`, which is also what SVG wants for `<circle />`.
+- `xmp`, `plaintext`, `noembed`, and `noframes` are syntax errors: they are obsolete, and their
+  content is raw text a renderer would show escaped. `<iframe>` takes no content, since browsers
+  never show it; write `<iframe src={url} />`. `<noscript>` is an ordinary element.
+- Inside `<svg>` and `<math>`, outside a `<foreignObject>`, the browser parses foreign content,
+  where `<script>` and `<style>` hold ordinary text and `<title>` is an ordinary element. So there
+  `<script>` is a syntax error; `<style>` still takes only literal text, which the renderer escapes
+  rather than writing raw, and `<![CDATA[` in it is a syntax error, since it would reach the CSS as
+  text; and `<title>` may hold elements.
+- `<!--`, `<!doctype`, and `<?` are syntax errors. A comment in markup is `{/* ... */}`, which
+  renders nothing (see White space below). The doctype is written where the page becomes a response.
+
+The element's value is an element node with the name, the attributes, and the children, built from
+left to right: attributes in order, then content in order.
+
+**Text and interpolation.** Between tags, text is written as in an `.html` file. The parser decodes
+it into a string: a character reference such as `&amp;`, `&nbsp;`, or `&#8212;` becomes the
+character it names, so the text node holds `&`, and the renderer escapes it again on the way out.
+
+- A reference is `&`, a name or `#` with decimal digits or `#x` with hexadecimal ones, and `;`. The
+  `;` is required: `&copy=2` is the text `&copy=2`. An `&` that does not begin a reference is a
+  plain `&`.
+- The names are six: `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, and `&nbsp;`. Any other name is a
+  syntax error whose message says to write the character itself or a numeric reference. Source is
+  UTF-8, so a character is written as itself, and only an invisible one needs a number.
+- A numeric reference must name a scalar value other than U+0000, and not one from U+0080 to U+009F,
+  which browsers remap to other characters; `&#0;`, `&#xD800;`, `&#x110000;`, and `&#128;` are
+  syntax errors.
+
+Three characters are special: `<` begins a tag, `{` begins an interpolation, and `}` alone is a
+syntax error. A literal brace is `&#123;` and `&#125;`, or `{"{"}`. Nothing else is: `//` and `/*`
+are text between tags, so `<p>see https://ant.dev</p>` holds the URL.
+
+`{expr}` interpolates any expression; braces nest inside it as in `${...}` of a template string, so
+lambdas and record literals can appear there, and it may span lines. The value goes in by its kind:
+
+| Value    | Becomes                                                    |
+| -------- | ---------------------------------------------------------- |
+| `Html`   | its nodes, unchanged                                       |
+| `string` | a text node                                                |
+| a number | a text node holding `String.from(n)`                       |
+| `void`   | nothing                                                    |
+| an array | each element in order by these rules, nothing between them |
+
+The checker accepts a union of these types, and arrays of them at any depth. Any other type is a
+compile error: `null`, `bool`, a record, a map, a set, a function, and a named primitive type, whose
+rendering as a constructor call would put `UserId("u-1")` on a page; write `{string(id)}`. `null` is
+excluded because a nullable value on a page is usually a case the author has not decided: write the
+decision, `{user?.name ?? "guest"}`, or an `if`. `void` renders nothing so that an `if` without
+`else` is the conditional, and an array renders its elements so that `Array.map` is the loop:
+
+```ant
+<nav>
+  <a href="/">Home</a>
+  {if user != null { <a href="/account">{user.name}</a> }}
+</nav>
+<ul>
+  {Array.map(tasks, { <li>{x.title}</li> })}
+</ul>
+```
+
+**Attributes.** An attribute is one of:
+
+- `name="text"`: literal text. `"` ends it, and character references are decoded as in content.
+  There is no interpolation inside the quotes, so `{` and `}` there are syntax errors whose message
+  points at `name={...}`. Single quotes are not accepted.
+- `name={expr}`: a value. A `string` is the value as it is; a number is `String.from(n)`; `null`
+  leaves the attribute out. A `bool` is accepted only on a boolean attribute (below). Any other type
+  is a compile error.
+- `name` alone: the attribute with an empty value, on any element and under any name.
+- `{...attrs}`: every entry of a map of type `Html.Attributes`, which is
+  `Map[string, string | bool | null]`, in the map's order, as if each were written there as
+  `name={value}`.
+
+A name starts with an ASCII letter or `_` and continues with letters, digits, `-`, `_`, `:`, and
+`.`, so `data-id`, `aria-label`, `hx-get`, and `xlink:href` work. A name written twice on one
+element, compared ignoring ASCII case, is a syntax error. `key` is reserved: `key="..."` and
+`key={...}` are syntax errors, so that a later client renderer can give it the meaning every
+framework gives it.
+
+The **boolean attributes** are `allowfullscreen`, `async`, `autofocus`, `autoplay`, `checked`,
+`controls`, `default`, `defer`, `disabled`, `formnovalidate`, `hidden`, `inert`, `ismap`,
+`itemscope`, `loop`, `multiple`, `muted`, `nomodule`, `novalidate`, `open`, `playsinline`,
+`readonly`, `required`, `reversed`, and `selected`. On these `true` gives the empty value and
+`false` leaves the attribute out; a string works on them too, as `hidden="until-found"` needs. On
+any other name a `bool` is a compile error, since many attributes take the words and mean the
+opposite of what presence would: `aria-hidden` is hidden only when it is `"true"`. Write the string,
+`aria-hidden={if open { "false" } else { "true" }}`. A custom attribute that is present or absent is
+`name={if on { "" } else { null }}`.
+
+`class={...}` also takes an array of `string`, `null`, and `void`: the non-empty strings joined with
+one space, the rest dropped, and the attribute left out when nothing remains.
+
+A spread is checked when the element is built, since its names are data: a name that is not an
+attribute name by the rule above, one that runs code (below), or `key` panics, and so does a `bool`
+on a name that is not a boolean attribute. URL attributes are checked as when written. Where a
+spread and another attribute, or two spreads, give one name, compared ignoring ASCII case, the later
+value wins and the attribute keeps the earlier position, as a later field wins in a record literal.
+Names are resolved first and `null` values dropped after, so a later `null` removes an attribute:
+`<button disabled {...Map{ disabled: null }} />` has no `disabled`.
+
+```ant
+<input type="checkbox" name={field} checked={task.done} disabled />
+<li class={["task", if x.done { "done" }]}>{x.title}</li>
+
+func button(label: string, attrs: Html.Attributes = Map{}): Html {
+  <button class="btn" {...attrs}>{label}</button>
+}
+```
+
+**Unsafe contexts.** Escaping makes a string safe as text and as a quoted attribute value, not as
+JavaScript, as CSS, or as a URL. These rules take those cases away from interpolation, by name:
+
+1. `<script>` and `<style>` hold literal text up to their end tag. Neither `{` nor `<` is special
+   inside, so JavaScript and CSS are written as in an `.html` file, braces and all. Their attributes
+   follow the ordinary rules, so `<script src={bundle} defer />` works.
+2. Attributes that run code take only literal text: every name that starts with `on`, `style`, and
+   `srcdoc`. `onclick={handler}` and `style={css}` are syntax errors whose message names the
+   alternative: a `data-` attribute that a script reads, or a class.
+3. The URL attributes are `action`, `archive`, `background`, `cite`, `classid`, `codebase`, `data`,
+   `formaction`, `href`, `icon`, `longdesc`, `manifest`, `poster`, `profile`, `src`, `usemap`, and
+   `xlink:href`. An interpolated value is checked when the element is built. A relative URL, or one
+   whose scheme is `http`, `https`, `mailto`, or `tel`, is kept; any other scheme, `javascript:` and
+   `data:` among them, is replaced by `about:invalid#ant`, and the page still renders. The value is
+   read as the URL standard reads it: leading and trailing U+0000 to U+0020 removed, every tab and
+   line break removed, then a scheme is `[A-Za-z][A-Za-z0-9+.-]*` followed by `:` before the first
+   `/`, `?`, or `#`, compared ignoring case. A value with no scheme is relative. `srcset` and
+   `imagesrcset` hold a list: the value is split at commas into candidates, each a URL and an
+   optional descriptor such as `2x` after white space; each URL is checked as above, and the
+   descriptors are kept as written. Literal text is never checked.
+4. `<title>` and `<textarea>`, outside `<svg>` and `<math>`, hold text only: their content may
+   interpolate strings, numbers, `void`, and arrays of them, but not `Html`, and a child element is
+   a syntax error.
+
+Data reaches a script through an attribute, which is escaped like any other:
+`<div id="chart" data-points={Json.stringify(points)}></div>`.
+
+**Fragments.** `<>...</>` is an `Html` value with no element around it. It holds content like an
+element and takes no attributes. It is how a function returns several siblings. A fragment is not a
+node: inserting one into content splices its nodes in, and `<></>` is the empty `Html`.
+
+**White space.** Inside content, outside `<pre>`, `<textarea>`, `<script>`, and `<style>`:
+
+- A run of white space on one line is kept as written.
+- A run of white space that contains a line break is removed when it is the first or the last thing
+  in the content, and otherwise becomes one space.
+- An interpolation that holds only comments is removed first, and the runs on either side of it then
+  count as one run.
+
+The rule applies to the characters as written, before references are decoded, so `&#32;` and `&#10;`
+survive. It follows the browser's habit of showing white space as one space, but it is applied when
+the expression is parsed, so the source is indented to match the code around it and the output
+carries no indentation. A line break between a word and a tag stays a space:
+
+```ant
+<ul>
+  <li>a</li>
+  <li>b</li>
+</ul>
+// <ul><li>a</li> <li>b</li></ul>
+```
+
+Inside `<pre>` and `<textarea>` the text is kept exactly, in every descendant too, with one
+exception that HTML makes: a line break right after the `<pre>` or `<textarea>` start tag belongs to
+the tag and is dropped, as the browser drops it. Inside `<script>` and `<style>` the text is kept
+exactly.
+
+**Components.** A component is a function that returns `Html`. Parameters are its properties, named
+arguments name them, defaults make them optional, and a parameter of type `Html` takes children:
+
+```ant
+func card(title: string, children: Html, footer: Html | null = null): Html {
+  <section class="card">
+    <h2>{title}</h2>
+    {children}
+    {if footer != null { <footer>{footer}</footer> }}
+  </section>
+}
+
+var page = card(title: "Tasks", children: <ul>{Array.map(tasks, { <li>{x}</li> })}</ul>)
+```
+
+**Statements.** An HTML expression is evaluated for its value. One that is a statement of a block
+but not its last item, or a statement of a script's top level, whose value is discarded too (section
+10, Scripts), is a syntax error. Two siblings at the end of a function need a fragment around them.
 
 ## 6. Functions
 
@@ -1860,12 +2105,12 @@ is initialized, and the program exits with `0`.
 The standard library is a set of namespaces in the prelude. Each is a plain record of functions and
 types, exactly like an imported module (section 10), so a type a namespace declares is written
 through it, as in `Http.Response`; none has methods or state. `Array`, `Map`, and `Set` are the
-functions of the three built-in container types, `Bytes` those of binary data, and `Result`,
-`Random`, and the sync types are types with functions declared on them (section 6); all read as
-`Name.function`, like a namespace. Every function takes its subject as the first argument so it
-composes with `|`. This section is the complete core library. The I/O namespaces `File`, `Http`,
-`Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto` are policy rather than
-language and live in `stdlib.md`.
+functions of the three built-in container types, `Bytes` those of binary data, `Html` those of
+markup, and `Result`, `Random`, and the sync types are types with functions declared on them
+(section 6); all read as `Name.function`, like a namespace. Every function takes its subject as the
+first argument so it composes with `|`. This section is the complete core library. The I/O
+namespaces `File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and
+`Crypto` are policy rather than language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
 carry a default, which a call omits or names as for a declared function (section 6). A callback
@@ -2207,7 +2452,7 @@ an escape inside quotes until then.
 
 `String.from` renders any value. `print`, `println` and template strings use it, so this is the
 format a program's output has. It is the only function the language calls implicitly, and only
-inside template strings.
+inside template strings and on a number in an HTML expression (section 5).
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
   value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
@@ -2229,6 +2474,7 @@ inside template strings.
 - A named primitive renders as its constructor call, `UserId("u-1")`.
 - `Bytes` renders as `Bytes(89 50 4e 47)`, two lower-case hexadecimal digits per byte separated by
   spaces, and `Bytes()` when empty.
+- `Html` renders as its markup (see Html), and an empty one as `<></>` inside a container.
 - Functions render as `func`, a constructor and a tag as their type's name, sync objects,
   generators, handles, and listeners as their type's name, `Mutex`, `Random`, `File.Handle`, or
   `Net.Listener`, and time values as `stdlib.md` says: an RFC 9557 string, or a zone's identifier.
@@ -2267,6 +2513,53 @@ two bytes `c2 89`.
 bytes and its reader would have to know which encoding to undo; a program writes
 `Encoding.toBase64(b)` or `Encoding.toHex(b)` into the JSON instead. Since neither side can change,
 `Bytes.slice`, `String.toBytes`, and `String.fromBytes` need not copy the bytes.
+
+### Html
+
+`Html` is the value of an HTML expression (section 5): an immutable list of nodes, each an element,
+a text node, or a raw node of trusted markup. The list is kept in one normal form, so that two
+values built differently but meaning the same are equal: fragments are spliced in, `void` leaves
+nothing, adjacent text nodes are joined, and an empty text node is dropped. `<p>{"a"}{"b"}</p>` and
+`<p>ab</p>` are one value. `==` compares the nodes, so `Html` serves as a map key, and a test
+compares a component's output against an HTML expression: `assert(badge(3) == <b>3</b>)`.
+
+```
+type Html.Node = Html.Element | Html.Text | Html.Raw
+type Html.Element = { name: string, attributes: Array[Html.Attribute], children: Html }
+type Html.Attribute = { name: string, value: string }
+type Html.Text = { text: string }
+type Html.Raw = { markup: string }
+type Html.Attributes = Map[string, string | bool | null]     // what an attribute spread takes
+
+Html.unsafe(s: string): Html              // s as markup, unescaped
+Html.nodes(h: Html): Array[Html.Node]     // the top-level nodes, in order
+```
+
+`Html.unsafe(s)` returns a raw node holding `s`, which the renderer writes unescaped. It is the one
+way to make markup from a string, so a search for `Html.unsafe` finds every place a string becomes
+markup. Its use is markup a program trusts: the output of a sanitizer or a Markdown renderer, or an
+SVG file shipped with the program. A raw node is opaque: `Html.unsafe("<b>x</b>")` renders as
+`<b>x</b>` does but is not `==` to it. `Html` has no constructor and no literal besides the HTML
+expression.
+
+`Html.nodes` reads a value one level at a time: an element's `children` is an `Html`, read with
+`Html.nodes` again. Names are as written, attributes in their final order, a boolean attribute that
+is on with the empty value, and text decoded. The records are copies. No function builds `Html` from
+records: `Html.Element{ name: "script", ... }` is a record, not markup. `Html.Node` is a closed
+union, and a node kind added later will break exhaustive tests over it, on purpose.
+
+`String.from(h)` renders the markup, so `println(page)` prints it and a template string embeds it:
+`` `<!doctype html>${page}` `` is a response body. An element renders as its start tag, its
+children, and its end tag, none for a void element. Attributes are written in order, each after one
+space, a value in double quotes and an empty value as the bare name. In a text node and an attribute
+value, `&`, `<`, `>`, `"`, and `'` are written `&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&#39;`. A raw
+node and the text of `<script>` and `<style>` are written as they are, which is safe because the
+parser allows those only literal text, except that `<style>` inside `<svg>` or `<math>` is escaped
+as text is. When the text of a `<pre>` or `<textarea>` starts with a line break, one more is written
+after the start tag, which the browser drops. An empty `Html` renders as the empty string, and as
+`<></>` inside a container. The same tree gives the same bytes in every implementation.
+
+`len`, indexing, and `for` do not take `Html`, and `Json.stringify` panics on it (`stdlib.md`).
 
 ### Regex
 
@@ -2612,14 +2905,15 @@ of each kind holds:
 | sync                             | an object whose state only the functions of its type change (section 11, Synchronization)                                                                                                                                                                                                                      |
 | time                             | the tag of its type plus the fields that type fixes (`stdlib.md`)                                                                                                                                                                                                                                              |
 | bytes                            | an immutable sequence of bytes                                                                                                                                                                                                                                                                                 |
+| html                             | an immutable list of nodes: elements, each a name, attributes, and a list of nodes; text; and raw markup                                                                                                                                                                                                       |
 | regex                            | the tag of `Regex.Pattern` plus the normalized source and the sorted flags; one is built for each literal when its module is loaded                                                                                                                                                                            |
 | random                           | four `uint64` words that each draw changes (section 11, Random)                                                                                                                                                                                                                                                |
 | resource                         | an open file, stream, or connection, or a listening socket, which its type's `close` ends                                                                                                                                                                                                                      |
 
 Arrays, maps, sets, records, functions, sync objects, generators, and resources are references: a
 variable holds a reference, and copying the variable copies the reference. Numbers, booleans,
-strings, `Bytes`, `null`, `void`, tags, time values, and patterns are immutable, so for them the
-distinction never shows.
+strings, `Bytes`, `Html`, `null`, `void`, tags, time values, and patterns are immutable, so for them
+the distinction never shows.
 
 ### Names and scopes
 
@@ -2659,6 +2953,14 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   position. The result is a new map.
 - **Array literal `[ ... ]`.** Elements evaluate in order; a spread appends every element of a value
   that must be an array. The result is a new array.
+- **HTML expression.** Attributes and then content evaluate left to right. Literal text and
+  attribute text are the strings the parser decoded. In content, a string or a number becomes a text
+  node, `void` nothing, an array its elements in order by the same rule, and an `Html` its nodes;
+  any other kind panics, as does an `Html` in `<title>` or `<textarea>` outside `<svg>` and
+  `<math>`. An attribute value must be a string, a number, or `null`, a `bool` on a boolean
+  attribute, or an array on `class` (section 5); a spread must be a map whose keys are strings and
+  whose names pass the checks of section 5. A URL attribute's string is checked when the node is
+  built. The result is a new `Html` in normal form (section 11).
 - **Variable.** The value bound to the name; a name no scope binds panics.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace
   is a record, so this rule also covers `Array.map` and `Geometry.Point`; a tag and a constructor
@@ -2810,35 +3112,36 @@ with a report. The program ends when the script body ends, whatever other gorout
 The complete list. The checker rules out every panic in the middle column, so a checked program can
 only panic in the ways the last column lists, which depend on values known at run time.
 
-| Operation                                         | Panics when (ruled out by the checker)                                                                                                                                                                                                                | Panics when (possible in a checked program)                                                                                                                                                                                     |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `+ - * / %`, `< <= > >=`, unary `-`               | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                      |                                                                                                                                                                                                                                 |
-| `!`, `&&`, `\|\|`, `if`, `while`                  | an operand or condition is not a `bool`                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
-| integer `+ - *`, compound assignment, `Array.sum` |                                                                                                                                                                                                                                                       | the result does not fit the kind                                                                                                                                                                                                |
-| integer `/`, `%`                                  |                                                                                                                                                                                                                                                       | the divisor is zero                                                                                                                                                                                                             |
-| `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                       | the count is negative or not below the operand's width                                                                                                                                                                          |
-| numeric conversion                                |                                                                                                                                                                                                                                                       | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                              |
-| `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                   |                                                                                                                                                                                                                                 |
-| `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, `Bytes`, or a channel                                                                                                                                                        |                                                                                                                                                                                                                                 |
-| `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                              |                                                                                                                                                                                                                                 |
-| `a[i]`, `a[i] = v`                                | `a` is not an array or a map, nor `Bytes` for a read                                                                                                                                                                                                  | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                      |
-| call                                              | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled |                                                                                                                                                                                                                                 |
-| record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                               |                                                                                                                                                                                                                                 |
-| array literal                                     | a spread operand is not an array                                                                                                                                                                                                                      |                                                                                                                                                                                                                                 |
-| `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                 |                                                                                                                                                                                                                                 |
-| `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                           | a sequence calls `yield` on another goroutine, after it returned `false`, or after the loop ended; a sequence returns after catching a panic of the body; the loop goes on or ends after a call of `yield` on another goroutine |
-| destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                           | the array has fewer elements than the fixed positions                                                                                                                                                                           |
-| variable                                          | no scope binds the name                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
-| `_`                                               | read                                                                                                                                                                                                                                                  |                                                                                                                                                                                                                                 |
-| library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                     | the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                                                      |
-| `var`                                             |                                                                                                                                                                                                                                                       | read or assigned before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                                                                                     |
-| `panic`                                           |                                                                                                                                                                                                                                                       | always                                                                                                                                                                                                                          |
-| any call                                          |                                                                                                                                                                                                                                                       | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                          |
-| a count                                           |                                                                                                                                                                                                                                                       | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold                          |
-| a result size                                     |                                                                                                                                                                                                                                                       | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                                                                                                   |
-| `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                      |                                                                                                                                                                                                                                 |
-| `select`                                          |                                                                                                                                                                                                                                                       | a send clause is chosen on a closed channel                                                                                                                                                                                     |
-| `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                 | never                                                                                                                                                                                                                           |
+| Operation                                         | Panics when (ruled out by the checker)                                                                                                                                                                                                                                                         | Panics when (possible in a checked program)                                                                                                                                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `+ - * / %`, `< <= > >=`, unary `-`               | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                                                               |                                                                                                                                                                                                                                 |
+| `!`, `&&`, `\|\|`, `if`, `while`                  | an operand or condition is not a `bool`                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
+| integer `+ - *`, compound assignment, `Array.sum` |                                                                                                                                                                                                                                                                                                | the result does not fit the kind                                                                                                                                                                                                |
+| integer `/`, `%`                                  |                                                                                                                                                                                                                                                                                                | the divisor is zero                                                                                                                                                                                                             |
+| `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                                                                | the count is negative or not below the operand's width                                                                                                                                                                          |
+| numeric conversion                                |                                                                                                                                                                                                                                                                                                | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                              |
+| `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                 |
+| `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, `Bytes`, or a channel                                                                                                                                                                                                 |                                                                                                                                                                                                                                 |
+| `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                                                                       |                                                                                                                                                                                                                                 |
+| `a[i]`, `a[i] = v`                                | `a` is not an array or a map, nor `Bytes` for a read                                                                                                                                                                                                                                           | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                      |
+| call                                              | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled                                          |                                                                                                                                                                                                                                 |
+| record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                                                                        |                                                                                                                                                                                                                                 |
+| array literal                                     | a spread operand is not an array                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
+| `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                                          |                                                                                                                                                                                                                                 |
+| `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                                                                    | a sequence calls `yield` on another goroutine, after it returned `false`, or after the loop ended; a sequence returns after catching a panic of the body; the loop goes on or ends after a call of `yield` on another goroutine |
+| destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                                                                    | the array has fewer elements than the fixed positions                                                                                                                                                                           |
+| variable                                          | no scope binds the name                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
+| `_`                                               | read                                                                                                                                                                                                                                                                                           |                                                                                                                                                                                                                                 |
+| library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                                                              | the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                                                      |
+| `var`                                             |                                                                                                                                                                                                                                                                                                | read or assigned before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                                                                                     |
+| `panic`                                           |                                                                                                                                                                                                                                                                                                | always                                                                                                                                                                                                                          |
+| any call                                          |                                                                                                                                                                                                                                                                                                | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                          |
+| a count                                           |                                                                                                                                                                                                                                                                                                | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold                          |
+| a result size                                     |                                                                                                                                                                                                                                                                                                | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                                                                                                   |
+| HTML expression                                   | a content value is not a string, a number, `void`, `Html`, or an array of them; an `Html` in `<title>` or `<textarea>`; an attribute value of another kind; a written `bool` on an attribute that is not boolean; a spread operand that is not a map of strings to strings, `bool`s, or `null` | a spread gives a name that is not an attribute name, runs code, or is `key`, or a `bool` to an attribute that is not boolean                                                                                                    |
+| `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
+| `select`                                          |                                                                                                                                                                                                                                                                                                | a send clause is chosen on a closed channel                                                                                                                                                                                     |
+| `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                                                          | never                                                                                                                                                                                                                           |
 
 ## 13. Example
 

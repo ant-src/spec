@@ -625,10 +625,11 @@ surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text 
 infinities, which JSON cannot carry, as `null`. A value that contains itself has no JSON form, so
 `Json.stringify` panics with `cyclic value` where `String.from` would print `...`. Nor has `Bytes`,
 which JSON carries only in an encoding its reader must know, so `Json.stringify` panics on it and a
-program writes `Encoding.toBase64(b)` in its place. Nor has a function, `void`, a type, or a
-reference such as a channel, a `Random`, a `Mutex`, or a `File.Handle`, whose state JSON cannot
-carry, and `Json.stringify` panics on each wherever it is in the value, with a message that names
-it, such as `Channel has no JSON form`.
+program writes `Encoding.toBase64(b)` in its place. Nor has `Html`, which a program renders with
+`String.from` first. Nor has a function, `void`, a type, or a reference such as a channel, a
+`Random`, a `Mutex`, or a `File.Handle`, whose state JSON cannot carry, and `Json.stringify` panics
+on each wherever it is in the value, with a message that names it, such as
+`Channel has no JSON form`.
 
 A map becomes an object, and a JSON property name is a string, so every key of a map must be a
 `string` or a named primitive over `string`, written without its tag as its values are:
