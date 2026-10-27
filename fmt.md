@@ -85,9 +85,10 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 ### 4.1 Files
 
 - The output is UTF-8 with `\n` line endings. A `\r\n` or a lone `\r`, the other line breaks of
-  section 2, becomes `\n`, in a comment too, except inside a template string, whose text is kept
-  byte for byte.
-- No line ends in spaces or tabs, except inside the text of a template string.
+  section 2, becomes `\n`, in a comment too, except inside a template string or the markup of an
+  HTML expression, whose text is kept byte for byte (4.9, 4.10).
+- No line ends in spaces or tabs, except inside the text of a template string or the markup of an
+  HTML expression.
 - The file starts with its first token or comment, and ends with exactly one `\n`.
 - Indentation is two spaces per level and never a tab, except on a line that starts inside a
   template string, whose text and interpolations keep their indentation as written (4.9). Any other
