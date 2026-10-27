@@ -290,10 +290,10 @@ first.
 
 A `type` declaration is the one thing the interpreter keeps of the type language. It binds the name
 to a fresh tag, or, for a named primitive type, to a constructor function that carries one. A record
-tag also keeps the names of its fields in declaration order; the rest of the body is discarded (see
-Type declarations). Every `type` declaration binds a tag or a constructor, even an alias, but only
-record literals, constructor calls, and `is` tests use tags, and the checker allows a literal head
-only on a record type.
+tag also keeps the names of its fields in declaration order and the default of each field that has
+one; the rest of the body is discarded (see Type declarations and Field defaults). Every `type`
+declaration binds a tag or a constructor, even an alias, but only record literals, constructor
+calls, and `is` tests use tags, and the checker allows a literal head only on a record type.
 
 ### Primitives
 
@@ -359,11 +359,12 @@ arguments are never written there. A bare identifier is a shorthand entry: `Poin
 
 The name is part of the value: a literal stores the tag of its head in the record. The interpreter
 keeps the field names so that `ant run` can reject a literal with a missing or unknown field and
-render fields in declaration order; it keeps no field type. A tag is compared only by identity, and
-a tag reached through an import or an alias is the same tag. The checker identifies the type by the
-same tag, so two declarations with the same fields are different types. `type B = A` is a compile
-error when `A` is a record or named primitive type, since it would mint a second tag for one type.
-Declare the fields, or the base type, again instead.
+render fields in declaration order, and the field defaults so that it can fill in an omitted field;
+it keeps no field type. A tag is compared only by identity, and a tag reached through an import or
+an alias is the same tag. The checker identifies the type by the same tag, so two declarations with
+the same fields are different types. `type B = A` is a compile error when `A` is a record or named
+primitive type, since it would mint a second tag for one type. Declare the fields, or the base type,
+again instead.
 
 A record has no dynamic access: `p["x"]` is a compile error, and `for` does not iterate a record.
 When the keys are data rather than part of the type, use a `Map`.
@@ -371,7 +372,8 @@ When the keys are data rather than part of the type, use a `Map`.
 A named record type accepts only values that carry its tag. An anonymous record type, written in an
 annotation as `{ name: string }`, accepts any record with at least those fields, whatever its tag.
 This is structural width subtyping, and it is how a function takes "anything with a name". A record
-literal must list exactly the fields of its named type, which catches typos.
+literal must give every field of its named type that has no default (see Field defaults), and an
+entry for a field the type does not list is a compile error, which catches typos.
 
 ```ant
 type Named = { name: string }
@@ -415,6 +417,91 @@ p == Point{ x: 5.0, y: 2.0 }      // true
 Record.same(p, q)                 // true
 Record.same(p, Point{ ...p })     // false
 ```
+
+### Field defaults
+
+A field of a record type that a `type` declaration declares may give a default after `=`, and a
+record literal may leave out any field that has one. A field without a default must still be given.
+There are no zero values: a field gets a default only by declaring one. A default belongs to
+literals only and changes nothing about the type: every value has every field, so reading
+`s.workers` needs no narrowing, an anonymous record type `{ workers: int }` still accepts a
+`Server`, and `==`, `String.from`, `Json.stringify`, and destructuring see every field.
+
+```ant
+type Server = {
+  addr: string,
+  workers: int = 4,
+  verbose: bool = false,
+  tags: Array[string] = [],
+}
+
+var s = Server{ addr: ":8080" }                 // workers: 4, verbose: false, tags: []
+var t = Server{ addr: ":9090", verbose: true }
+var u = Server{ workers: 8 }                    // compile error: missing field addr
+```
+
+Only the record body of a `type` declaration takes defaults. A default in an anonymous record type,
+in a record type nested in another type, or in a record that is a member of a union is a syntax
+error, since no literal could name the record it would belong to.
+
+A literal evaluates its entries and spreads first, as in Records. Then each field still without a
+value takes its default, in declaration order. A default is evaluated only when it is used, and
+afresh each time, as a parameter default is per call: `tags` above is a new array in each `Server`,
+while `tags: Array[string] = shared` reads the variable each time and shares the one array it holds.
+A field that an entry or a spread gives never evaluates its default, so a spread converts to a
+record type with more fields when the extra ones have defaults: with `z: float64 = 0.0` declared,
+`Point3{ ...p }` fills `z`.
+
+A default is evaluated in the scope of its declaration, not of the literal. It sees the declaring
+module's top-level names, its imports, the prelude, and the types visible where its type is
+declared, local types included, since each of those has one tag for the whole run (see Type
+declarations). It does not see the other fields of the record. A default of a local type may not
+name a variable, a function bound with `var`, or a parameter of an enclosing block or function,
+since the one tag cannot close over the variables of one run of the block; that is a syntax error. A
+default lies outside every boundary (section 5), as a library's top-level initializer does, so
+`return`, `try`, `break`, `continue`, and `defer` in it, outside a lambda, are syntax errors too.
+
+```ant
+// config.ant
+var defaultPort = 8080
+
+export type Config = {
+  host: string,
+  port: int = defaultPort,
+  retries: int = 3,
+  headers: Map[string, string] = Map{},
+}
+```
+
+A module that imports `Config` fills in its defaults from `config.ant`'s scope:
+
+```ant
+import "./config.ant" { Config }
+
+var c = Config{ host: "example.com" }            // port: 8080, read from config.ant's scope
+var d = Config{ ...c, retries: 5 }               // every field from c; no default runs
+c.headers["accept"] = "text/html"                // d.headers is the same map as c.headers
+var e = Config{ host: "example.com" }            // e.headers is a new, empty map
+```
+
+The checker checks each default against its field's type as the expected type, so `[]`, `Map{}`, and
+`null` need no annotation. In a generic record the type parameters are rigid in a default, as in a
+generic function's body: `type Bag[T] = { items: Array[T] = [] }` is fine for every `T`, and
+`type Box[T] = { value: T = 0 }` is a compile error. An omitted field takes no part in solving a
+literal's type arguments, so `Bag{}` fixes nothing and needs an expected type, as `[]` does:
+`var b: Bag[int] = Bag{}`.
+
+A default runs at the literal, so a failure in it shows there. One that reads a top-level `var` of
+its module before that variable's initializer has run panics, as a function that reads it would
+(section 10). One that builds its own type, `type Node = { next: Node | null = Node{} }`, recurses:
+evaluating a default counts as a call, so it panics when the call depth exceeds the runtime's limit
+(section 12, Runtime panics).
+
+A default suits a field that callers set independently of the others: a timeout, a flag, a list that
+starts empty. Fields that must agree, such as `min` and `max`, stay required, or the type gets a
+function that checks them together, since a caller who sets only one could break the invariant
+without writing either value wrong. A field every caller should decide stays without a default, so
+that adding it makes every literal fail to check until someone does.
 
 ### Named primitive types
 
@@ -739,9 +826,11 @@ As a statement it is `void`. Each declaration has one tag for the whole run, mad
 time the block runs, so every call of `tally` below builds values of one type, which `==` compares
 as usual. Its body may not mention a type parameter of the enclosing function, which would make the
 one tag stand for a different type in each call, and its name may not be one, which is a syntax
-error like shadowing a prelude name. A local type is never exported and has no functions declared on
-it, since `export` and `func` appear only at the top level. Its values may still leave the block, as
-the inferred return type of `origin` below, and code outside then uses them without naming the type.
+error like shadowing a prelude name. For the same reason its field defaults may name the block's
+types but none of its variables (see Field defaults). A local type is never exported and has no
+functions declared on it, since `export` and `func` appear only at the top level. Its values may
+still leave the block, as the inferred return type of `origin` below, and code outside then uses
+them without naming the type.
 
 ```ant
 func tally(words: Array[string]): Array[string] {
@@ -1128,7 +1217,8 @@ five boundaries. `return` leaves the innermost one; inside a `go` or `defer` blo
 value, since neither has a result. `break` and `continue` target the innermost loop inside the same
 boundary, so a `break` in a lambda or a `go` block cannot leave a loop outside it. A `break` or
 `continue` with no loop to target is a syntax error, as is a `return` outside any boundary, which
-can only be in a library's top-level initializer. The parser enforces all of this.
+can only be in a library's top-level initializer or a field default (section 4). The parser enforces
+all of this.
 
 ```ant
 var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
@@ -1634,14 +1724,14 @@ enclosing function, typed by that function's return type. The enclosing function
 return a `Result` whose error type accepts `E`, or such a `Result` or `null`, since `Err[E]` is
 assignable to `Result[U, E] | null` too; an inferred return type must come out one of the two. A
 `go` or `defer` block has no result, so `try` directly inside one is a compile error. Outside every
-boundary (section 5), in a library's top-level initializer outside a lambda, there is no function to
-return from, so `try` there is a syntax error, as `return` is; in a script's top-level code it
-returns from the script body (section 10); a parameter default evaluates in the called function,
-which a `try` in it returns from. `try` reads only the outer tag, so on an `Ok[Ok[int]]` it yields
-the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates `null` (section 7), and
-a `Result[T, E] | null` operand needs that first. An operand of type parameter type is a compile
-error, since it is not a `Result`; under erasure a second meaning chosen by static type would be
-unsound.
+boundary (section 5), in a library's top-level initializer or a field default outside a lambda,
+there is no function to return from, so `try` there is a syntax error, as `return` is; in a script's
+top-level code it returns from the script body (section 10); a parameter default evaluates in the
+called function, which a `try` in it returns from. `try` reads only the outer tag, so on an
+`Ok[Ok[int]]` it yields the inner `Ok[int]`. It has no nullable form: `x ?? return null` propagates
+`null` (section 7), and a `Result[T, E] | null` operand needs that first. An operand of type
+parameter type is a compile error, since it is not a `Result`; under erasure a second meaning chosen
+by static type would be unsound.
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
@@ -2891,24 +2981,24 @@ Every value has a kind, fixed when the value is created. The table of Kinds in s
 types have which kind, how `==` compares them, and how they render; this one says only what a value
 of each kind holds:
 
-| Kind                             | Values                                                                                                                                                                                                                                                                                                         |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the ten numeric kinds            | a number carries its width, because overflow and conversion depend on it                                                                                                                                                                                                                                       |
-| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                                                                                |
-| array                            | a growable sequence of values                                                                                                                                                                                                                                                                                  |
-| map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                                                                                           |
-| set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                                                                                      |
-| record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                                                                                    |
-| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                                                                                    |
-| func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)                                                                  |
-| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order; every tag carries the functions declared on its type as fields (section 6) |
-| sync                             | an object whose state only the functions of its type change (section 11, Synchronization)                                                                                                                                                                                                                      |
-| time                             | the tag of its type plus the fields that type fixes (`stdlib.md`)                                                                                                                                                                                                                                              |
-| bytes                            | an immutable sequence of bytes                                                                                                                                                                                                                                                                                 |
-| html                             | an immutable list of nodes: elements, each a name, attributes, and a list of nodes; text; and raw markup                                                                                                                                                                                                       |
-| regex                            | the tag of `Regex.Pattern` plus the normalized source and the sorted flags; one is built for each literal when its module is loaded                                                                                                                                                                            |
-| random                           | four `uint64` words that each draw changes (section 11, Random)                                                                                                                                                                                                                                                |
-| resource                         | an open file, stream, or connection, or a listening socket, which its type's `close` ends                                                                                                                                                                                                                      |
+| Kind                             | Values                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the ten numeric kinds            | a number carries its width, because overflow and conversion depend on it                                                                                                                                                                                                                                                                                  |
+| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                                                                                                                           |
+| array                            | a growable sequence of values                                                                                                                                                                                                                                                                                                                             |
+| map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                                                                                                                                      |
+| set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                                                                                                                                 |
+| record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                                                                                                                               |
+| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                                                                                                                               |
+| func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)                                                                                                             |
+| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order and the default of each field that has one; every tag carries the functions declared on its type as fields (section 6) |
+| sync                             | an object whose state only the functions of its type change (section 11, Synchronization)                                                                                                                                                                                                                                                                 |
+| time                             | the tag of its type plus the fields that type fixes (`stdlib.md`)                                                                                                                                                                                                                                                                                         |
+| bytes                            | an immutable sequence of bytes                                                                                                                                                                                                                                                                                                                            |
+| html                             | an immutable list of nodes: elements, each a name, attributes, and a list of nodes; text; and raw markup                                                                                                                                                                                                                                                  |
+| regex                            | the tag of `Regex.Pattern` plus the normalized source and the sorted flags; one is built for each literal when its module is loaded                                                                                                                                                                                                                       |
+| random                           | four `uint64` words that each draw changes (section 11, Random)                                                                                                                                                                                                                                                                                           |
+| resource                         | an open file, stream, or connection, or a listening socket, which its type's `close` ends                                                                                                                                                                                                                                                                 |
 
 Arrays, maps, sets, records, functions, sync objects, generators, and resources are references: a
 variable holds a reference, and copying the variable copies the reference. Numbers, booleans,
@@ -2944,9 +3034,11 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   yields the pattern built from it when its module was loaded, the same value at every evaluation.
 - **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag.
   Entries evaluate in order; a spread copies every field of a value that must be a record; a later
-  entry replaces an earlier one with the same name. Every name must be one the tag lists, and every
-  name the tag lists must have received a value. The result is a new record with that tag and those
-  fields, in the tag's order whatever order the literal wrote them.
+  entry replaces an earlier one with the same name. Every name must be one the tag lists. Then each
+  field the tag lists that has received no value takes its default, evaluated in declaration order
+  in the scope of the type's declaration, as a call from the literal (section 4, Field defaults); a
+  field without a default must have received a value. The result is a new record with that tag and
+  those fields, in the tag's order whatever order the literal wrote them.
 - **Map literal `Map{ ... }`.** A key that is a single word, an identifier or a keyword, is the
   string of that word, decided by the parser (section 4); other keys and all values evaluate in
   order; a later entry whose key is `==` to an earlier one replaces its value and keeps its
@@ -3125,7 +3217,7 @@ only panic in the ways the last column lists, which depend on values known at ru
 | `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                                                                       |                                                                                                                                                                                                                                 |
 | `a[i]`, `a[i] = v`                                | `a` is not an array or a map, nor `Bytes` for a read                                                                                                                                                                                                                                           | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                      |
 | call                                              | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled                                          |                                                                                                                                                                                                                                 |
-| record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value                                                                                                                        |                                                                                                                                                                                                                                 |
+| record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value and has no default                                                                                                     |                                                                                                                                                                                                                                 |
 | array literal                                     | a spread operand is not an array                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
 | `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                                          |                                                                                                                                                                                                                                 |
 | `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                                                                    | a sequence calls `yield` on another goroutine, after it returned `false`, or after the loop ended; a sequence returns after catching a panic of the body; the loop goes on or ends after a call of `yield` on another goroutine |
