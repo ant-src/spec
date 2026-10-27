@@ -459,7 +459,8 @@ declarations). It does not see the other fields of the record. A default of a lo
 name a variable, a function bound with `var`, or a parameter of an enclosing block or function,
 since the one tag cannot close over the variables of one run of the block; that is a syntax error. A
 default lies outside every boundary (section 5), as a library's top-level initializer does, so
-`return`, `try`, `break`, `continue`, and `defer` in it, outside a lambda, are syntax errors too.
+`return` and `try` in it, outside a lambda, are syntax errors too, as are a `break` or `continue`
+outside a loop of its own and a `defer` outside a block of its own.
 
 ```ant
 // config.ant
