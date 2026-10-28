@@ -1,7 +1,8 @@
 # Ant Standard Library: I/O Namespaces
 
 Companion to `ant-lang.md`. The core library, which every program needs, is section 11 of the
-specification. The namespaces here talk to the world outside the program, and they follow one rule:
+specification. The namespaces here, and `Cmd`, a type with functions that reads like one, talk to
+the world outside the program, and they follow one rule:
 every operation that can fail returns a `Result` with `Error` as the error type, and nothing here
 panics on bad input, with these exceptions. `Json.stringify` panics on a value that contains itself
 or one with no JSON form, and `Time`, `Csv`, and `Crypto`, which are computation rather than I/O,
@@ -546,8 +547,6 @@ values are immutable and serve as map keys.
 ## Os
 
 ```
-type Output = { status: int, stdout: string, stderr: string, stdoutBytes: Bytes, stderrBytes: Bytes }
-type Process                          // opaque: a child started by Os.start
 type Pipe = { read: File.Handle, write: File.Handle }
 
 Os.args(): Array[string]              // the arguments after the program path: `ant run main.ant a b` gives ["a", "b"]
@@ -559,124 +558,22 @@ Os.stdin(): File.Handle               // the program's standard input
 Os.stdout(): File.Handle              // its standard output, which print and println write to as well
 Os.stderr(): File.Handle              // its standard error
 Os.interrupt(): Context               // done when the process is interrupted; the same context at every call
-
-Os.run(program: string, args: Array[string] = [], dir: string | null = null,
-       env: Map[string, string] | null = null, ctx: Context | null = null): Result[int, Error]
-                                      // in the foreground, with the program's three streams; Ok of its status
-Os.output(program: string, args: Array[string] = [], dir: string | null = null,
-          env: Map[string, string] | null = null, stdin: string | Bytes = "",
-          ctx: Context | null = null): Result[string, Error]
-                                      // standard output without one final newline; Err on a nonzero status
-Os.exec(program: string, args: Array[string] = [], dir: string | null = null,
-        env: Map[string, string] | null = null, stdin: string | Bytes = "",
-        ctx: Context | null = null): Result[Os.Output, Error]
-Os.start(program: string, args: Array[string] = [], dir: string | null = null,
-         env: Map[string, string] | null = null, stdin: File.Handle | null = null,
-         stdout: File.Handle | null = Os.stdout(), stderr: File.Handle | null = Os.stderr(),
-         ctx: Context | null = null): Result[Os.Process, Error]
-                                      // in the background, in a process group of its own; null is the null device
-Os.wait(p: Os.Process, ctx: Context | null = null): Result[int, Error]    // its status once it has exited
-Os.kill(p: Os.Process, signal: string = "SIGTERM"): Result[void, Error]   // to its process group; Ok when it has exited
-Os.stop(p: Os.Process, grace: Time.Duration = Time.duration(seconds: 5)): Result[int, Error]
-                                      // SIGTERM, then SIGKILL after grace, or SIGKILL alone when it is zero or negative; its status; panics on a grace with years, months or weeks
-Os.pid(p: Os.Process): int
 Os.openPipe(): Result[Os.Pipe, Error] // what is written to write is read from read
-Os.which(program: string): string | null   // the path the calls above would start; null when none
+Os.which(program: string): string | null   // the path a Cmd naming program starts; null when none
 ```
-
-### Processes
-
-Every call that starts a child takes `program`, `args`, `dir` and `env` alike. `program` is started
-with `args` as its arguments and no shell between: `args` arrive as they are. A `program` with no
-path separator is looked up in the program's own `PATH`, `Os.env("PATH")`, never in the `PATH` of
-`env`, and an entry of `PATH` that is not absolute, `.` included, finds nothing; `Os.which` returns
-what that lookup finds. A `program` with a separator is taken as it is, relative to `dir` when it is
-relative. The child inherits the parent's working directory and environment unless `dir` or `env` is
-given; `env` is the child's whole environment, so a program that adds one variable starts from
-`Os.environ()`. Starting a child flushes standard output first, so what the program printed comes
-before what the child prints.
-
-The calls differ in what they do with the child's streams and how long they wait:
-
-| A script wants                                          | Call                                 |
-| ------------------------------------------------------- | ------------------------------------ |
-| to run a program the user watches or types into         | `Os.run`                             |
-| one value a program prints                              | `Os.output`                          |
-| the status and both outputs, without failing on nonzero | `Os.exec`                            |
-| the output as it comes, a pipeline, a file, or a server | `Os.start`, `Os.openPipe`, `Os.wait` |
-
-`Os.run` gives the child the program's own standard input, output and error, handed over as they
-are, so a pager, an editor or `ssh` uses the terminal, and the child stays in the program's process
-group, which the terminal treats as the foreground. What the program has read ahead from standard
-input stays the program's. The call blocks until the child exits and is `Ok` of its status, nonzero
-included.
-
-`Os.exec` captures both outputs whole and keeps each twice, as an HTTP body is: as bytes in
-`stdoutBytes` and `stderrBytes`, and as text in `stdout` and `stderr`, one copy when the output is
-UTF-8. `stdin` is what the child reads, a string as its UTF-8 and `Bytes` as they are. A nonzero
-exit is `Ok` with its `status`. `Os.output` does the same and returns standard output as text with
-one final `\n` or `\r\n` removed, and no other white space; a nonzero status is `Err` with the
-message `<program>: exit status <n>`, followed by `: ` and standard error with its trailing white
-space removed when it wrote any. Both stay in the program's process group, as a shell's `$(...)`
-does, so a child that opens the terminal itself can use it.
-
-`Os.start` starts the child and returns once it is running. Each of `stdin`, `stdout` and `stderr`
-is a handle or `null`, the null device; the outputs default to the program's and the input to
-`null`, as a shell's `cmd &` has it. A terminal as `stdin` is `Err` and nothing is started: a child
-outside the foreground that reads the terminal would be stopped by it. The child leads a process
-group of its own, so the terminal's Ctrl-C does not reach it and `Os.kill`, `Os.stop` and the
-context signal what it started too; on Windows a signal reaches the child alone. `Os.wait` blocks
-until the child has exited, and may be called any number of times, from any goroutine, each getting
-the same outcome. A child that writes into a pipe nobody reads blocks once the pipe is full, so a
-program reads a child's pipe while it waits, before the wait or on another goroutine. Every child is
-reaped when it exits, waited for or not. `Os.kill` sends a signal by name: `SIGTERM`, `SIGKILL`,
-`SIGINT`, `SIGHUP`, `SIGQUIT`, `SIGUSR1` or `SIGUSR2`; an unknown name, or one the host lacks, is
-`Err`. `Os.stop` sends SIGTERM, waits up to `grace`, sends SIGKILL if the child still runs, and
-returns the status. On a child that has exited both send nothing. A child still running when the
-script ends is left running, as in Go; a program that wants it gone stops it in a deferred block.
-
-A handle given to `Os.start` is lent: the child gets its own copy, and the handle stays open and the
-program's. Each handle given as an output is flushed first, so a header the program wrote comes
-before the child's output. A file with nothing read ahead, a pipe end, and a standard stream are
-handed over as they are; anything else, such as a file the program has read part of or a connection,
-goes through a copy the runtime runs, which ends a second after the child exits at the latest, and
-the program does not read that handle while the child runs. A child has only the three streams it
-was given. The same handle may be given twice: `stdout: p.write, stderr: p.write` merges the
-outputs, as `2>&1` does.
 
 `Os.openPipe` returns two handles the program closes, as it closes a file: a read of `read` waits
 for data and a context ends it, and a write to `write` is flushed. `read` is at end of file once
-every copy of `write` is closed, the program's included, so after `Os.start` the program closes its
-copy of each writing end it gave away:
+every copy of `write` is closed, the program's included, so after `Cmd.start` the program closes its
+copy of each writing end it gave away. A pipe joins what `Cmd.pipe` does not: a child's output read
+as it comes, a child's input written a piece at a time, or both outputs watched apart:
 
 ```ant
-var p = try Os.openPipe()
-var log = try Os.start("git", ["log", "--oneline"], stdout: p.write)
-var grep = try Os.start("grep", ["fix"], stdin: p.read)
-try File.close(p.write)
-try File.close(p.read)
-try Os.wait(log)
-var status = try Os.wait(grep)
+var out = try Os.openPipe()
+var make = try Cmd.start(Cmd.new("make"), stdout: out.write)
+try File.close(out.write)
+var line = try File.readLine(out.read)   // each line as make writes it, null at the end
 ```
-
-A context bounds a wait, and the context of a call that starts a child bounds the child's life:
-
-| What happens                                       | Outcome                                                                                                    |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| The call's context is done before the child starts | `Err` with the context's reason; nothing is started                                                        |
-| The call's context ends while the child runs       | The child, and for `Os.start` its group, is killed; the call, or every `Os.wait`, is `Err` with the reason |
-| The child exits before the kill is sent            | The child's status, as if there were no context                                                            |
-| An `Os.wait` context ends first                    | That wait is `Err` with the reason; the child goes on running                                              |
-| The program ends it with `Os.kill` or `Os.stop`    | `Ok` of its status                                                                                         |
-| The host cancels the run, or an interrupt ends it  | Every child still running is killed                                                                        |
-
-Contexts end when the run ends (`ant-lang.md` section 9), so a child started with a context is
-killed then too. The other calls are `Err` only when the child could not be started or run to its
-end: the program is not found, `dir` does not exist, a copy failed.
-
-Where the host has signals, a child ended by signal `n` has the status `128 + n`, as a shell reports
-it: SIGKILL is `137` and Ctrl-C `130`. On Windows the status is the exit code, and a child that
-`Os.kill`, `Os.stop` or a context ended has status 1.
 
 ### Interrupts
 
@@ -690,16 +587,16 @@ handled. When an interrupt ends the run the `ant` command prints nothing and end
 SIGINT or SIGTERM, so the shell that started it sees what a signal ended, `130` or `143`, and a
 shell loop running it stops too. Where the host has no signals it exits with 130.
 
-While a goroutine waits in `Os.run`, the `ant` command holds back every SIGINT and SIGQUIT it
-receives: the terminal sends the keyboard's signal to the child too, and the child decides. When the
-child exits because of a signal held back meanwhile, the program receives it then, as if it had
-arrived: a SIGINT is an interrupt, and a SIGQUIT does what it does without a child. When the child
+While a goroutine waits in `Cmd.run`, the `ant` command holds back every SIGINT and SIGQUIT it
+receives: the terminal sends the keyboard's signal to the children too, and they decide. When the child,
+or a pipeline's last stage, exits because of a signal held back meanwhile, the program receives it
+then, as if it had arrived: a SIGINT is an interrupt, and a SIGQUIT does what it does without a child. When the child
 exits otherwise, as `less` and `vim` do on Ctrl-C, the held signal is dropped. Held signals do not
-queue, so several presses while one child runs are one interrupt. So a loop of `Os.run` calls stops
+queue, so several presses while one child runs are one interrupt. So a loop of `Cmd.run` calls stops
 at Ctrl-C, and a pager quit with Ctrl-C does not end the script. SIGTERM is not held back. Holding
 back is process-wide, as signals are, so a server that waits for `Os.interrupt()` does not call
-`Os.run`. An `ant` started with SIGINT ignored, as `nohup` starts it, keeps it ignored, and so do
-its children. A host that embeds Ant owns its process's signals, and there `Os.run` shares the
+`Cmd.run`. An `ant` started with SIGINT ignored, as `nohup` starts it, keeps it ignored, and so do
+its children. A host that embeds Ant owns its process's signals, and there `Cmd.run` shares the
 streams and holds nothing back.
 
 ### Streams
@@ -709,10 +606,176 @@ The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.
 `Os.stdout()`, `print` and `println` write to one buffer, so their output interleaves in program
 order, and a read of standard input flushes it first, so a prompt is seen before the program waits.
 `File.close` on a stream does nothing and is `Ok`. In the REPL standard input belongs to the REPL,
-and `Os.stdin()` is at end of file, as is a child's standard input under `Os.run`. A read of
+and `Os.stdin()` is at end of file, as is a child's standard input under `Cmd.run`. A read of
 standard input reads the stream only while a read waits, so between reads the input is left to a
 child the stream is handed to. A read that its context ended goes on waiting for the stream, which
 nothing can interrupt, and what it then reads is the program's, for its next read, not a child's.
+
+## Cmd
+
+```
+type Cmd = { program: string, args: Array[string] = [], dir: string | null = null,
+             env: Map[string, string] | null = null }
+type Pipeline = { cmds: Array[Cmd] }
+type Output = { status: int, statuses: Array[int], stdout: string, stderr: string,
+                stdoutBytes: Bytes, stderrBytes: Bytes }
+type Process                          // opaque: a command started by Cmd.start
+
+Cmd.new(program: string, args: Array[string] = [], dir: string | null = null,
+        env: Map[string, string] | null = null): Cmd
+Cmd.pipe(cmds: Array[Cmd]): Cmd.Pipeline   // each one's output the next one's input; panics if cmds is empty
+Cmd.string(c: Cmd | Cmd.Pipeline): string  // shell-quoted, for a log; env and dir left out
+
+Cmd.run(c: Cmd | Cmd.Pipeline, ctx: Context | null = null): Result[int, Error]
+                                      // in the foreground, with the program's three streams; Ok of its status
+Cmd.read(c: Cmd | Cmd.Pipeline, input: string | Bytes = "", ctx: Context | null = null): Result[string, Error]
+                                      // standard output without one final newline; Err on a nonzero status
+Cmd.readBytes(c: Cmd | Cmd.Pipeline, input: string | Bytes = "", ctx: Context | null = null): Result[Bytes, Error]
+Cmd.capture(c: Cmd | Cmd.Pipeline, input: string | Bytes = "", ctx: Context | null = null): Result[Cmd.Output, Error]
+Cmd.start(c: Cmd | Cmd.Pipeline, stdin: File.Handle | null = null, stdout: File.Handle | null = Os.stdout(),
+          stderr: File.Handle | null = Os.stderr(), ctx: Context | null = null): Result[Cmd.Process, Error]
+                                      // in the background, in a process group of its own; null is the null device
+Cmd.wait(p: Cmd.Process, ctx: Context | null = null): Result[int, Error]    // its status once it has exited
+Cmd.kill(p: Cmd.Process, signal: string = "SIGTERM"): Result[void, Error]   // to its process group; Ok when it has exited
+Cmd.stop(p: Cmd.Process, grace: Time.Duration = Time.duration(seconds: 5)): Result[int, Error]
+                                      // SIGTERM, then SIGKILL after grace, or SIGKILL alone when it is zero or negative; its status; panics on a grace with years, months or weeks
+Cmd.pid(p: Cmd.Process): int          // the last stage's
+```
+
+`Cmd` is a type with functions, as `Panic` is, rather than a namespace only: a `Cmd` value says what
+to run, and a function of `Cmd` says how. A command is built once and run, logged, or passed to a
+helper like any record:
+
+```ant
+var build = Cmd.new("go", ["build"], dir: root)
+if verbose { Array.push(build.args, "-v") }
+Array.push(build.args, "./...")
+println(`running ${Cmd.string(build)}`)
+var status = try Cmd.run(build)
+```
+
+`Cmd.new` is the literal with its defaults, `Cmd{ program: "go", args: ["build"] }`. `Cmd.string`
+writes the program and its arguments as a POSIX shell would need them quoted, `git commit -m 'a b'`,
+and a pipeline's stages joined by ` | `. It leaves out `env` and `dir`, unlike the record's own
+rendering, so the environment's secrets stay out of a log.
+
+### Processes
+
+A command's `program` is started with `args` as its arguments and no shell between: `args` arrive as
+they are. A `program` with no path separator is looked up in the program's own `PATH`,
+`Os.env("PATH")`, never in the `PATH` of `env`, and an entry of `PATH` that is not absolute, `.`
+included, finds nothing; `Os.which` returns what that lookup finds. A `program` with a separator is
+taken as it is, relative to `dir` when it is relative. The child inherits the parent's working
+directory and environment unless `dir` or `env` is given; `env` is the child's whole environment, so
+a program that adds one variable starts from `Os.environ()`. Starting a command flushes standard
+output first, so what the program printed comes before what the child prints.
+
+The functions differ in what they do with the command's streams and how long they wait:
+
+| A script wants                                          | Function                               |
+| ------------------------------------------------------- | -------------------------------------- |
+| to run a program the user watches or types into         | `Cmd.run`                              |
+| one value a program prints                              | `Cmd.read`, or `Cmd.readBytes` exactly |
+| the status and both outputs, without failing on nonzero | `Cmd.capture`                          |
+| the output as it comes, a file, or a server             | `Cmd.start`, `Os.openPipe`, `Cmd.wait` |
+
+`Cmd.run` gives the command the program's own standard input, output and error, handed over as they
+are, so a pager, an editor or `ssh` uses the terminal, and the command stays in the program's
+process group, which the terminal treats as the foreground. What the program has read ahead from
+standard input stays the program's. The call blocks until the command exits and is `Ok` of its
+status, nonzero included.
+
+`Cmd.capture` captures both outputs whole and keeps each twice, as an HTTP body is: as bytes in
+`stdoutBytes` and `stderrBytes`, and as text in `stdout` and `stderr`, one copy when the output is
+UTF-8. `input` is what the command reads, a string as its UTF-8 and `Bytes` as they are. A nonzero
+exit is `Ok` with its `status`, and `statuses` holds each stage's own. `Cmd.read` does the same and
+returns standard output as text with one final `\n` or `\r\n` removed, and no other white space,
+as a shell's `$(...)` does; this differs from `File.read`, which returns a file exactly, and
+`Cmd.readBytes` returns the output as it was written. For both, a nonzero status is `Err` with the
+message `<program>: exit status <n>`, followed by `: ` and standard error with its trailing white
+space removed when it wrote any. All three stay in the program's process group, as `$(...)` does, so
+a command that opens the terminal itself can use it.
+
+`Cmd.start` starts the command and returns once it is running. Each of `stdin`, `stdout` and
+`stderr` is a handle or `null`, the null device; the outputs default to the program's and the input
+to `null`, as a shell's `cmd &` has it. A terminal as `stdin` is `Err` and nothing is started: a
+child outside the foreground that reads the terminal would be stopped by it. The command's stages
+share a process group of their own, so the terminal's Ctrl-C does not reach them and `Cmd.kill`,
+`Cmd.stop` and the context signal what they started too; on Windows a signal reaches each stage
+alone. `Cmd.wait` blocks until every stage has exited, and may be called any number of times, from
+any goroutine, each getting the same outcome. A child that writes into a pipe nobody reads blocks
+once the pipe is full, so a program reads a child's pipe while it waits, before the wait or on
+another goroutine. Every child is reaped when it exits, waited for or not. `Cmd.kill` sends a
+signal by name: `SIGTERM`, `SIGKILL`, `SIGINT`, `SIGHUP`, `SIGQUIT`, `SIGUSR1` or `SIGUSR2`; an
+unknown name, or one the host lacks, is `Err`. `Cmd.stop` sends SIGTERM, waits up to `grace`, sends
+SIGKILL if a stage still runs, and returns the status. On a command that has exited both send
+nothing. A command still running when the script ends is left running, as in Go; a program that
+wants it gone stops it in a deferred block.
+
+A handle given to `Cmd.start` is lent: the child gets its own copy, and the handle stays open and
+the program's. Each handle given as an output is flushed first, so a header the program wrote comes
+before the child's output. A file with nothing read ahead, a pipe end, and a standard stream are
+handed over as they are; anything else, such as a file the program has read part of or a
+connection, goes through a copy the runtime runs, which ends a second after the child exits at the
+latest, and the program does not read that handle while the child runs. A child has only the three
+streams it was given. The same handle may be given twice: `stdout: p.write, stderr: p.write` merges
+the outputs, as `2>&1` does.
+
+A context bounds a wait, and the context of a call that starts a command bounds its life:
+
+| What happens                                         | Outcome                                                                                                   |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| The call's context is done before the command starts | `Err` with the context's reason; nothing is started                                                       |
+| The call's context ends while the command runs       | Every stage, and for `Cmd.start` its group, is killed; the call, or every `Cmd.wait`, is `Err` with the reason |
+| The command exits before the kill is sent            | Its status, as if there were no context                                                                   |
+| A `Cmd.wait` context ends first                      | That wait is `Err` with the reason; the command goes on running                                           |
+| The program ends it with `Cmd.kill` or `Cmd.stop`    | `Ok` of its status                                                                                        |
+| The host cancels the run, or an interrupt ends it    | Every command still running is killed                                                                     |
+
+Contexts end when the run ends (`ant-lang.md` section 9), so a command started with a context is
+killed then too. The other calls are `Err` only when the command could not be started or run to its
+end: a program is not found, `dir` does not exist, a copy failed.
+
+Where the host has signals, a child ended by signal `n` has the status `128 + n`, as a shell reports
+it: SIGKILL is `137` and Ctrl-C `130`. On Windows the status is the exit code, and a child that
+`Cmd.kill`, `Cmd.stop` or a context ended has status 1.
+
+### Pipelines
+
+`Cmd.pipe` joins commands as a shell's `|` does, and every function that runs a `Cmd` runs a
+`Cmd.Pipeline` too:
+
+```ant
+var fixes = try Cmd.read(Cmd.pipe([
+  Cmd.new("git", ["log", "--oneline"]),
+  Cmd.new("grep", ["fix"]),
+  Cmd.new("wc", ["-l"]),
+]))
+```
+
+The pipeline holds a copy of the array, so changing the array later changes no pipeline. The
+stages run at once. The first reads the pipeline's standard input: `input` for `Cmd.read`,
+`Cmd.readBytes` and `Cmd.capture`, the `stdin` handle for `Cmd.start`, and the terminal for
+`Cmd.run`, where only the first stage reads it. The last writes the pipeline's standard output, and
+each stage's output is the next one's input, joined by OS pipes with no copy between. Every stage
+writes standard error where the call sends it; where it is captured, the stages' lines interleave as
+they arrive, and no order between stages is promised. Each stage keeps its own `dir` and `env`.
+
+The pipeline's status is that of the rightmost stage that failed, or 0 when none did, as under
+bash's `pipefail`, so `false | cat` fails. A stage before the last that SIGPIPE ended does not count,
+since only a later stage that stopped reading ends it so: `yes | head -n 1` succeeds, where bash's
+`pipefail` gives 141. Its own status in `statuses` is still 141. A stage that ignores SIGPIPE and
+exits nonzero on the failed write counts, and on Windows, which has no SIGPIPE, every nonzero stage
+does. `Cmd.read`'s `Err` names the program of the stage that set the status, followed by
+`(stage <i>)`, counting from 1, when another stage runs the same program:
+`grep (stage 3): exit status 1`.
+
+The stages of `Cmd.start` share one process group, so one signal reaches them all, and
+`Cmd.pid` is the last stage's, as a shell's `$!` is. When a stage cannot be started, those already
+started are killed and the call is `Err`. Under `Cmd.run` a Ctrl-C reaches every stage, and the
+last stage decides whether it is the program's interrupt (Os, Interrupts): in `git log | less`, Ctrl-C
+ends `git`, `less` handles it and goes on, and so does the script. A pipeline of no commands, which
+a literal `Cmd.Pipeline{ cmds: [] }` can make, panics wherever it is run, as `Cmd.pipe` does.
 
 ## Json
 

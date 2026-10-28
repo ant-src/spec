@@ -613,7 +613,7 @@ apart at run time.
 | `Regex.Pattern`                                                                 | regex                        | `Regex.Pattern`            | the normalized source and the flags          | `/a\/b/i`                                  | once                                                                         |
 | `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, `Context` | sync                         | none                       | identity                                     | its type's name, `Mutex`                   | at most one type of these rows                                               |
 | `Random`                                                                        | random                       | none                       | identity                                     | `Random`                                   | at most one type of these rows                                               |
-| `File.Handle`, `Net.Listener`, `Os.Process`                                     | resource                     | none                       | identity                                     | its type's name, `File.Handle`             | at most one type of these rows                                               |
+| `File.Handle`, `Net.Listener`, `Cmd.Process`                                    | resource                     | none                       | identity                                     | its type's name, `File.Handle`             | at most one type of these rows                                               |
 | a type parameter                                                                | its argument's               | none                       | as for its argument                          | as for its argument                        | only `null`, `void`, type parameters, and named types without type arguments |
 
 A tag, the value a `type` declaration binds, is not a type in this table: no annotation names it. It
@@ -676,7 +676,7 @@ written. `type Either[A, B] = A | B` is allowed, since two type parameters may s
 `Either[Box[int], Box[string]]` repeats a tag and `Either[Box[int], { value: string }]` is the
 `Mixed` type above, so both are compile errors at the use.
 
-The sync types, `Random`, `File.Handle`, `Net.Listener`, and `Os.Process` have no discriminator
+The sync types, `Random`, `File.Handle`, `Net.Listener`, and `Cmd.Process` have no discriminator
 either, because `is` does not accept them. A union may contain at most one of them, and it is
 narrowed by testing the other members: after `m != null`, an `m` of type `Mutex | null` is a
 `Mutex`.
@@ -2202,7 +2202,8 @@ markup, and `Result`, `Random`, and the sync types are types with functions decl
 (section 6); all read as `Name.function`, like a namespace. Every function takes its subject as the
 first argument so it composes with `|`. This section is the complete core library. The I/O
 namespaces `File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and
-`Crypto` are policy rather than language and live in `stdlib.md`.
+`Crypto`, and `Cmd`, a type with functions that runs other programs, are policy rather than
+language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
 carry a default, which a call omits or names as for a declared function (section 6). A callback
@@ -2569,7 +2570,7 @@ inside template strings and on a number in an HTML expression (section 5).
 - `Html` renders as its markup (see Html), and an empty one as `<></>` inside a container.
 - Functions render as `func`, a constructor and a tag as their type's name, sync objects,
   generators, handles, listeners, and processes as their type's name, `Mutex`, `Random`,
-  `File.Handle`, `Net.Listener`, or `Os.Process`, and time values as `stdlib.md` says: an RFC 9557
+  `File.Handle`, `Net.Listener`, or `Cmd.Process`, and time values as `stdlib.md` says: an RFC 9557
   string, or a zone's identifier.
 - A regular expression pattern renders as a literal that reads back to it, `/a\/b/i`, as the Regex
   section says.
