@@ -7,6 +7,7 @@ goroutine-style concurrency.
 - [stdlib.md](stdlib.md) — the I/O standard library
 - [fmt.md](fmt.md) — `ant fmt`, the source formatter
 - [doc.md](doc.md) — `ant doc` and doc comments
+- [lsp.md](lsp.md) — `ant lsp`, the language server
 
 ## License
 
