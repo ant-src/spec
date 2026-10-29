@@ -214,8 +214,8 @@ while the program runs, is answered with an error.
 
 - A `condition`: an expression evaluated, as `evaluate` does, in the scopes of the stop point,
   each time a goroutine reaches it. The goroutine stops only when it is `true`. A condition that
-  does not parse, or names nothing visible there, makes the breakpoint unverified, with the error.
-  One that panics, or gives anything but a `bool`, stops the goroutine and writes the error as an
+  does not parse makes the breakpoint unverified, with the error. One that names nothing visible
+  there, panics, or gives anything but a `bool` stops the goroutine and writes the error as an
   `output` event of category `console`.
 - A `hitCondition`, counting the times the breakpoint is reached with its condition true: `N` or
   `== N` stops at the Nth time, `>= N` from it on, `> N` after it, and `% N` at every Nth. The count
