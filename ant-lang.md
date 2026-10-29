@@ -353,10 +353,10 @@ p.x = 3.0
 ```
 
 Every record value has a name; there are no anonymous record literals. The head of a literal is an
-identifier path, so a type reached through a namespace is written `Geometry.Point{ x: 1.0 }`. Type
-arguments are never written there. A bare identifier is a shorthand entry: `Point{ x, y }` means
-`Point{ x: x, y: y }`, the same shorthand destructuring uses. Map literals follow the same two rules
-(see Arrays and maps).
+identifier path, so a type reached through a namespace (section 10, Namespaces) is written
+`Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a
+shorthand entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses.
+Map literals follow the same two rules (see Arrays and maps).
 
 The name is part of the value: a literal stores the tag of its head in the record. The interpreter
 keeps the field names so that `ant run` can reject a literal with a missing or unknown field and
@@ -860,10 +860,11 @@ func wrap[T](v: T): Array[T] {
 }
 ```
 
-A type name is also the namespace of the functions declared on it (section 6, Functions on types).
-It is an expression only as the head of a record literal, as the target of `is`, as the left side of
-`.` naming one of its functions, or, for a named primitive type, as its constructor. Anywhere else
-it is a compile error, since a type has no value. There are no classes, interfaces, or prototypes.
+A type name is also a namespace holding the functions declared on it (section 6, Functions on
+types; section 10, Namespaces). It is an expression only as the head of a record literal, as the
+target of `is`, as the left side of `.` naming one of its functions, or, for a named primitive type,
+as its constructor. Anywhere else it is a compile error, since a type has no value. There are no
+classes, interfaces, or prototypes.
 
 ### Assignability
 
@@ -1534,11 +1535,12 @@ next()    // 2
 
 ### Functions on types
 
-`func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`. The call
+`func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`: a type's
+name is a namespace (section 10, Namespaces), and this is how a module declares into one. The call
 is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared at
 the top level of the same module and may be a record, a named primitive type, or an alias, including
-an alias of a union. A type's namespace is therefore closed, and the prelude's types cannot be
-extended.
+an alias of a union, since a module owns only its own types. A type's namespace is therefore closed,
+and the prelude's types cannot be extended.
 
 The function is an ordinary function. It need not take the type as a parameter, which is how
 `Point.origin()` and `UserId.parse(s)` are written; it is a value like any other; and named
@@ -2097,11 +2099,8 @@ export func distance(a: Point, b: Point): float64 {
 A module is a record. Its top-level scope is a record whose fields are its declarations, and
 `export` marks the fields other modules may see. `import` destructures that record: a record
 destructuring brings chosen exports into scope, with the usual `name: alias` renaming, and a bare
-name binds the whole record as a namespace. The standard-library namespaces are prelude variables
-bound to records of the same kind, so `Geometry.distance` and `Array.map` are both a field read
-followed by a call, and `Geometry.Point{ x: 1.0 }` is a field read that yields a tag. The
-interpreter has no notion of a namespace beyond this; the checker keeps each module's export table
-so that `Geometry.Point` also resolves in a type.
+name binds the whole record as a namespace (Namespaces, below), so `Geometry.distance` is a field
+read followed by a call and `Geometry.Point{ x: 1.0 }` is a field read that yields a tag.
 
 ```ant
 import "./geometry.ant" { distance, Point }
@@ -2141,6 +2140,32 @@ body is a compile error; reading or assigning one through a function call before
 is a runtime panic, since the checker does not trace calls. A `var` declared in a block, such as the
 body of a top-level `if` or `for`, belongs to that block, as anywhere; only top-level `var`s are
 fields of the module record.
+
+### Namespaces
+
+A **namespace** is a record whose fields are declarations, read with `.`: `Geometry.distance`,
+`Point.distance`, `Array.map`, and `Os.cwd` are one operation, a field read (section 12), and
+`Geometry.Point` or `Time.Instant` is the same read in a type. Three things are namespaces, and
+nothing else:
+
+- A type. Its name holds the functions declared on it (section 6, Functions on types) and, in the
+  prelude, the types declared on it, as `Panic` holds `Panic.catch` and `Panic.Frame`.
+- A module imported under a name, which holds the module's exports.
+- A namespace of the prelude, such as `Array`, `Os`, or `Time`, which holds the functions, types,
+  and constants that `prelude.d.ant`, or a host's declaration file, declares on its name
+  (Declaration files, below).
+
+Who may declare into a namespace follows from what it owns. A module owns itself and its types, so
+a `func` in a module is declared on one of the module's own types or on none, and a `type` is never
+qualified. The prelude owns a name in every module, so its declarations name any owner, and an
+owner that no `type` declares is a namespace and nothing more: `Os` and `Time` are reached only
+through `.`, cannot stand in an annotation or after `is`, and are not values, so `var t = Time` is a
+compile error. An owner that a `type` does declare is a type as well, so `Mutex` is a type in an
+annotation and a namespace in `Mutex.new()`, with no conflict between the two, since a type is not
+a value (section 4, Type declarations). The interpreter has no notion of a namespace beyond the
+record: a module record, a tag, a constructor, and a prelude namespace all hold their declarations
+as fields (section 12, Expressions). The checker keeps each module's export table and each
+namespace's members so that `Geometry.Point` also resolves in a type.
 
 ### Scripts
 
@@ -2199,8 +2224,7 @@ A file whose name ends in `.d.ant` is a **declaration file**: the signatures of 
 outside the language, written as the prelude listing of section 11 and `ant doc` write them. The
 prelude itself is one, `prelude.d.ant`, which an editor opens for a prelude name (`lsp.md` section
 4), and a host that adds a namespace to the prelude gives its signatures as one. A declaration file
-holds declarations only, each qualified by the namespace or type that owns it, with doc comments as
-in a module (section 2):
+holds declarations only, with doc comments as in a module (section 2):
 
 ```
 // Panic.Frame is one frame of a panic's trace.
@@ -2210,15 +2234,22 @@ func Regex.compile(source: string, flags: string = ""): Result[Regex.Pattern, Er
 var Math.PI: float64
 ```
 
+- A declaration is qualified by its owner, `Owner.name`, or unqualified. The owner is a namespace
+  (Namespaces): a type the file declares, as `Panic` owns `Panic.Frame` and `Panic.catch`, or a
+  name that nothing declares, as `Os` and `Time`, which naming as an owner makes a namespace. The
+  order does not matter: `type Panic.Frame` may come before `type Panic`.
 - A `func` has a signature and no body. A parameter may carry a default, as in a declared function
   (section 6).
-- A `type` may be qualified, `type Owner.Name`. The owner is a type the file declares, as the
-  prelude declares `Panic`, or else a namespace, which needs no declaration beyond being named. A
-  `type` with no body, `type Regex.Pattern`, is **opaque**: its values come only from the functions
-  declared on it, and `is` cannot test them, as for the synchronization types (section 11). A
-  record type may give its fields defaults (section 4, Field defaults).
-- A `var` is a constant of a namespace, `var Owner.NAME: T`, with a type and no initializer.
+- A `type` with no body, `type Regex.Pattern`, is **opaque**: its values come only from the
+  functions declared on it, and `is` cannot test them, as for the synchronization types (section
+  11). A record type may give its fields defaults (section 4, Field defaults).
+- A `var` is a constant of a namespace, `var Owner.NAME: T`, with a type and no initializer, and
+  is always qualified.
 - An unqualified `func` or `type` is a name of the prelude's own, as `print` and `Result` are.
+- A namespace that nothing declares takes its doc from a **section label**: a comment line holding
+  its name alone, an empty comment line, and a paragraph, set off from the declarations by blank
+  lines, as `prelude.d.ant` documents `Os`. `ant doc` and an editor show it where a declaration's
+  doc would be (`doc.md`).
 - There is no `import`, no `export`, and no statement: every declaration is visible, and the file
   sees only the prelude and its own declarations.
 
@@ -2230,16 +2261,16 @@ lists every declaration in it, since all are visible.
 
 ## 11. Standard library
 
-The standard library is a set of namespaces in the prelude. Each is a plain record of functions and
-types, exactly like an imported module (section 10), so a type a namespace declares is written
-through it, as in `Http.Response`; none has methods or state. `Array`, `Map`, and `Set` are the
-functions of the three built-in container types, `Bytes` those of binary data, `Html` those of
-markup, and `Result`, `Random`, and the sync types are types with functions declared on them
-(section 6); all read as `Name.function`, like a namespace. Every function takes its subject as the
-first argument so it composes with `|`. This section is the complete core library. The I/O
-namespaces `File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and
-`Crypto`, and `Cmd`, a type with functions that runs other programs, are policy rather than
-language and live in `stdlib.md`.
+The standard library is a set of namespaces in the prelude (section 10, Namespaces). Each holds
+the functions, types, and constants `prelude.d.ant` declares on its name, so a type a namespace
+declares is written through it, as in `Http.Response`; none has methods or state. Some are types as
+well: `Result`, `Error`, `Panic`, `Bytes`, `Html`, `Random`, `Cmd`, and the types of section 9,
+whose functions are declared on the type (section 6), so the name is a type in an annotation and a
+namespace in an expression. `Array`, `Map`, and `Set` hold the functions of the three built-in
+container types, and `String` those of `string`. Every function takes its subject as the first
+argument so it composes with `|`. This section is the complete core library. The I/O namespaces
+`File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto`, and
+`Cmd`, which runs other programs, are policy rather than language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
 carry a default, which a call omits or names as for a declared function (section 6). A callback
@@ -2757,9 +2788,9 @@ and a group that took no part to `""`. A name after `$` is taken as long as it c
 interpolate `$`, so `"$1"` needs no escape. `replaceWith` calls `f` with each `Match` in order and
 puts its result in the match's place, as written, with no expansion.
 
-`Regex` is a namespace that declares two types, like `Time`, and not a type with functions, like
-`Mutex`, so the annotation is `Regex.Pattern`. `p is Regex.Pattern` tests a value for the kind, as
-`t is Time.Instant` does (section 5).
+`Regex` is a namespace and not a type, like `Time` (section 10, Namespaces), so the annotation is
+`Regex.Pattern`. `p is Regex.Pattern` tests a value for the kind, as `t is Time.Instant` does
+(section 5).
 
 ### Iter
 
@@ -3097,8 +3128,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   built. The result is a new `Html` in normal form (section 11).
 - **Variable.** The value bound to the name; a name no scope binds panics.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace
-  is a record, so this rule also covers `Array.map` and `Geometry.Point`; a tag and a constructor
-  have the functions declared on their type as fields, so it also covers `Point.distance`.
+  is a record (section 10, Namespaces), so this rule also covers `Array.map` and `Geometry.Point`;
+  a tag and a constructor have the functions declared on their type as fields, so it also covers
+  `Point.distance`.
 - **Index read `a[i]`.** `a` must be an array, a map, or `Bytes`. For an array, `i` must be an `int`
   from `0` up to but excluding the length, and the value is that element; for `Bytes` likewise, and
   the value is that byte as a `byte`. For a map, the value is the entry whose key is `==` to `i`, or

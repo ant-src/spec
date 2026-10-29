@@ -11,7 +11,7 @@ of each such function says when it panics. Blocking calls block only the calling
 9).
 
 A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`, since
-a namespace is a record like an imported module and the bare name would collide with it. A parameter
+a namespace that no type declares is reached only through `.` (section 10, Namespaces). A parameter
 with a default may be omitted or named at the call, as for a declared function (section 6, Calling).
 A function that blocks takes a context as its last parameter, `ctx: Context | null = null`, and when
 the context is done gives up with `Err` and the context's reason as the message, as section 9

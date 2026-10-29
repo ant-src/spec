@@ -30,12 +30,13 @@ through its result type, or its parameters when it has none, of a `type` through
 definition, and of a `var` through its annotation, leaving out the body or initializer. A
 declaration without a doc comment prints only its signature.
 
-A name without a dot that is a namespace, or a type with functions declared on it, prints its own
-declaration, if it has one, as above, and then the signature of every declaration owned by it, one
-after another in source order. A namespace of the standard library without a type of its name, such
-as `Array` or `Time`, has a doc of its own, which stands in for the declaration: its name, then its
-doc indented. A module prints its doc, if it has one, with every non-empty line indented by four
-spaces, and then the signature of each exported declaration in source order.
+A name without a dot that is a namespace (section 10, Namespaces), a type with functions declared
+on it included, prints its own declaration, if it has one, as above, and then the signature of every
+declaration owned by it, one after another in source order. A namespace that no type declares, such
+as `Array` or `Time`, has the doc of its section label (section 10, Declaration files), which stands
+in for the declaration: its name, then its doc indented. A module prints its doc, if it has one,
+with every non-empty line indented by four spaces, and then the signature of each exported
+declaration in source order.
 
 | Exit status | When                                                                     |
 | ----------- | ------------------------------------------------------------------------ |
@@ -57,6 +58,16 @@ conventions the standard library follows, and editors may rely on:
   `//! Geometry computes distances and areas on the plane.` It goes on to what a reader of the whole
   module needs: its main types, how its functions fit together, an example of use. A script's doc
   says what the program does and how to run it.
+- **A namespace doc** is a section label in a declaration file (section 10, Declaration files): a
+  comment line holding the namespace's name alone, an empty comment line, and a paragraph that
+  starts with the name, set off from the declarations by blank lines:
+
+  ```ant
+  // Os
+  //
+  // Os holds the process: its arguments, environment, standard streams, exit, and pipes.
+  ```
+
 - **Paragraphs** are separated by an empty comment line, `//` or `//!` with nothing after it.
 - **Code** is a run of lines indented by at least one space beyond the comment's own one, which an
   editor shows in a monospaced block, as Ant:
