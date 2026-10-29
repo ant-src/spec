@@ -167,6 +167,13 @@ body goes to the next statement of the body, and then, at its end, into the next
 is not stepped into; a breakpoint inside the block stops it. A breakpoint reached by another
 goroutine during a step stops the program there, and the step ends.
 
+**Function breakpoints.** `setFunctionBreakpoints` replaces every function breakpoint. A name binds
+to the first stop point of the body of each top-level function of that name, in every module of the
+program: `parse` names `func parse`, and `Point.dist` names `func Point.dist` (`ant-lang.md` section
+6). A function whose body has no statement, or a name no module declares, gives an unverified
+breakpoint. A function breakpoint takes a `condition` and a `hitCondition` as a line breakpoint does
+(section 6), and stops with the reason `function breakpoint`.
+
 **Pause.** `pause` stops every goroutine, as a breakpoint would, and the `stopped` event names the
 goroutine `pause` named, or the main goroutine when that one has ended.
 
@@ -226,6 +233,14 @@ while the program runs, is answered with an error.
   `{expr}` in the message is evaluated and written as `String.from` writes it; `{{` and `}}` are
   `{` and `}`. An expression that fails writes its error in its place.
 
+**Setting variables.** `setVariable` gives a variable a new value: the value of an expression,
+evaluated as `evaluate` evaluates it in the frame the variable was listed for. A variable of
+`Locals`, `Closure`, or `Module` is the binding itself, so the program reads the new value from
+then on. A field of a record, an element of an array, and an entry of a map are changed in their
+container. The members of a set, the bytes of `Bytes`, and `(piped)` cannot be set. No type is
+checked, as `ant run` checks none (section 1, Types are advisory): a value of the wrong type fails
+where the program uses it.
+
 ## 7. Requests
 
 | Request                   | What the adapter does                                                  |
@@ -244,6 +259,8 @@ while the program runs, is answered with an error.
 | `pause`                   | stops every goroutine (section 4)                                      |
 | `exceptionInfo`           | describes the panic the program stopped at                             |
 | `evaluate`                | evaluates an expression in a stopped frame (section 6)                 |
+| `setVariable`             | gives a variable a new value (section 6)                               |
+| `setFunctionBreakpoints`  | sets the function breakpoints (section 4)                              |
 | `terminate`               | interrupts the program (section 2)                                     |
 | `disconnect`              | ends the run and the command (section 2)                               |
 
@@ -255,13 +272,12 @@ it runs, `threads` lists the goroutines and the others answer with an error.
 
 The response to `initialize` states `supportsConfigurationDoneRequest`,
 `supportsTerminateRequest`, `supportsExceptionInfoRequest`, `supportsEvaluateForHovers`,
-`supportsConditionalBreakpoints`, `supportsHitConditionalBreakpoints`, `supportsLogPoints`, and
-the two `exceptionBreakpointFilters` of section 5, and no other capability.
+`supportsConditionalBreakpoints`, `supportsHitConditionalBreakpoints`, `supportsLogPoints`,
+`supportsSetVariable`, `supportsFunctionBreakpoints`, and the two `exceptionBreakpointFilters` of
+section 5, and no other capability.
 
 ## 9. What `ant dap` does not do
 
-- It offers no function breakpoints.
-- It does not change a variable's value.
 - It does not attach to a program already running; it runs the program it launches.
 - It gives the program no terminal. A program that reads its input as it is typed is run with
   `ant run`.
