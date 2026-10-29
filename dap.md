@@ -237,7 +237,8 @@ while the program runs, is answered with an error.
 evaluated as `evaluate` evaluates it in the frame the variable was listed for. A variable of
 `Locals`, `Closure`, or `Module` is the binding itself, so the program reads the new value from
 then on. A field of a record, an element of an array, and an entry of a map are changed in their
-container. The members of a set, the bytes of `Bytes`, and `(piped)` cannot be set. No type is
+container. The members of a set, the bytes of `Bytes`, and `(piped)` cannot be set, and are listed
+with the `readOnly` attribute. No type is
 checked, as `ant run` checks none (section 1, Types are advisory): a value of the wrong type fails
 where the program uses it.
 
