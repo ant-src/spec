@@ -235,6 +235,11 @@ while the program runs, is answered with an error.
   `{expr}` in the message is evaluated and written as `String.from` writes it; `{{` and `}}` are
   `{` and `}`. An expression that fails writes its error in its place.
 
+The expressions run each time a goroutine reaches the stop point, also when a step or the entry
+ends there: the logpoint writes, the hit counts, and the stop is the step's or the entry's. A
+condition that waits, by a channel operation or a lock, holds its goroutine as a blocking call
+does, and a stop under way does not wait for it.
+
 **Setting variables.** `setVariable` gives a variable a new value: the value of an expression,
 evaluated as `evaluate` evaluates it in the frame the variable was listed for. A variable of
 `Locals`, `Closure`, or `Module` is the binding itself, so the program reads the new value from
