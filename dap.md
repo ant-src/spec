@@ -91,7 +91,7 @@ argument, is a frame directly above the one that called the prelude function.
 | --------- | ---------------------------------------------------------------------------------------- |
 | `Locals`  | the bindings of the frame's body in scope at its position, innermost block first          |
 | `Closure` | for a lambda or a `go` block, the bindings of the enclosing bodies it sees                |
-| `Module`  | the top-level declarations of the frame's module                                         |
+| `Module`  | the top-level variables of the frame's module                                            |
 
 A binding is shown once its declaration has run: a `var` below the position, or a module variable
 whose initializer has not run, is left out. A name an inner binding shadows is left out. A `defer`
@@ -123,7 +123,8 @@ stopped; references are valid until the program resumes.
 **Stop points.** The program stops only at a stop point:
 
 - before each statement of a block: a function body, a script body, a lambda, a `go` block, a
-  `defer` block, a loop body, a branch of `if` or `match`, and a plain block;
+  `defer` block, a loop body, a branch of `if`, a clause of `select`, and a plain block;
+- before each top-level `var` of a library module, as its initializer runs (section 10);
 - before each stage of a pipeline of two or more stages (section 5, Pipes): after the value flowing
   into the stage is computed and before the stage's arguments are. The stage's position is that of
   its `|`.
@@ -132,7 +133,7 @@ stopped; references are valid until the program resumes.
 
 **Breakpoints.** A line breakpoint binds to the first stop point that starts on its line, in the
 module of its source. A line with none binds to the next line that has one, inside the same
-function, lambda, or module body; the breakpoint is reported verified on that line. A breakpoint
+function, lambda, `go` block, `defer` block, or module body; the breakpoint is reported verified on that line. A breakpoint
 that binds to nothing, or whose source is not a module of the program, is reported unverified, with
 a message saying why. `setBreakpoints` replaces every breakpoint of its source. A stop point a
 breakpoint binds to stops each goroutine that reaches it.
@@ -148,7 +149,8 @@ Time does not stop with the program. A sleep, a timer, or a deadline (`stdlib.md
 passes while the program is stopped ends as it would have, when the program resumes.
 
 **Stepping.** A step resumes every goroutine and stops them all when the stepping goroutine reaches
-the stop point it is looking for, or ends. It looks only on its own goroutine:
+the stop point it is looking for. It looks only on its own goroutine, and when that goroutine ends
+first, the program runs on as after `continue`:
 
 | Request    | Stops at the next stop point                                              |
 | ---------- | ------------------------------------------------------------------------- |
