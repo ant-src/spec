@@ -32,8 +32,8 @@ The exit status of the program is reported in the `exited` event, not as the com
 A session runs in this order:
 
 1. `initialize`. The response states the capabilities of section 7.
-2. `launch`, with the attributes below. The adapter loads the program as `ant run` does (section 10),
-   and answers with an error, and nothing more, if it does not load: the error is `ant run`'s
+2. `launch`, with the attributes below. The adapter loads the program as `ant run` does (section
+   10), and answers with an error, and nothing more, if it does not load: the error is `ant run`'s
    message. A program that loads is not yet running.
 3. The `initialized` event, after the response to `launch`. The client then sends its breakpoints
    (section 4) and exception filters (section 5).
