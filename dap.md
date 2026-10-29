@@ -55,9 +55,9 @@ the root imports have run, before the first statement of the root itself: for a 
 line.
 
 **Streams.** What the program writes to standard output and standard error is sent as `output`
-events of category `stdout` and `stderr`. Standard output is sent at each line break, at least every
-100 milliseconds, and before every stop, so what a program wrote before it stops is shown when it
-stops. With no `stdin`, standard input is at end of file. A child the program starts (`stdlib.md`,
+events of category `stdout` and `stderr`. Standard output is sent at least every 100 milliseconds
+and before every stop, so what a program wrote before it stops is shown when it stops. With no
+`stdin`, standard input is at end of file. A child the program starts (`stdlib.md`,
 `Cmd`) gets the same: its output goes to the same events, and it never reads or writes the
 adapter's own streams. A panic the runtime reports and the error of a `Result` returned from `main`
 are written to standard error as `ant run` writes them (section 8).
