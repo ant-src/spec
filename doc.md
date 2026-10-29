@@ -20,7 +20,9 @@ A name is `Name` or `Owner.name`. `ant doc` looks it up without regard to case, 
 destructures has no name of its own: a module lists it, but a name does not find it. An argument
 that ends in `.ant` is a module path; every other first argument is a prelude name. `ant doc` reads
 only the file it is given: it does not follow imports and does not run the checker, so a module with
-type errors is documented like any other. The file must parse as a module (section 10).
+type errors is documented like any other. The file must parse as a module (section 10), or as a
+declaration file when its name ends in `.d.ant` (section 10, Declaration files): every declaration
+of one is visible, so `ant doc` lists them all and a name finds any of them.
 
 For a single declaration, `ant doc` prints its signature as written in the source, followed by its
 doc comment with every non-empty line indented by four spaces. The signature of a `func` runs

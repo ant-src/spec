@@ -21,8 +21,9 @@ language as a programmer sees it, not the compiler or the runtime.
 
 ## 2. Lexical structure
 
-Source files are UTF-8 text with the extension `.ant`. A byte that begins no UTF-8 character is a
-syntax error at that byte, so a string literal holds only scalar values (section 11, String).
+Source files are UTF-8 text with the extension `.ant`; a declaration file (section 10, Declaration
+files) ends in `.d.ant`. A byte that begins no UTF-8 character is a syntax error at that byte, so a
+string literal holds only scalar values (section 11, String).
 
 ### Comments
 
@@ -2192,6 +2193,41 @@ reported as the error alone, and `unwrap` as a bug, reported as a panic with its
 `Os.exit` ends the process with any status and skips deferred blocks. A library given to `ant run`
 is initialized, and the program exits with `0`.
 
+### Declaration files
+
+A file whose name ends in `.d.ant` is a **declaration file**: the signatures of names that are bound
+outside the language, written as the prelude listing of section 11 and `ant doc` write them. The
+prelude itself is one, `prelude.d.ant`, which an editor opens for a prelude name (`lsp.md` section
+4), and a host that adds a namespace to the prelude gives its signatures as one. A declaration file
+holds declarations only, each qualified by the namespace or type that owns it, with doc comments as
+in a module (section 2):
+
+```
+// Panic.Frame is one frame of a panic's trace.
+type Panic.Frame = { function: string, path: string, line: int, column: int }
+type Regex.Pattern
+func Regex.compile(source: string, flags: string = ""): Result[Regex.Pattern, Error]
+var Math.PI: float64
+```
+
+- A `func` has a signature and no body. A parameter may carry a default, as in a declared function
+  (section 6).
+- A `type` may be qualified, `type Owner.Name`. The owner is a type the file declares, as the
+  prelude declares `Panic`, or else a namespace, which needs no declaration beyond being named. A
+  `type` with no body, `type Regex.Pattern`, is **opaque**: its values come only from the functions
+  declared on it, and `is` cannot test them, as for the synchronization types (section 11). A
+  record type may give its fields defaults (section 4, Field defaults).
+- A `var` is a constant of a namespace, `var Owner.NAME: T`, with a type and no initializer.
+- An unqualified `func` or `type` is a name of the prelude's own, as `print` and `Result` are.
+- There is no `import`, no `export`, and no statement: every declaration is visible, and the file
+  sees only the prelude and its own declarations.
+
+A declaration file cannot be imported, and `ant run` refuses one. `ant check` checks its signatures:
+every type they mention must resolve, every default must fit its type, a name may be declared once,
+and no declaration may take a prelude name, except in a file named `prelude.d.ant`, which is checked
+as the prelude's own source. `ant fmt` formats a declaration file as it does a module, and `ant doc`
+lists every declaration in it, since all are visible.
+
 ## 11. Standard library
 
 The standard library is a set of namespaces in the prelude. Each is a plain record of functions and
@@ -2226,6 +2262,8 @@ A function that can panic on a particular value says so in its comment, as in "p
 
 ### Prelude
 
+The prelude is a declaration file (section 10, Declaration files), `prelude.d.ant`, which declares
+every name of this section and of `stdlib.md` with its doc comment; `ant doc` and an editor show it.
 Besides the namespaces below, the prelude declares these names in every module:
 
 ```

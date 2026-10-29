@@ -32,7 +32,9 @@ imports, found as `ant run` finds them, by the path written in the `import` rela
 importing file. A file opened on its own that is a library is a program whose root is a library, as
 `ant run` accepts one. Each open file is the root of its own program, so two files that import the
 same module each analyze it in their own program, and a module's errors are reported where it is
-imported from as well as in the module itself (section 3).
+imported from as well as in the module itself (section 3). A declaration file (section 10,
+Declaration files) is a program of its own: it imports nothing, and its signatures are checked
+against the prelude, as `ant check` checks them.
 
 The text of an open document stands in for the file on disk, saved or not. A module that is not
 open is read from disk at each analysis, so a change saved by another tool is seen at the next
@@ -131,8 +133,10 @@ its function type, whose parameters have no names.
 `func`, a `type`, an import name, or the lambda whose `x` it is; from a member to its declaration in
 the namespace's module or in the prelude; from a field to the field in the type's declaration; from
 the path of an `import` to the file. A declaration of the prelude opens the prelude's source,
-`prelude.ant`, as a read-only document with the URI `ant:/prelude.ant`, whose text the client
-fetches with the request `ant/source`, which takes the URI and returns the text.
+`prelude.d.ant` (section 10, Declaration files), as a read-only document with the URI
+`ant:/prelude.d.ant`, whose text the client fetches with the request `ant/source`, which takes the
+URI and returns the text. The server serves that document as it serves a file: hover, definition,
+and the other requests work inside it.
 
 **References**, **document highlight**, and **rename** find every use of a declaration in its
 program, in every module of it. Renaming an export also renames its uses in every module of the
