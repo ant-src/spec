@@ -8,6 +8,7 @@ goroutine-style concurrency.
 - [fmt.md](fmt.md) — `ant fmt`, the source formatter
 - [doc.md](doc.md) — `ant doc` and doc comments
 - [lsp.md](lsp.md) — `ant lsp`, the language server
+- [dap.md](dap.md) — `ant dap`, the debugger
 
 ## License
 
