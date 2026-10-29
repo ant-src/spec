@@ -133,10 +133,10 @@ stopped; references are valid until the program resumes.
 
 **Breakpoints.** A line breakpoint binds to the first stop point that starts on its line, in the
 module of its source. A line with none binds to the next line that has one, inside the same
-function, lambda, `go` block, `defer` block, or module body; the breakpoint is reported verified on that line. A breakpoint
-that binds to nothing, or whose source is not a module of the program, is reported unverified, with
-a message saying why. `setBreakpoints` replaces every breakpoint of its source. A stop point a
-breakpoint binds to stops each goroutine that reaches it.
+function, lambda, `go` block, `defer` block, or module body; the breakpoint is reported verified
+on that line. A breakpoint that binds to nothing, or whose source is not a module of the program, is
+reported unverified, with a message saying why. `setBreakpoints` replaces every breakpoint of its
+source. A stop point a breakpoint binds to stops each goroutine that reaches it.
 
 **All-stop.** When one goroutine stops, for a breakpoint, a step, a pause, a panic, or the entry,
 every goroutine stops: one running Ant code stops at its next stop point, and one waiting in a
