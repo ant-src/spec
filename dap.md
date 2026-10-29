@@ -144,7 +144,9 @@ every goroutine stops: one running Ant code stops at its next stop point, and on
 blocking call (a channel operation, `select`, a lock, a sleep, I/O) stops before the call returns to
 Ant code. A waiting goroutine's innermost frame is the one making the call, at the call. The
 `stopped` event names the goroutine that stopped, with the reason `breakpoint`, `step`, `pause`,
-`exception`, or `entry`, and `allThreadsStopped`. `continue` resumes every goroutine.
+`exception`, or `entry`, and `allThreadsStopped`. `continue` resumes every goroutine. A goroutine
+that reaches a breakpoint or panics while the program is stopping for another stops the program
+again for its own when the program resumes, unless the program resumed by stepping it.
 
 Time does not stop with the program. A sleep, a timer, or a deadline (`stdlib.md`, `Context`) that
 passes while the program is stopped ends as it would have, when the program resumes.
