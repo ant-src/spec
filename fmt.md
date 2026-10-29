@@ -23,7 +23,8 @@ declaration files among them, in lexical order, skipping any entry whose name st
 symbolic links met in the walk are not followed. A symbolic link named on the command line is
 formatted through: the file it points to is rewritten and the link stays a link. `ant fmt` with no
 path is a usage error, so that nothing is rewritten by accident; the current directory is
-`ant fmt .`.
+`ant fmt .`. Standard input has no name, so `ant fmt -` reads it as a module; a declaration file is
+formatted by its path.
 
 `ant fmt` reads only the files it is given. It does not follow imports, and it does not run the
 checker: a file with type errors is formatted like any other. A file must parse as a module (section
