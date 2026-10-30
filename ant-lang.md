@@ -2987,7 +2987,7 @@ Result.unwrapOr[T, E](r: Result[T, E], fallback: T): T
 Result.all[T, E](rs: Array[Result[T, E]]): Result[Array[T], E]   // the first Err, or Ok of every value
 Result.wrapErr[T](r: Result[T, Error], context: string): Result[T, Error]   // r when Ok; else an Err of Error.wrap(r.error, context)
 
-Error.wrap(e: Error, context: string): Error                   // Error{ message: `${context}: ${e.message}` }, a new record
+Error.wrap(e: Error, context: string): Error                   // Error{ message: "${context}: ${e.message}" }, a new record
 
 Panic.catch[T](f: func(): T): Result[T, Panic]                 // Ok of f's value, or Err of the panic that left f, after its deferred blocks ran
 Panic.raise(p: Panic): never                                   // panics with p's message and trace
