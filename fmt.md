@@ -53,8 +53,9 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 
 - **Meaning.** The formatted file has the same tokens as the original, in the same order, with the
   same spelling, except for the layout tokens this document names: newlines, semicolons that end a
-  statement, and trailing commas. A template string counts as its text pieces and the tokens of its
-  interpolations, so spacing inside `${...}` may change and nothing else in it does. It therefore
+  statement, and trailing commas, and for the line breaks inside strings, which become `\n` and
+  keep the value (4.1). A string counts as its text pieces and the tokens of its interpolations, so
+  spacing inside `${...}` may change and nothing else in it does. It therefore
   parses to the same tree, and `ant run` and `ant check` behave exactly as they did, error positions
   aside.
 - **Comments.** Every comment is kept, in order, with its text. Only the whitespace before it, the
@@ -75,9 +76,10 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 - **Order.** Declarations, statements, record fields, arguments, and imports stay in written order.
   Imports in particular are never sorted, since their order is the order modules are initialized
   (section 10).
-- **Spelling.** Identifiers, number literals (`0xFF`, `1_000`, `1e9`), string literals and their
-  escapes, regular expression literals and their flags, and the text of template strings are printed
-  exactly as written. Inside a template, only the code between `${` and `}` is formatted (4.9).
+- **Spelling.** Identifiers, number literals (`0xFF`, `1_000`, `1e9`), the text of strings and
+  their escapes, raw strings, and regular expression literals and their flags are printed exactly
+  as written. Inside a string, only the code between `${` and `}` is formatted (4.9). `ant fmt`
+  never turns a string into a raw string or back.
 - **Parentheses.** Every pair of parentheses the author wrote is kept, even where precedence makes
   it redundant, and none is added.
 - **`else` placement.** `} else {` on one line and `else` at the start of the next line are both
@@ -88,14 +90,15 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 ### 4.1 Files
 
 - The output is UTF-8 with `\n` line endings. A `\r\n` or a lone `\r`, the other line breaks of
-  section 2, becomes `\n`, in a comment too, except inside a template string or the markup of an
-  HTML expression, whose text is kept byte for byte (4.9, 4.10).
-- No line ends in spaces or tabs, except inside the text of a template string or the markup of an
-  HTML expression.
+  section 2, becomes `\n`, in a comment and a string too, except inside the markup of an HTML
+  expression, whose text is kept byte for byte (4.10). In a string or a raw string the value does
+  not change, since each line break there is one `\n` (section 2).
+- No line ends in spaces or tabs, except inside the text of a string or a raw string or the markup
+  of an HTML expression.
 - The file starts with its first token or comment, and ends with exactly one `\n`.
 - Indentation is two spaces per level and never a tab, except on a line that starts inside a
-  template string, whose text and interpolations keep their indentation as written (4.9). Any other
-  tab outside a string, the text of a template, a regular expression literal, or a comment becomes
+  string or a raw string, whose text and interpolations keep their indentation as written (4.9).
+  Any other tab outside a string, a raw string, a regular expression literal, or a comment becomes
   the spacing this section prescribes.
 
 ### 4.2 Blank lines
@@ -113,7 +116,7 @@ block at indentation zero.
 
 A block is **flat** when the author wrote it on one line: no newline between its `{` and its `}`,
 outside the nested brackets of its statements. A newline inside a block comment does not count, nor
-does one inside a template string; a line comment does, since it ends its line.
+does one inside a string or a raw string; a line comment does, since it ends its line.
 
 A flat block stays on one line, with one space inside each brace and `; ` between its statements:
 `{ n += 1; n }`. An empty block is `{}`.
@@ -157,8 +160,8 @@ Items are separated by commas, and a parenthesized expression has one item.
 A list is **broken** when the author wrote a newline between its opening bracket and its first item,
 between two of its items, or between its last item and its closing bracket. A newline inside an
 item, such as inside a lambda passed as an argument or after a binary operator within an item, does
-not break the list. Newlines inside block comments and template strings do not count. Any other list
-is **flat**.
+not break the list. Newlines inside block comments, strings, and raw strings do not count. Any other
+list is **flat**.
 
 A flat list adds no line breaks. Its items are separated by `, `, and a trailing comma is removed. A
 line break the author wrote inside an item stays, indented as 4.5 says.
@@ -253,8 +256,8 @@ line at the level of the line that holds the `if` it belongs to, which keeps cha
 branches readable:
 
 ```ant
-if e is NoAccount { `no account named ${e.id}` }
-else if e is Insufficient { `${e.id} is short by ${e.short}` }
+if e is NoAccount { "no account named ${e.id}" }
+else if e is Insufficient { "${e.id} is short by ${e.short}" }
 else { "unknown" }
 ```
 
@@ -340,29 +343,31 @@ the corpus's `// expect`, `// =>`, and `// ERR:`, keep their meaning, provided n
 trailing whitespace. An `// out:` line therefore cannot expect output that ends in a space; a test
 program whose output would trims it.
 
-### 4.9 Template strings
+### 4.9 Strings
 
-The text of a template string, everything outside its interpolations, is kept byte for byte,
-including its line breaks, spaces, and tabs. The code inside each `${...}` is formatted as an
-expression, as TypeScript formatters do: its tokens take the spacing of 4.7, with no space after
-`${` or before `}`, and a lambda or record literal inside keeps its own inner spaces.
+The text of a string, everything outside its interpolations, is kept byte for byte, including its
+spaces and tabs, and so is a raw string; only their line breaks become `\n` (4.1). Neither is
+reindented, since the indentation of a line inside one belongs to its value. The code inside each
+`${...}` is formatted as an expression, as TypeScript formatters do: its tokens take the spacing of
+4.7, with no space after `${` or before `}`, and a lambda or record literal inside keeps its own
+inner spaces.
 
 ```ant
 // before
-`total: ${ a+b } items, first ${Array.map(xs,{x*2})[0]}`
+"total: ${ a+b } items, first ${Array.map(xs,{x*2})[0]}"
 
 // after
-`total: ${a + b} items, first ${Array.map(xs, { x * 2 })[0]}`
+"total: ${a + b} items, first ${Array.map(xs, { x * 2 })[0]}"
 ```
 
 An interpolation adds no line breaks and removes none. Its code is not reindented, since the lines
-of a multi-line template belong to the string: a line break the author wrote inside `${...}` stays
+of a multi-line string belong to it: a line break the author wrote inside `${...}` stays
 where it is, with its indentation as written, tabs included; only the spaces and tabs before the
 line break go (4.1). Comments inside an interpolation are kept as 4.8 says.
 
 ### 4.10 HTML expressions
 
-An HTML expression is formatted as a template string is (4.9): its markup, tags and attributes and
+An HTML expression is formatted as a string is (4.9): its markup, tags and attributes and
 text, is kept byte for byte, line breaks and indentation included, and the code inside each `{...}`
 interpolation, attribute value, or spread is formatted as an expression, with no space after `{` or
 before `}`. A lambda or record literal inside keeps its own inner spaces. An interpolation adds no

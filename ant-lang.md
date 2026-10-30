@@ -115,7 +115,8 @@ are ordinary identifiers bound by the prelude, not keywords.
 42          1_000_000     0xFF        0b1010    // integers
 3.14        1e9           2.5e-3                // floats
 "hello"     "line\nbreak" "\u{1F600}"           // strings
-`total: ${count} items`                         // template strings
+"total: ${count} items"                         // interpolation
+`C:\temp`   `say "hi"`                          // raw strings
 /^\d{4}-\d{2}$/   /\bant\b/i                    // regular expressions
 true        false         null
 ```
@@ -133,12 +134,30 @@ through a conversion, as in `byte(255)` or `float32(1.5)`. An integer literal th
 out of the range of `float64`: one so large that it would round to infinity, such as `1e400`, or one
 whose digits are not all zero but that would round to `0.0`, such as `1e-400`.
 
-The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `` \` ``, `\$`, and `\u{...}`, whose hexadecimal value
-must be a Unicode scalar value: at most `10FFFF` and not a surrogate. A plain string stays on one
-line; a template string may span lines. A template string interpolates any expression: each `${...}`
-is rendered with `String.from`, which is defined for every type (section 11). Braces nest inside
-`${...}`, so a lambda or a record literal can appear there. There are no raw strings and no
-character literals.
+A string is written between double quotes. The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `\$`, and
+`\u{...}`, whose hexadecimal value must be a Unicode scalar value: at most `10FFFF` and not a
+surrogate. A string interpolates any expression: each `${...}` is rendered with `String.from`, which
+is defined for every type (section 11). Braces nest inside `${...}`, so a lambda, a record literal,
+or another string can appear there. `\$` is a literal `$`; a `$` not followed by `{` needs no
+escape, so `"$5"` is two characters. A string may span lines: each line break inside the quotes is
+one `\n` in the value, whatever the source file uses, and the indentation of the following lines is
+kept as written.
+
+A raw string is written between backticks, as in Go. Its value is the text between them, with no
+escapes and no interpolation: `\`, `"`, and `${` stand for themselves, so `` `C:\temp` `` holds a
+backslash and `` `${2}` `` holds a dollar sign. A raw string may span lines, with each line break one
+`\n`, as in a string, and it cannot contain a backtick: text with one is written as a string, or as
+raw strings joined with `+`. There are no character literals.
+
+```ant
+var greeting = "hello, ${name}"
+var origin = Regex.compile(`^https?://[^/"]+/`)
+var script = `#!/bin/sh
+echo "deploying ${APP}"
+`
+```
+
+`script` keeps `${APP}` for the shell and ends with a line break.
 
 A regular expression literal is a pattern between slashes with optional flags after the closing
 slash, as in JavaScript. The pattern is RE2 syntax, which section 11 (Regex) describes, and it is
@@ -198,8 +217,8 @@ are ASCII in both.
 
 A line break is a line feed `\n`, a carriage return and line feed `\r\n`, or a carriage return `\r`
 alone, as in JavaScript. Each is one line break wherever this document speaks of a line or a
-newline: it ends a line comment, a plain string or a regular expression literal cannot hold one, and
-the text of a template string keeps it as written.
+newline: it ends a line comment, a regular expression literal cannot hold one, and inside a string
+or a raw string it is one `\n` in the value.
 
 A newline or a semicolon ends an expression. A newline does not end one when:
 
@@ -379,7 +398,7 @@ entry for a field the type does not list is a compile error, which catches typos
 ```ant
 type Named = { name: string }
 type Person = { name: string, age: int }
-func greet(n: { name: string }): string { `hi ${n.name}` }
+func greet(n: { name: string }): string { "hi ${n.name}" }
 
 var user = Person{ name: "ada", age: 36 }
 greet(user)                                 // ok: user has a name field
@@ -632,7 +651,7 @@ returns `A | B`; parenthesize the function type to put it inside a union.
 type Id = int | string
 
 func describe(id: Id): string {
-  if id is int { `number ${id}` } else { `text ${id}` }
+  if id is int { "number ${id}" } else { "text ${id}" }
 }
 ```
 
@@ -844,7 +863,7 @@ func tally(words: Array[string]): Array[string] {
     c.n += 1
     counts[w] = c
   }
-  Map.values(counts) | Array.sortBy({ -x.n }) | Array.map({ `${x.word}: ${x.n}` })
+  Map.values(counts) | Array.sortBy({ -x.n }) | Array.map({ "${x.word}: ${x.n}" })
 }
 
 func origin() {
@@ -1092,7 +1111,7 @@ for user in users {
 }
 
 for { key, value } in ages {  // destructures each Entry[string, int]
-  println(`${key}: ${value}`)
+  println("${key}: ${value}")
 }
 
 for i in Iter.range(0, 10) { ... }
@@ -1200,7 +1219,7 @@ var { address: { city } } = user
 var [first, second] = xs             // panics when xs has fewer than two elements
 var [head, ...tail] = xs             // tail is a new array; panics only when xs is empty
 var [_, y] = pair
-for { key, value } in ages { println(`${key}: ${value}`) }
+for { key, value } in ages { println("${key}: ${value}") }
 for [a, b] in pairs { println(a + b) }
 ```
 
@@ -1305,7 +1324,7 @@ Three characters are special: `<` begins a tag, `{` begins an interpolation, and
 syntax error. A literal brace is `&#123;` and `&#125;`, or `{"{"}`. Nothing else is: `//` and `/*`
 are text between tags, so `<p>see https://ant.dev</p>` holds the URL.
 
-`{expr}` interpolates any expression; braces nest inside it as in `${...}` of a template string, so
+`{expr}` interpolates any expression; braces nest inside it as in `${...}` of a string, so
 lambdas and record literals can appear there, and it may span lines. The value goes in by its kind:
 
 | Value    | Becomes                                                    |
@@ -1707,11 +1726,11 @@ func parseInt(s: string): Result[int, ParseError] {
 }
 
 var parsed = parseInt(input)
-if parsed is Ok { println(`parsed ${parsed.value}`) }
+if parsed is Ok { println("parsed ${parsed.value}") }
 else {
   var error = parsed.error                 // parsed: Err[ParseError] here
   if error is EmptyInput { println("nothing to parse") }
-  else { println(`bad digit at ${error.at}`) }   // error: BadDigit here
+  else { println("bad digit at ${error.at}") }   // error: BadDigit here
 }
 ```
 
@@ -1765,7 +1784,7 @@ parenthesized together with the call it wraps, as any pipeline is (see `try`):
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
   var text = try File.read(path)
-  var json = try (Json.parse(text) | Result.wrapErr(`parse ${path}`))
+  var json = try (Json.parse(text) | Result.wrapErr("parse ${path}"))
   Result.ok(Config.fromJson(json))
 }
 
@@ -1848,7 +1867,7 @@ type Job = { id: int, input: string }
 func runAll(jobs: Array[Job]) {
   for job in jobs {
     var done = Panic.catch({ handle(job) })
-    if done is Err { println(`job ${job.id}: ${done.error.message}`) }
+    if done is Err { println("job ${job.id}: ${done.error.message}") }
   }
 }
 ```
@@ -2188,9 +2207,9 @@ for path in Os.args() {
   var text = try File.read(path)
   var n = len(String.lines(text))
   total += n
-  println(`${n} ${path}`)
+  println("${n} ${path}")
 }
-println(`${total} total`)
+println("${total} total")
 ```
 
 The script is initialized last, and its top-level code is the **script body**: the body of a
@@ -2626,9 +2645,9 @@ the Unicode version `String.unicodeVersion` names. A code point that a later ver
 unassigned, `"Cn"`, until the implementation moves to that version, and `String.from` writes it as
 an escape inside quotes until then.
 
-`String.from` renders any value. The four print functions and template strings use it, so this is
-the format a program's output has. It is the only function the language calls implicitly, and only
-inside template strings and on a number in an HTML expression (section 5).
+`String.from` renders any value. The four print functions and string interpolation use it, so this
+is the format a program's output has. It is the only function the language calls implicitly, and
+only inside `${...}` of a string and on a number in an HTML expression (section 5).
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
   value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
@@ -2636,12 +2655,13 @@ inside template strings and on a number in an HTML expression (section 5).
   keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values render as
   `NaN`, `Infinity`, and `-Infinity`.
 - A string renders as itself at the top level and quoted with escapes inside a container. Inside the
-  quotes, `"` and `\` are escaped, `\n`, `\t`, and `\r` are written so, and every other code point
-  that `String.isPrint` rejects, such as a control character, a non-breaking space, a zero-width
-  joiner, or a bidirectional override, is written `\u{...}` in lower-case hexadecimal without
-  leading zeros, as `\u{7f}`. The rendering shows every code point that is there and reads back as a
-  literal, which an emoji joined from several shows too: `String.from(["👨‍👩‍👧"])` is
-  `["👨\u{200d}👩\u{200d}👧"]`. `bool`, `null`, and `void` render as their literals.
+  quotes, `"` and `\` are escaped, a `$` before `{` is written `\$`, `\n`, `\t`, and `\r` are
+  written so, and every other code point that `String.isPrint` rejects, such as a control character,
+  a non-breaking space, a zero-width joiner, or a bidirectional override, is written `\u{...}` in
+  lower-case hexadecimal without leading zeros, as `\u{7f}`. The rendering shows every code point
+  that is there and reads back as a literal, which an emoji joined from several shows too:
+  `String.from(["👨‍👩‍👧"])` is `["👨\u{200d}👩\u{200d}👧"]`. `bool`, `null`, and `void` render as their
+  literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
   call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
   their tag and the fields in declaration order. Entries are separated by `, `. An empty array, map,
@@ -2725,8 +2745,8 @@ is on with the empty value, and text decoded. The records are copies. No functio
 records: `Html.Element{ name: "script", ... }` is a record, not markup. `Html.Node` is a closed
 union, and a node kind added later will break exhaustive tests over it, on purpose.
 
-`String.from(h)` renders the markup, so `println(page)` prints it and a template string embeds it:
-`` `<!doctype html>${page}` `` is a response body. An element renders as its start tag, its
+`String.from(h)` renders the markup, so `println(page)` prints it and a string embeds it:
+`"<!doctype html>${page}"` is a response body. An element renders as its start tag, its
 children, and its end tag, none for a void element. Attributes are written in order, each after one
 space, a value in double quotes and an empty value as the bare name. In a text node and an attribute
 value, `&`, `<`, `>`, `"`, and `'` are written `&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&#39;`. A raw
@@ -2798,8 +2818,9 @@ without regard to case is compared through `String.foldCase`.
 
 In `replacement`, `$n` and `${n}` expand to group `n`, `${name}` to a named group, `$$` to one `$`,
 and a group that took no part to `""`. A name after `$` is taken as long as it can be: `$1x` is
-`${1x}`, which is no group and so expands to `""`; write `${1}x`. A plain string does not
-interpolate `$`, so `"$1"` needs no escape. `replaceWith` calls `f` with each `Match` in order and
+`${1x}`, which is no group and so expands to `""`; write `${1}x`. In a string `"$1"` needs no
+escape, but `${` interpolates: write `"\${1}x"` or the raw string `` `${1}x` ``. `replaceWith` calls
+`f` with each `Match` in order and
 puts its result in the match's place, as written, with no expansion.
 
 `Regex` is a namespace and not a type, like `Time` (section 10, Namespaces), so the annotation is
@@ -3116,8 +3137,8 @@ rule: at run time every field of a module record is readable.
 
 Operands evaluate left to right (section 5). Below, "must be" means the operation panics otherwise.
 
-- **Literals.** An integer literal is an `int`, a float literal a `float64`. A template string
-  evaluates each `${...}` in order and renders it with `String.from`. A regular expression literal
+- **Literals.** An integer literal is an `int`, a float literal a `float64`. A string evaluates
+  each `${...}` in order and renders it with `String.from`. A regular expression literal
   yields the pattern built from it when its module was loaded, the same value at every evaluation.
 - **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag.
   Entries evaluate in order; a spread copies every field of a value that must be a record; a later
@@ -3364,7 +3385,7 @@ func report(accounts: Map[AccountId, Account]): string {
   Map.values(accounts)
     | Array.filter({ x.status is Active })
     | Array.sortBy({ x.balance })
-    | Array.map({ `${x.owner}: ${x.balance}` })
+    | Array.map({ "${x.owner}: ${x.balance}" })
     | String.join("\n")
 }
 
@@ -3378,9 +3399,9 @@ var result = transfer(accounts, ada, linus, 50.0)
 if result is Ok { println("ok") }
 else {
   var error = result.error
-  if error is NotFound { println(`unknown account ${int(error.id)}`) }
-  else if error is Insufficient { println(`short by ${error.needed}`) }
-  else { println(`account ${int(error.id)} is suspended: ${error.reason}`) }
+  if error is NotFound { println("unknown account ${int(error.id)}") }
+  else if error is Insufficient { println("short by ${error.needed}") }
+  else { println("account ${int(error.id)} is suspended: ${error.reason}") }
 }
 
 println(report(accounts))

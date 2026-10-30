@@ -154,14 +154,14 @@ to it:
 ```ant
 func handle(req: Http.Request): Http.Reply {
   if req.path == "/health" { Http.Reply{ status: 200, headers: Map{}, body: "ok" } }
-  else { Http.Reply{ status: 404, headers: Map{}, body: `no ${req.path}` } }
+  else { Http.Reply{ status: 404, headers: Map{}, body: "no ${req.path}" } }
 }
 
 var listener = Result.unwrap(Net.listen(":8080"))
-println(`listening on ${Net.address(listener)}`)
+println("listening on ${Net.address(listener)}")
 var stop = Os.interrupt()
 var served = Http.serve(listener, handle, stop)
-println(`stopped: ${Context.reason(stop) ?? "?"}`)
+println("stopped: ${Context.reason(stop) ?? "?"}")
 ```
 
 ## Net
@@ -333,7 +333,7 @@ would give a duration with a field beyond an `int` panics: `until`, `since` or `
 balancing a long span into nanoseconds, and `negate`, `abs` or `subtract` given a field of −2^63.
 
 **Text.** Every value renders as its RFC 9557 string, which is ISO 8601 with the zone in brackets,
-and parses back from it; `String.from`, template strings and `Json.stringify`, which writes a time
+and parses back from it; `String.from`, string interpolation and `Json.stringify`, which writes a time
 value as a JSON string, all use that form.
 
 ```
@@ -587,7 +587,7 @@ differs by platform tests them rather than running `uname`:
 
 ```ant
 if len(Os.args()) == 0 {
-  eprintln(`usage: ${Path.base(Os.program())} <file>...`)
+  eprintln("usage: ${Path.base(Os.program())} <file>...")
   Os.exit(2)
 }
 var opener = if Os.platform() == "darwin" { "open" } else { "xdg-open" }
@@ -672,7 +672,7 @@ helper like any record:
 var build = Cmd.new("go", ["build"], dir: root)
 if verbose { Array.push(build.args, "-v") }
 Array.push(build.args, "./...")
-println(`running ${Cmd.string(build)}`)
+println("running ${Cmd.string(build)}")
 var status = try Cmd.run(build)
 ```
 
