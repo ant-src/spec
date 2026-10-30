@@ -625,6 +625,8 @@ The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.
 order, and a read of standard input flushes it first, so a prompt is seen before the program waits.
 Standard error is not buffered, and a write to it, by `eprint`, `eprintln` or `Os.stderr()`, flushes
 standard output first, so where the two streams reach one terminal they interleave in program order.
+The write therefore waits while standard output cannot be written, as when the reader of a full pipe
+is not reading.
 `File.close` on a stream does nothing and is `Ok`. In the REPL standard input belongs to the REPL,
 and `Os.stdin()` is at end of file, as is a child's standard input under `Cmd.run`. A read of
 standard input reads the stream only while a read waits, so between reads the input is left to a

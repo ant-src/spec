@@ -50,9 +50,10 @@ A session runs in this order:
 | `stdin`       | a file whose contents are the program's standard input           | none                     |
 | `stopOnEntry` | stop before the root module's first statement                    | `false`                  |
 
-A relative `program` or `stdin` is resolved against `cwd`. `stopOnEntry` stops after the modules
-the root imports have run, before the first statement of the root itself: for a script, its first
-line.
+A relative `program` or `stdin` is resolved against `cwd`, and `Os.program()` returns the resolved
+`program`, an absolute path, since the working directory may have moved. `stopOnEntry` stops after
+the modules the root imports have run, before the first statement of the root itself: for a script,
+its first line.
 
 **Streams.** What the program writes to standard output and standard error is sent as `output`
 events of category `stdout` and `stderr`. Standard output is sent at least every 100 milliseconds

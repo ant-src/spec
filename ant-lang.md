@@ -2355,7 +2355,7 @@ Array.get[T](xs: Array[T], i: int): T | null
 Array.first[T](xs: Array[T]): T | null                         // null when empty
 Array.last[T](xs: Array[T]): T | null
 Array.push[T](xs: Array[T], v: T): void                        // mutates
-Array.pushAll[T](xs: Array[T], ys: Array[T]): void             // mutates; ys's elements in order, as ys was at the call
+Array.extend[T](xs: Array[T], ys: Array[T]): void              // mutates; ys's elements in order, as ys was at the call
 Array.pop[T](xs: Array[T]): T | null                           // mutates; null when empty
 Array.insert[T](xs: Array[T], i: int, v: T): void              // mutates; v becomes element i; panics if i is outside 0 ..= length
 Array.removeAt[T](xs: Array[T], i: int): T                     // mutates; the removed element; panics if i is out of range
