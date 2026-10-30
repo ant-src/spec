@@ -550,13 +550,16 @@ values are immutable and serve as map keys.
 type Pipe = { read: File.Handle, write: File.Handle }
 
 Os.args(): Array[string]              // the arguments after the program path: `ant run main.ant a b` gives ["a", "b"]
+Os.program(): string                  // the program path: `ant run main.ant a b` gives "main.ant"; "" in the REPL
+Os.platform(): string                 // the operating system: "darwin", "linux", "windows", ...
+Os.arch(): string                     // the processor architecture: "arm64", "amd64", ...
 Os.env(name: string): string | null
 Os.environ(): Map[string, string]     // every variable
 Os.cwd(): Result[string, Error]       // the working directory
 Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 Os.stdin(): File.Handle               // the program's standard input
 Os.stdout(): File.Handle              // its standard output, which print and println write to as well
-Os.stderr(): File.Handle              // its standard error
+Os.stderr(): File.Handle              // its standard error, which eprint and eprintln write to as well
 Os.interrupt(): Context               // done when the process is interrupted; the same context at every call
 Os.openPipe(): Result[Os.Pipe, Error] // what is written to write is read from read
 Os.which(program: string): string | null   // the path a Cmd naming program starts; null when none
@@ -573,6 +576,21 @@ var out = try Os.openPipe()
 var make = try Cmd.start(Cmd.new("make"), stdout: out.write)
 try File.close(out.write)
 var line = try File.readLine(out.read)   // each line as make writes it, null at the end
+```
+
+`Os.program()` is the path of the program's root module as the command was given it, as a shell's
+`$0` is, so a usage line names the script as it was run: `./tool.ant` when a `#!` line runs it
+from the working directory, `tool.ant` after `ant run tool.ant`. A host that embeds Ant gives the
+path it loaded. `Os.platform()` and `Os.arch()` are Go's names for the host's operating system and
+architecture, `GOOS` and `GOARCH`, so they are lower case and macOS is `"darwin"`. A script that
+differs by platform tests them rather than running `uname`:
+
+```ant
+if len(Os.args()) == 0 {
+  eprintln(`usage: ${Path.base(Os.program())} <file>...`)
+  Os.exit(2)
+}
+var opener = if Os.platform() == "darwin" { "open" } else { "xdg-open" }
 ```
 
 ### Interrupts
@@ -605,6 +623,8 @@ The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.
 `File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new.
 `Os.stdout()`, `print` and `println` write to one buffer, so their output interleaves in program
 order, and a read of standard input flushes it first, so a prompt is seen before the program waits.
+Standard error is not buffered, and a write to it, by `eprint`, `eprintln` or `Os.stderr()`, flushes
+standard output first, so where the two streams reach one terminal they interleave in program order.
 `File.close` on a stream does nothing and is `Ok`. In the REPL standard input belongs to the REPL,
 and `Os.stdin()` is at end of file, as is a child's standard input under `Cmd.run`. A read of
 standard input reads the stream only while a read waits, so between reads the input is left to a

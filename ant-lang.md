@@ -2125,12 +2125,12 @@ Imports are live and read-only. `export var` is allowed; an imported name reads 
 module's current value each time, and assigning to an imported name or to a field of a namespace
 from outside the module is a compile error. Two imports binding the same local name, or a top-level
 declaration that shadows an imported name, are syntax errors, so every name in a file has one
-visible origin. The prelude names count as imports in every module: `print`, `println`, `panic`,
-`len`, the type and conversion names such as `int` and `Result`, and the namespaces. Unlike other
-imports, a prelude name cannot be shadowed in an inner scope either, so `int` and `x is int` mean
-one thing everywhere; the parser enforces it, since the prelude is a fixed list. There is no
-re-export. An import cycle is an error in both commands, since no module in it could be initialized
-after its imports: `ant run` stops before any module runs.
+visible origin. The prelude names count as imports in every module: `print`, `println`, `eprint`,
+`eprintln`, `panic`, `len`, the type and conversion names such as `int` and `Result`, and the
+namespaces. Unlike other imports, a prelude name cannot be shadowed in an inner scope either, so
+`int` and `x is int` mean one thing everywhere; the parser enforces it, since the prelude is a fixed
+list. There is no re-export. An import cycle is an error in both commands, since no module in it
+could be initialized after its imports: `ant run` stops before any module runs.
 
 Imports are resolved depth first in source order, and each module is initialized once, after
 everything it imports. Within a module, `func` and `type` declarations are hoisted, so functions may
@@ -2313,6 +2313,8 @@ type Ordered = Number | string
 
 print[T](value: T): void                         // String.from(value) to standard output
 println[T](value: T): void                       // String.from(value) and a newline; println() writes only the newline
+eprint[T](value: T): void                        // as print, to standard error
+eprintln[T](value: T): void                      // as println, to standard error
 panic(message: string): never
 int8[T: Number](x: T): int8                      // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
 string(x): string                                // x is a string or a named primitive over string: the payload
@@ -2334,9 +2336,11 @@ takes its parameter type from the function type expected, which must be one of t
 `Array.map(words, len)` is an `Array[int]`. The namespace functions stay; `len(xs)` and
 `Array.length(xs)` are the same count.
 
-`println` is built into the checker too, so that it may be called with no argument, which writes an
-empty line. `print` writes no newline, so a prompt or a progress dot needs nothing else; output is
-buffered and flushed when the program reads standard input, blocks, or exits (stdlib.md, Os).
+`println` and `eprintln` are built into the checker too, so that they may be called with no
+argument, which writes an empty line. `print` writes no newline, so a prompt or a progress dot needs
+nothing else; output is buffered and flushed when the program reads standard input, blocks, or
+exits. `eprint` and `eprintln` write a warning or a usage line to standard error, which is not
+buffered, and flush standard output first (stdlib.md, Os).
 
 ### Array
 
@@ -2351,6 +2355,7 @@ Array.get[T](xs: Array[T], i: int): T | null
 Array.first[T](xs: Array[T]): T | null                         // null when empty
 Array.last[T](xs: Array[T]): T | null
 Array.push[T](xs: Array[T], v: T): void                        // mutates
+Array.pushAll[T](xs: Array[T], ys: Array[T]): void             // mutates; ys's elements in order, as ys was at the call
 Array.pop[T](xs: Array[T]): T | null                           // mutates; null when empty
 Array.insert[T](xs: Array[T], i: int, v: T): void              // mutates; v becomes element i; panics if i is outside 0 ..= length
 Array.removeAt[T](xs: Array[T], i: int): T                     // mutates; the removed element; panics if i is out of range
@@ -2612,8 +2617,8 @@ the Unicode version `String.unicodeVersion` names. A code point that a later ver
 unassigned, `"Cn"`, until the implementation moves to that version, and `String.from` writes it as
 an escape inside quotes until then.
 
-`String.from` renders any value. `print`, `println` and template strings use it, so this is the
-format a program's output has. It is the only function the language calls implicitly, and only
+`String.from` renders any value. The four print functions and template strings use it, so this is
+the format a program's output has. It is the only function the language calls implicitly, and only
 inside template strings and on a number in an HTML expression (section 5).
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
