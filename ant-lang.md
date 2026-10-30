@@ -2223,7 +2223,9 @@ stay for the inputs after it: `return` ends the input, `try` returns an `Err` fr
 returns the value after it, and `defer` registers on it, its deferred blocks running when the input
 ends. An input that returns an `Err` has it written to standard error as a script's is, and the REPL
 goes on; one that returns anything else has that value printed, as the value of its last expression
-would be. So `var page = try Http.get(url)` binds the response, or reports why there is none.
+would be. So `var page = try Http.get(url)` binds the response, or reports why there is none. In
+the REPL `_` read as a value is the result the last input printed, for one that printed any;
+written, it still discards.
 
 ### Declaration files
 
