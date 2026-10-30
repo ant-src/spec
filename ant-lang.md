@@ -2218,6 +2218,13 @@ reported as the error alone, and `unwrap` as a bug, reported as a panic with its
 `Os.exit` ends the process with any status and skips deferred blocks. A library given to `ant run`
 is initialized, and the program exits with `0`.
 
+The REPL that a bare `ant` starts runs each input as a script body of its own, whose declarations
+stay for the inputs after it: `return` ends the input, `try` returns an `Err` from it, `?? return`
+returns the value after it, and `defer` registers on it, its deferred blocks running when the input
+ends. An input that returns an `Err` has it written to standard error as a script's is, and the REPL
+goes on; one that returns anything else has that value printed, as the value of its last expression
+would be. So `var page = try Http.get(url)` binds the response, or reports why there is none.
+
 ### Declaration files
 
 A file whose name ends in `.d.ant` is a **declaration file**: the signatures of names that are bound
