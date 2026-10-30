@@ -19,11 +19,11 @@ framed with a `Content-Length` header as the Language Server Protocol frames the
 to standard error. It serves one client and one debug session, and runs one program, in its own
 process.
 
-| Exit status | When                                                       |
-| ----------- | ---------------------------------------------------------- |
-| `0`         | the client sent `disconnect`                               |
-| `1`         | the connection ended without `disconnect`                  |
-| `2`         | the usage is wrong                                         |
+| Exit status | When                                                                     |
+| ----------- | ------------------------------------------------------------------------ |
+| `0`         | the client sent `disconnect`, or ended the connection after `terminated` |
+| `1`         | the connection ended before `terminated` without `disconnect`            |
+| `2`         | the usage is wrong                                                       |
 
 The exit status of the program is reported in the `exited` event, not as the command's own.
 
@@ -67,7 +67,8 @@ are written to standard error as `ant run` writes them (section 8).
 context `Os.interrupt` returned, when the program asked for one and it is not done, and otherwise it
 cancels the run (section 9). A second `terminate` cancels the run. A cancelled run kills the
 children still running (`stdlib.md`, `Cmd`). `disconnect` cancels the run if it has not ended, waits
-for it, and ends the command.
+for it, and ends the command. A client may also end the connection once it has the `terminated`
+event, without `disconnect`, as some do: the run has ended, so the command ends as cleanly.
 
 ## 3. The program in protocol terms
 
