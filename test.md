@@ -87,7 +87,7 @@ else:
 | `action`   | Other fields                                                    | When                           |
 | ---------- | --------------------------------------------------------------- | ------------------------------ |
 | `"run"`    | `file`, `test`                                                  | a test starts                  |
-| `"output"` | `file`, `test`, `output`: the text, a line or less              | a test prints                  |
+| `"output"` | `file`, `test`, `output`: the text of one write                 | a test prints                  |
 | `"pass"`   | `file`, `test`, `elapsed`: seconds as a number                  | a test passes                  |
 | `"skip"`   | `file`, `test`, `elapsed`, `reason`                             | a test is skipped              |
 | `"fail"`   | `file`, `test`, `elapsed`, `message`: the failures, as reported | a test fails                   |
@@ -108,7 +108,9 @@ as an interrupt does (section 9), and exits with status `1`.
 | `2`    | a file could not be loaded, because of a syntax error, an import cycle, a missing module, or a bad import, or the usage is wrong |
 
 A file that cannot be loaded is reported as `ant run` reports one, on standard error, and the other
-files still run. `Os.exit` in a test ends the command with its status, as it ends a program.
+files still run. A panic while a file's modules are initialized is reported as `ant run` reports
+one; the file's tests do not run, and the file counts as one failed test. `Os.exit` in a test ends
+the command with its status, as it ends a program.
 
 ## 5. Editors and the debugger
 
