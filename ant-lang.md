@@ -1644,7 +1644,8 @@ parameter:
 - When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`,
   `continue`, or `panic`, the complement applies to the rest of the block, so
   `if user == null { return }` leaves `user` a `User` below it. `x ?? return ...` and
-  `x ?? panic(...)` narrow the same way.
+  `x ?? panic(...)` narrow the same way, and so does `assert(cond)`, as `if !cond { panic(...) }`
+  (section 8, `assert`).
 - After a `while` whose body contains no `break`, the complement of its condition holds, whatever
   the body assigned, because the condition was evaluated last.
 - An assignment narrows the variable to the type of the assigned expression, and where branches
@@ -1820,6 +1821,70 @@ panic).
 
 Section 12 lists every operation that panics. The common ones: integer overflow, integer division by
 zero, array index out of range, lossy numeric conversion, and `unwrap` on the wrong case.
+
+### `assert`
+
+`assert(cond, message)` panics when `cond` is `false`, with a message that quotes the condition and
+shows the values it was computed from. `message` is optional. It is always on: no flag or build mode
+removes it.
+
+```ant
+func pop[T](stack: Array[T]): T {
+  assert(len(stack) > 0, "pop on empty stack")
+  ...
+}
+```
+
+```
+panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
+  stack = []
+  at pop (stack.ant:2:3)
+  at main (main.ant:14:9)
+```
+
+- **Evaluation.** `cond` is evaluated once. If it is `true`, `assert` returns `void` and `message`
+  is never evaluated, as the message of `if !cond { panic(message) }` is not. If it is `false`,
+  `message` is evaluated and the goroutine panics as `panic` does. The innermost frame of the trace
+  is the `assert` call.
+- **The message.** The panic message is `assertion failed: `, then the condition as `ant fmt` prints
+  it on one line, then the comparison's values in parentheses when there are any, then `: ` and
+  `message` when it is not empty. The parts follow, one per line (below). Comments and line breaks
+  in the source do not appear.
+- **The comparison.** When the outermost operator of `cond` is `==`, `!=`, `<`, `<=`, `>`, `>=`, or
+  `is`, its two values follow the condition, so they stand next to the text they belong to:
+  `total == expected (9 == 10)`. For `is`, the right side is the tag the left value carries, or its
+  kind when it has none: `shape is Circle (Square{ side: 2 } is Square)`. A failed `!=` against the
+  literal `null` names the other side instead, since both values are `null`:
+  `user != null (user is null)`.
+- **The parts.** On the following lines comes `text = value`, indented by two spaces, for each
+  name, field access, index, and call inside `cond` that ran, in the order it finished:
+  `assert(isSorted(xs))` shows `xs = [3, 1, 2]`. Left out are literals, the callee of a call, the
+  object of a field access or an index (the access is shown), the comparison's two operands
+  (already in parentheses), the whole condition, and the bodies of lambdas. A text that repeats is
+  shown once, with its first value. A part that `&&`, `||`, `??`, or `?.` skipped did not run and is
+  not shown.
+- **Values.** Every value is rendered in full by `String.from`. These are the values the evaluation
+  already produced; nothing is evaluated a second time.
+- **Narrowing.** After `assert(cond)`, the rest of the block is narrowed as after
+  `if !cond { panic(...) }` (section 7, Narrowing), so `assert(user != null)` leaves `user` a `User`.
+- **Not a value.** `assert` may only be called by name, since its message needs the condition as
+  written, which exists only at a call site. Any other use of the name, such as
+  `Array.map(flags, assert)`, is a syntax error. It is the one prelude name that is not a value.
+
+```ant
+assert(lo <= mid && mid < hi)
+// panic: assertion failed: lo <= mid && mid < hi
+//   lo = 0
+//   mid = 5
+//   hi = 5
+```
+
+`assert` states something the program believes is true, so that a bug shows where it is made instead
+of where it is noticed: a documented precondition of a function ("panics if n < 0"), an invariant of
+a data structure or a loop, a value that cannot be `null` here, or the expectation of a test. Input
+from a user, a file, or the network is never asserted; it is a `Result`. If the program can recover
+by doing something else, it is a `Result`; if the only fix is to change the code, it is an `assert`.
+A message names the reason the condition should hold, not the condition again.
 
 ### `defer`
 
@@ -2344,6 +2409,7 @@ println[T](value: T): void                       // String.from(value) and a new
 eprint[T](value: T): void                        // as print, to standard error
 eprintln[T](value: T): void                      // as println, to standard error
 panic(message: string): never
+assert(cond: bool, message: string = ""): void   // panics if cond is false; message is evaluated only then
 int8[T: Number](x: T): int8                      // panics if out of range, NaN, or infinite; likewise the other nine; a named primitive over a number is accepted and unwrapped
 string(x): string                                // x is a string or a named primitive over string: the payload
 bool(x): bool                                    // likewise
@@ -2363,6 +2429,10 @@ parameter whose every member it accepts. Any other argument is a compile error. 
 takes its parameter type from the function type expected, which must be one of these, so
 `Array.map(words, len)` is an `Array[int]`. The namespace functions stay; `len(xs)` and
 `Array.length(xs)` are the same count.
+
+`assert` is built into the checker and the evaluator (section 8, `assert`). Unlike every other
+prelude name it is not a value: it may only be called by name, because its message needs the
+condition as written.
 
 `println` and `eprintln` are built into the checker too, so that they may be called with no
 argument, which writes an empty line. `print` writes no newline, so a prompt or a progress dot needs
@@ -3285,6 +3355,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **`defer { ... }`.** Registers the block with the innermost enclosing block. The value is `void`.
 - **`go { ... }`.** Starts a new goroutine that evaluates the block, and yields `void` at once.
 - **`panic(message)`.** Begins a panic in the current goroutine (below).
+- **`assert(cond, message)`.** `cond` evaluates, recording the values section 8 shows, and must be
+  a `bool`. When it is `true` the value is `void`. When it is `false`, `message` evaluates and must
+  be a string, and a panic begins with the message section 8 describes.
 
 ### Deferred blocks and panics
 
@@ -3336,6 +3409,7 @@ only panic in the ways the last column lists, which depend on values known at ru
 | library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                                                              | the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                                                      |
 | `var`                                             |                                                                                                                                                                                                                                                                                                | read or assigned before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                                                                                     |
 | `panic`                                           |                                                                                                                                                                                                                                                                                                | always                                                                                                                                                                                                                          |
+| `assert`                                          | the condition is not a `bool`, or the message is not a string                                                                                                                                                                                                                                  | the condition is `false`                                                                                                                                                                                                        |
 | any call                                          |                                                                                                                                                                                                                                                                                                | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                          |
 | a count                                           |                                                                                                                                                                                                                                                                                                | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold                          |
 | a result size                                     |                                                                                                                                                                                                                                                                                                | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                                                                                                   |
