@@ -91,6 +91,8 @@ break continue defer else export false for func go if import
 in is null return select true try type var void while
 ```
 
+In a test file (section 10, Tests), `test` is a keyword as well; elsewhere it is a plain name.
+
 Reserved words, so that they stay available and JavaScript habits produce an error rather than an
 identifier:
 
@@ -1886,7 +1888,8 @@ of where it is noticed: a documented precondition of a function ("panics if n < 
 a data structure or a loop, a value that cannot be `null` here, or the expectation of a test. Input
 from a user, a file, or the network is never asserted; it is a `Result`. If the program can recover
 by doing something else, it is a `Result`; if the only fix is to change the code, it is an `assert`.
-A message names the reason the condition should hold, not the condition again.
+A message names the reason the condition should hold, not the condition again. In a test, a failed
+`assert` fails the test, and the report shows the same message (section 10, Tests).
 
 ### `defer`
 
@@ -2160,7 +2163,8 @@ println(config().name)
 A panic ends the goroutine it occurs in, after running that goroutine's deferred blocks. The runtime
 reports the message and stack trace on standard error. Nothing else happens: no other goroutine is
 interrupted, and the program continues. Code that waits on a goroutine must therefore account for it
-never finishing its work; the `defer { WaitGroup.done(wg) }` above is the usual pattern.
+never finishing its work; the `defer { WaitGroup.done(wg) }` above is the usual pattern. A goroutine
+that a test owns reports its panic to the test instead, which fails (section 10, Tests).
 
 A goroutine that runs many units of work, such as a worker reading jobs or a server's handler loop,
 calls each through `Panic.catch` (section 8, Catching a panic), so that a bug in one unit ends that
@@ -2312,6 +2316,105 @@ goes on; one that returns anything else has that value printed, as the value of 
 would be. So `var page = try Http.get(url)` binds the response, or reports why there is none. In the
 REPL `_` read as a value is the result the last input printed, for one that printed any; written, it
 still discards.
+
+### Tests
+
+A file whose name ends in `_test.ant` is a **test file**. It is a library that may also hold `test`
+declarations, which `ant test` runs (`test.md`). `ant run` refuses a test file, and so does an
+`import` in a file that is not one; a test file may import another, for shared helpers.
+
+```ant
+// stack_test.ant, beside stack.ant
+test "push then pop returns the value" {
+  var s = Stack.new()
+  Stack.push(s, 1)
+  assert(Stack.pop(s) == 1)
+}
+
+test "pop on an empty stack panics" {
+  var r = Panic.catch({ Stack.pop(Stack.new()) })
+  assert(r is Err)
+  assert(String.contains(r.error.message, "pop on empty stack"))
+}
+
+type Case = { input: string, want: int }
+
+test "parse" {
+  var cases = [
+    Case{ input: "1", want: 1 },
+    Case{ input: "-7", want: -7 },
+    Case{ input: "0x10", want: 16 },
+  ]
+  for c in cases {
+    test "${c.input}" {
+      assert(parse(c.input) == c.want)
+    }
+  }
+}
+```
+
+**Test files.** A test file holds `import`, `func`, `type`, `var`, and `test` declarations, and no
+top-level statement, which would make it a script. What it exports only another test file can
+import, so helpers shared by several test files live in one, such as `helpers_test.ant`.
+
+- **Companion scope.** `foo_test.ant` beside a library `foo.ant`, in the same directory, is that
+  library's companion: it sees every top-level name of `foo.ant`, exported or not, and every name
+  `foo.ant` imports, without importing them, as though its top-level scope were nested in
+  `foo.ant`'s. A declaration or import of its own that would bind one of those names again is an
+  error, as shadowing an import is (section 10). `foo.ant` is initialized first, once, as an import
+  is.
+- **Black box.** A test file with no such library beside it, such as `api_test.ant` for a whole
+  directory, sees only what it imports.
+- A script cannot be a companion, since its top-level names are locals of its body (Scripts, above):
+  `foo_test.ant` beside a script `foo.ant` sees only what it imports, and logic worth testing moves
+  into a library the script imports.
+
+**The `test` declaration.** `test`, a string literal, and a block:
+
+```
+test "name" { body }
+```
+
+1. **Where.** At the top level of a test file it declares a test. Inside the body of a test, at any
+   depth of blocks and loops but not inside a nested function, lambda, `go` block, or `defer` block,
+   it is a statement that runs a **subtest**. Anywhere else it is a syntax error. `test` is a
+   keyword in test files only (section 2): elsewhere it is a plain name, and `Regex.test` is a field
+   in every file.
+2. **Name.** A top-level test's name is a string literal without interpolation, not empty, and
+   unique in its file, so tools know every top-level test without running anything. A subtest's name
+   may interpolate, and is evaluated when the statement runs; an empty one panics. When two subtests
+   of one test get the same name, the second is named with ` #2` appended, the third with ` #3`, and
+   so on. A test's **full name** joins the names from the top-level test down with `/`:
+   `parse/0x10`.
+3. **Body.** The body is a boundary, like a script body (Scripts, above): `return` ends the test,
+   `defer` registers on it, `try` returns an `Err` from it, and `?? return` returns the value after
+   it. Its last expression is discarded. It may return `void` or an `Err`, which the checker
+   enforces. A subtest's body sees the variables of the blocks around it, as a lambda's does. A test
+   is not a value: nothing can call it, and the statement that runs a subtest has type `void`.
+4. **Outcome.** A test **fails** when a panic leaves its body, from an `assert` or any other; when
+   its body returns an `Err`; when a goroutine it owns panics or outlives it (below); or when one of
+   its subtests fails. It is **skipped** when it calls `Test.skip` and has not failed. Otherwise it
+   **passes**. A failure ends the body at once, as any panic does, after its deferred blocks run:
+   there is no failure that records and goes on. A failed subtest does not end its parent's body,
+   which goes on, to the next row of a table, and fails when it ends.
+5. **Order.** Top-level tests run one at a time in source order, after every module of the test
+   file's program has been initialized, and subtests in the order their statements run, each to its
+   end before the statement after it, except tests that call `Test.parallel` (section 11, Test).
+   Each body runs on a goroutine of its own, which the test owns.
+
+**Goroutines.** A goroutine started while a test is current belongs to that test, and so does every
+goroutine it starts in turn; the current test of a goroutine is the test whose body it runs or that
+owns it, and the `Test` functions act on it (section 11, Test).
+
+- A panic in a goroutine the test owns fails the test, with the panic's message and trace, instead
+  of being written to standard error (section 9, Panics in goroutines). The test's body is not
+  interrupted; the test fails when it ends.
+- When the body and its deferred blocks have finished, and its parallel subtests have ended, the
+  runner waits a short grace for the goroutines the test owns. One still running after it fails the
+  test with `goroutine started at path:line:column outlived the test`, and the runner ends it as a
+  cancelled run ends every goroutine (section 9, Goroutines): at its next call or loop iteration,
+  with every blocking call it is in returning `cancelled`. So a leaked goroutine cannot disturb the
+  next test.
 
 ### Declaration files
 
@@ -3147,6 +3250,37 @@ wraps the value, and `Context.isDone(ctx)` tells a cancellation from a close. A 
 channels at once, or on a channel and a context, a group or a timer, is a `select` (section 5),
 which takes nothing from any channel until its choice is made.
 
+### Test
+
+The functions a test body needs beyond `assert`, `Panic.catch`, and `defer` (section 10, Tests).
+Each acts on the **current test**: the test whose body the calling goroutine runs, or the test that
+owns the goroutine. Called outside any test, each panics, so a helper function can skip or make a
+temporary directory without being given a handle.
+
+```
+Test.skip(reason: string): never      // ends the current test as skipped, after its deferred blocks
+Test.parallel(): void                 // runs the current test alongside the other parallel tests of its parent
+Test.tempDir(): string                // a new directory, removed with its contents when the test ends
+Test.context(): Context               // done when the test's body ends, before its deferred blocks
+Test.name(): string                   // the current test's full name, as "parse/0x10"
+```
+
+- **`Test.skip`** unwinds the goroutine as a panic does, running deferred blocks, but it is not a
+  panic: `Panic.catch` does not stop it. In a subtest it skips the subtest. A test that is skipped
+  after it failed stays failed. Called on a goroutine the test owns, it ends that goroutine and
+  marks the test skipped.
+- **`Test.parallel`** may be called once, from the test's body, and panics otherwise. The test stops
+  at the call until every test of the same parent that did not call it has ended (for a top-level
+  test, every such test of the file), then runs alongside the parent's other parallel tests, at most
+  `-parallel n` at a time (`test.md`). A parent ends after all of its parallel subtests have ended,
+  which is after its own body and deferred blocks. Tests in different files never run at once.
+- **`Test.tempDir`** returns a new directory at each call, made as `File.tempDir` makes one
+  (`stdlib.md`), and fails the test with a panic when it cannot make one. The directory is removed
+  after the test's deferred blocks have run and its goroutines have ended or been ended.
+- **`Test.context`** is the context to give blocking calls that must stop when the test does, such
+  as a server the test starts. It is the same context at every call within one test, and its reason
+  is `cancelled`.
+
 ## 12. Dynamic semantics
 
 This section is the contract of `ant run`. It defines what every construct does to values, and it is
@@ -3382,6 +3516,20 @@ memory, and the sync objects of section 9 are the only synchronization. The runt
 a data race cannot corrupt memory or crash the interpreter, as section 9 spells out; the values a
 racing program observes are otherwise unspecified, and an implementation may end a racing program
 with a report. The program ends when the script body ends, whatever other goroutines are doing.
+
+### Running a test
+
+`ant test` loads a test file as `ant run` loads a program, initializes its modules in order, and
+then runs its tests (section 10, Tests). A test's body runs on a new goroutine, in an environment
+whose parent is the module's scope for a top-level test and the scope of the statement for a
+subtest, under a frame named `test "name"` with the test's own name, so the trace of a panic in it
+ends there. The body is run as `Panic.catch` runs a function: a panic that leaves it, after its
+deferred blocks, is the test's failure, and `Test.skip` unwinds it the same way, running its
+deferred blocks, without being a panic that `Panic.catch` stops. When the body returns, the runner
+cancels the context `Test.context` gave, before the body's deferred blocks run; then it waits for
+the test's parallel subtests, then for the goroutines the test owns, up to the grace, then removes
+the directories `Test.tempDir` made. A goroutine records the test it belongs to when it starts, and
+keeps it.
 
 ### Runtime panics
 

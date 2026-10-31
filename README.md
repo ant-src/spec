@@ -9,6 +9,7 @@ goroutine-style concurrency.
 - [doc.md](doc.md) — `ant doc` and doc comments
 - [lsp.md](lsp.md) — `ant lsp`, the language server
 - [dap.md](dap.md) — `ant dap`, the debugger
+- [test.md](test.md) — `ant test`, the test runner
 
 ## License
 
