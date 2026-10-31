@@ -1860,11 +1860,12 @@ panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
   name, field access, index, and call inside `cond` that ran, in the order it finished:
   `assert(isSorted(xs))` shows `xs = [3, 1, 2]`. Left out are literals, the callee of a call, the
   object of a field access or an index (the access is shown), the comparison's two operands
-  (already in parentheses), the whole condition, and the bodies of lambdas. A text that repeats is
-  shown once, with its first value. A part that `&&`, `||`, `??`, or `?.` skipped did not run and is
-  not shown.
-- **Values.** Every value is rendered in full by `String.from`. These are the values the evaluation
-  already produced; nothing is evaluated a second time.
+  (already in parentheses), the whole condition, the bodies of lambdas, and a part whose value is a
+  function. A text that repeats is shown once, with its first value. A part that `&&`, `||`, `??`,
+  or `?.` skipped did not run and is not shown.
+- **Values.** Every value is rendered in full by `String.from`, as inside an array, so a string is
+  quoted: `name == "Anne" ("Ann" == "Anne")`. These are the values the evaluation already produced;
+  nothing is evaluated a second time.
 - **Narrowing.** After `assert(cond)`, the rest of the block is narrowed as after
   `if !cond { panic(...) }` (section 7, Narrowing), so `assert(user != null)` leaves `user` a `User`.
 - **Not a value.** `assert` may only be called by name, since its message needs the condition as
