@@ -87,6 +87,7 @@ closed.
 | `textDocument/semanticTokens/full` | what each identifier is                                     |
 | `textDocument/inlayHint`           | inferred types                                              |
 | `textDocument/codeAction`          | mechanical fixes for diagnostics                            |
+| `textDocument/codeLens`            | "run test" and "debug test" above each test of a test file  |
 
 **Completion** offers what can be written at the position:
 
@@ -145,10 +146,10 @@ reserved word, a prelude name, or a name already bound in a scope the renamed bi
 (section 10). Fields of a record type and elements of markup are not renamed.
 
 **Document symbols** list the module's imports, its types with their fields and the functions
-declared on them nested beneath, its functions, and its top-level variables, in source order, each
-with its range and the range of its name. **Workspace symbols** list the top-level declarations of
-every `.ant` file under the workspace folders whose name contains the query, matched without regard
-to case, as `ant doc` matches a name.
+declared on them nested beneath, its functions, its top-level variables, and in a test file its
+tests (Code lenses, below), in source order, each with its range and the range of its name.
+**Workspace symbols** list the top-level declarations of every `.ant` file under the workspace
+folders whose name contains the query, matched without regard to case, as `ant doc` matches a name.
 
 **Formatting** is `ant fmt` (`fmt.md`): the whole document is replaced by its formatted text, and a
 document that does not parse is left as it is. There is no range formatting and no formatting as you
@@ -165,15 +166,24 @@ differently; a declaration is marked as such, and a prelude name as `defaultLibr
 **Inlay hints** show the type the checker inferred after the name of a `var` that states none, and
 the name of each parameter before a positional argument.
 
+**Code lenses** stand above each top-level test of a test file (`ant-lang.md` section 10, Tests),
+and above each subtest whose name is a string without interpolation: one titled `run test` with the
+command `ant.test.run`, and one titled `debug test` with the command `ant.test.debug`. Both take two
+arguments, the document's URI and the `-run` pattern that selects that test alone: each name, from
+the top-level test down, quoted as a regular expression between `^` and `$`, joined with `/`. The
+client carries the commands out, with `ant test -run` (`test.md`) and with a `launch` of `ant dap`
+whose `test` is the pattern (`dap.md`). The same tests are document symbols of kind `Function` with
+the detail `test`, each subtest under its test.
+
 **Code actions** fix what a diagnostic names when the fix is mechanical: they state the type of a
 `var` or the return type of a function where a message asks for an annotation (section 4,
 Inference), and add the fields a record literal leaves out, with placeholders for their values.
 
 ## 5. What `ant lsp` does not do
 
-- It does not run programs. The editor runs `ant run`, and the extension for an editor may offer a
-  command for it.
+- It does not run programs or tests. The editor runs `ant run` and `ant test`, and the extension for
+  an editor may offer a command for it.
 - It does not watch the file system; it relies on the client's notifications.
 - It does not format a range or on type (section 4, Formatting).
-- It offers no code lens, no call hierarchy, and no type hierarchy.
+- It offers no code lens but those of tests, no call hierarchy, and no type hierarchy.
 - It serves one workspace per process; an editor that opens two starts two servers.

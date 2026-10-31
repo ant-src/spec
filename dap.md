@@ -49,11 +49,21 @@ A session runs in this order:
 | `env`         | variables set in the program's environment over the adapter's | `{}`                    |
 | `stdin`       | a file whose contents are the program's standard input        | none                    |
 | `stopOnEntry` | stop before the root module's first statement                 | `false`                 |
+| `test`        | a `-run` pattern choosing the tests of a test file to run     | every test              |
 
 A relative `program` or `stdin` is resolved against `cwd`, and `Os.program()` returns the resolved
 `program`, an absolute path, since the working directory may have moved. `stopOnEntry` stops after
 the modules the root imports have run, before the first statement of the root itself: for a script,
 its first line.
+
+**Tests.** A `program` that is a test file (`ant-lang.md` section 10, Tests) runs its tests as
+`ant test` runs that file (`test.md`), with `test` as its `-run` pattern; `test` with any other
+program is an error. Each test's start and outcome are sent as `output` events of category
+`console`, as `ant test -v` prints them, a failure's report as `stderr`, and what a test prints as
+`stdout`. A breakpoint in a test, or in the code it calls, stops as in a program. The panic that
+fails a test is not caught by a `Panic.catch` of the program, so it stops the run under the
+`uncaught` filter (section 5). The exit status in the `exited` event is `ant test`'s: `1` when a
+test failed.
 
 **Streams.** What the program writes to standard output and standard error is sent as `output`
 events of category `stdout` and `stderr`. Standard output is sent at least every 100 milliseconds
