@@ -1838,7 +1838,7 @@ func pop[T](stack: Array[T]): T {
 ```
 panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
   stack = []
-  at pop (stack.ant:2:3)
+  at pop (stack.ant:2:9)
   at main (main.ant:14:9)
 ```
 
