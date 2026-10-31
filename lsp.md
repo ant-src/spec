@@ -19,11 +19,11 @@ logs goes to standard error. It implements version 3.17 of the protocol, with th
 `Content-Length` framing. It serves one client, the one that started it, and ends when that client
 sends `exit`.
 
-| Exit status | When                                                                      |
-| ----------- | ------------------------------------------------------------------------- |
-| `0`         | the client sent `shutdown` and then `exit`                                |
-| `1`         | the client sent `exit` without `shutdown`, or the connection ended first  |
-| `2`         | the usage is wrong                                                        |
+| Exit status | When                                                                     |
+| ----------- | ------------------------------------------------------------------------ |
+| `0`         | the client sent `shutdown` and then `exit`                               |
+| `1`         | the client sent `exit` without `shutdown`, or the connection ended first |
+| `2`         | the usage is wrong                                                       |
 
 ## 2. Documents and programs
 
@@ -36,9 +36,9 @@ imported from as well as in the module itself (section 3). A declaration file (s
 Declaration files) is a program of its own: it imports nothing, and its signatures are checked
 against the prelude, as `ant check` checks them.
 
-The text of an open document stands in for the file on disk, saved or not. A module that is not
-open is read from disk at each analysis, so a change saved by another tool is seen at the next
-edit, and at once when the client reports it through `workspace/didChangeWatchedFiles`.
+The text of an open document stands in for the file on disk, saved or not. A module that is not open
+is read from disk at each analysis, so a change saved by another tool is seen at the next edit, and
+at once when the client reports it through `workspace/didChangeWatchedFiles`.
 
 A position is a line and a character. Lines count the line breaks of section 2 (Line endings),
 starting at 0. The character counts UTF-16 code units, the protocol's default; when the client
@@ -70,30 +70,30 @@ closed.
 
 ## 4. Features
 
-| Request                            | What the server answers                                      |
-| ---------------------------------- | ------------------------------------------------------------ |
-| `textDocument/completion`          | names, members, fields, arguments, imports, types, markup     |
-| `textDocument/hover`               | the kind, type, and doc comment of what is under the cursor  |
-| `textDocument/signatureHelp`       | the signature of the call the cursor is in                   |
-| `textDocument/definition`          | the declaration of a name, a member, a field, or an import   |
-| `textDocument/references`          | every use of a declaration in the program                    |
-| `textDocument/documentHighlight`   | the uses of a declaration in the document                    |
-| `textDocument/rename`              | a new name for a declaration and its uses                    |
-| `textDocument/documentSymbol`      | the outline of the module                                    |
-| `workspace/symbol`                 | the top-level declarations of the workspace                  |
-| `textDocument/formatting`          | `ant fmt`                                                    |
-| `textDocument/foldingRange`        | blocks, lists, markup, comment runs, imports                 |
-| `textDocument/selectionRange`      | the enclosing expressions, statements, and declarations      |
-| `textDocument/semanticTokens/full` | what each identifier is                                      |
-| `textDocument/inlayHint`           | inferred types                                               |
-| `textDocument/codeAction`          | mechanical fixes for diagnostics                             |
+| Request                            | What the server answers                                     |
+| ---------------------------------- | ----------------------------------------------------------- |
+| `textDocument/completion`          | names, members, fields, arguments, imports, types, markup   |
+| `textDocument/hover`               | the kind, type, and doc comment of what is under the cursor |
+| `textDocument/signatureHelp`       | the signature of the call the cursor is in                  |
+| `textDocument/definition`          | the declaration of a name, a member, a field, or an import  |
+| `textDocument/references`          | every use of a declaration in the program                   |
+| `textDocument/documentHighlight`   | the uses of a declaration in the document                   |
+| `textDocument/rename`              | a new name for a declaration and its uses                   |
+| `textDocument/documentSymbol`      | the outline of the module                                   |
+| `workspace/symbol`                 | the top-level declarations of the workspace                 |
+| `textDocument/formatting`          | `ant fmt`                                                   |
+| `textDocument/foldingRange`        | blocks, lists, markup, comment runs, imports                |
+| `textDocument/selectionRange`      | the enclosing expressions, statements, and declarations     |
+| `textDocument/semanticTokens/full` | what each identifier is                                     |
+| `textDocument/inlayHint`           | inferred types                                              |
+| `textDocument/codeAction`          | mechanical fixes for diagnostics                            |
 
 **Completion** offers what can be written at the position:
 
 - Where an expression can start: the names in scope, which are the variables declared above in the
   enclosing blocks, the parameters, `x` in a lambda that has one (section 6), the module's own
-  declarations, the imported names, and the prelude names, and the keywords that start an
-  expression or a statement there.
+  declarations, the imported names, and the prelude names, and the keywords that start an expression
+  or a statement there.
 - After `.` or `?.`: the members of a namespace, an imported module, or a type, which are its
   functions and types; and the fields of a record, including the fields every member of a union
   declares (section 4, Unions) and, after `?.`, the fields of the members that are not `null`.
@@ -123,8 +123,8 @@ as a code block, and a bracketed name as a link where it names a declaration. Fo
 shows `name: Type` and the record type it belongs to. For an element in markup, its name, and
 whether it is a void element or takes text only. For a literal or an operator, hover shows nothing.
 
-**Signature help** shows, inside the arguments of a call, the signature of the function called,
-with each parameter's name, type, and default, and marks the active parameter: the one the cursor's
+**Signature help** shows, inside the arguments of a call, the signature of the function called, with
+each parameter's name, type, and default, and marks the active parameter: the one the cursor's
 argument fills, by position or by name (section 6, Calling). Through a pipe the left side fills the
 first parameter, so the active parameter counts from the second. A call of a function value shows
 its function type, whose parameters have no names.
@@ -151,8 +151,8 @@ every `.ant` file under the workspace folders whose name contains the query, mat
 to case, as `ant doc` matches a name.
 
 **Formatting** is `ant fmt` (`fmt.md`): the whole document is replaced by its formatted text, and a
-document that does not parse is left as it is. There is no range formatting and no formatting as
-you type, since the layout of a line depends on the line breaks around it.
+document that does not parse is left as it is. There is no range formatting and no formatting as you
+type, since the layout of a line depends on the line breaks around it.
 
 **Folding ranges** cover each block, each list spanning more than one line, each element of markup,
 each run of comments, and the imports. **Selection ranges** are the expressions, statements, and

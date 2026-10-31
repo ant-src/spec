@@ -5,8 +5,8 @@ Draft 0.1 · October 2026
 `ant dap` is the debugger: it speaks the Debug Adapter Protocol over standard input and standard
 output, so that an editor runs a program with breakpoints, steps through it, and shows its
 goroutines, stacks, and variables. This document is the contract of the command and of what it
-offers an editor; section numbers in it refer to `ant-lang.md`, and `stdlib.md` defines the
-standard library it mentions.
+offers an editor; section numbers in it refer to `ant-lang.md`, and `stdlib.md` defines the standard
+library it mentions.
 
 ## 1. Command
 
@@ -41,14 +41,14 @@ A session runs in this order:
 5. The `exited` event with the program's exit status, as `ant run` would end with it, and then
    `terminated`, when the program ends.
 
-| Attribute     | Meaning                                                          | Default                  |
-| ------------- | ---------------------------------------------------------------- | ------------------------ |
-| `program`     | the file to run, as given to `ant run`                           | required                 |
-| `args`        | the program's arguments, as `Os.args()` returns them              | `[]`                     |
-| `cwd`         | the working directory                                            | the program's directory  |
-| `env`         | variables set in the program's environment over the adapter's    | `{}`                     |
-| `stdin`       | a file whose contents are the program's standard input           | none                     |
-| `stopOnEntry` | stop before the root module's first statement                    | `false`                  |
+| Attribute     | Meaning                                                       | Default                 |
+| ------------- | ------------------------------------------------------------- | ----------------------- |
+| `program`     | the file to run, as given to `ant run`                        | required                |
+| `args`        | the program's arguments, as `Os.args()` returns them          | `[]`                    |
+| `cwd`         | the working directory                                         | the program's directory |
+| `env`         | variables set in the program's environment over the adapter's | `{}`                    |
+| `stdin`       | a file whose contents are the program's standard input        | none                    |
+| `stopOnEntry` | stop before the root module's first statement                 | `false`                 |
 
 A relative `program` or `stdin` is resolved against `cwd`, and `Os.program()` returns the resolved
 `program`, an absolute path, since the working directory may have moved. `stopOnEntry` stops after
@@ -58,10 +58,10 @@ its first line.
 **Streams.** What the program writes to standard output and standard error is sent as `output`
 events of category `stdout` and `stderr`. Standard output is sent at least every 100 milliseconds
 and before every stop, so what a program wrote before it stops is shown when it stops. With no
-`stdin`, standard input is at end of file. A child the program starts (`stdlib.md`,
-`Cmd`) gets the same: its output goes to the same events, and it never reads or writes the
-adapter's own streams. A panic the runtime reports and the error of a `Result` returned from `main`
-are written to standard error as `ant run` writes them (section 8).
+`stdin`, standard input is at end of file. A child the program starts (`stdlib.md`, `Cmd`) gets the
+same: its output goes to the same events, and it never reads or writes the adapter's own streams. A
+panic the runtime reports and the error of a `Result` returned from `main` are written to standard
+error as `ant run` writes them (section 8).
 
 **Ending.** `terminate` delivers an interrupt, as the first Ctrl-C does under `ant run`: to the
 context `Os.interrupt` returned, when the program asked for one and it is not done, and otherwise it
@@ -89,11 +89,11 @@ argument, is a frame directly above the one that called the prelude function.
 
 **Scopes.** Each frame has up to three scopes:
 
-| Scope     | Holds                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------- |
-| `Locals`  | the bindings of the frame's body in scope at its position, innermost block first          |
-| `Closure` | for a lambda or a `go` block, the bindings of the enclosing bodies it sees                |
-| `Module`  | the top-level variables of the frame's module                                            |
+| Scope     | Holds                                                                            |
+| --------- | -------------------------------------------------------------------------------- |
+| `Locals`  | the bindings of the frame's body in scope at its position, innermost block first |
+| `Closure` | for a lambda or a `go` block, the bindings of the enclosing bodies it sees       |
+| `Module`  | the top-level variables of the frame's module                                    |
 
 A binding is shown once its declaration has run: a `var` below the position, or a module variable
 whose initializer has not run, is left out. A name an inner binding shadows is left out. A `defer`
@@ -107,13 +107,13 @@ enum type's name for a record, a variant, `Ok`, `Err`, or a tagged primitive, an
 (`int`, `string`, `array`, `map`, `func`, ...). Annotations are not kept at run time (section 1,
 Types are advisory), so the declared type is not shown. These values expand:
 
-| Value       | Children                                                     |
-| ----------- | ------------------------------------------------------------ |
-| record      | its fields, in declaration order                             |
-| array       | its elements, `[0]`, `[1]`, ...                              |
-| map         | its entries, named by the key as `String.from` writes it     |
-| set         | its members, `[0]`, `[1]`, ... in iteration order            |
-| `Bytes`     | its bytes, `[0]`, `[1]`, ...                                 |
+| Value   | Children                                                 |
+| ------- | -------------------------------------------------------- |
+| record  | its fields, in declaration order                         |
+| array   | its elements, `[0]`, `[1]`, ...                          |
+| map     | its entries, named by the key as `String.from` writes it |
+| set     | its members, `[0]`, `[1]`, ... in iteration order        |
+| `Bytes` | its bytes, `[0]`, `[1]`, ...                             |
 
 An array, a set, and `Bytes` report `indexedVariables`, so the client fetches their children in
 pages with `start` and `count`; a map reports `namedVariables`. A value refers to itself through a
@@ -135,8 +135,8 @@ stopped; references are valid until the program resumes.
 
 **Breakpoints.** A line breakpoint binds to the first stop point that starts on its line, in the
 module of its source. A line with none binds to the next line that has one, inside the same
-function, lambda, `go` block, `defer` block, or module body; the breakpoint is reported verified
-on that line. A breakpoint that binds to nothing, or whose source is not a module of the program, is
+function, lambda, `go` block, `defer` block, or module body; the breakpoint is reported verified on
+that line. A breakpoint that binds to nothing, or whose source is not a module of the program, is
 reported unverified, with a message saying why. `setBreakpoints` replaces every breakpoint of its
 source. A stop point a breakpoint binds to stops each goroutine that reaches it, unless the
 breakpoint has a condition, a hit condition, or a log message (section 6, Breakpoint expressions).
@@ -157,11 +157,11 @@ passes while the program is stopped ends as it would have, when the program resu
 the stop point it is looking for. It looks only on its own goroutine, and when that goroutine ends
 first, the program runs on as after `continue`:
 
-| Request    | Stops at the next stop point                                              |
-| ---------- | ------------------------------------------------------------------------- |
-| `stepIn`   | in any frame                                                              |
-| `next`     | in the current frame or a frame below it                                  |
-| `stepOut`  | in a frame below the current one                                          |
+| Request   | Stops at the next stop point             |
+| --------- | ---------------------------------------- |
+| `stepIn`  | in any frame                             |
+| `next`    | in the current frame or a frame below it |
+| `stepOut` | in a frame below the current one         |
 
 A frame here is one call of a function or a lambda, or one run of a module body, wherever it sits on
 the stack. A loop's body over a sequence runs inside the sequence's call of `yield`, above the
@@ -185,16 +185,16 @@ goroutine `pause` named, or the main goroutine when that one has ended.
 
 `setExceptionBreakpoints` takes two filters:
 
-| Filter     | Stops at                                                       | Default |
-| ---------- | -------------------------------------------------------------- | ------- |
-| `uncaught` | a panic that no `Panic.catch` on its goroutine will stop       | on      |
-| `all`      | every panic, including one a `Panic.catch` turns into a value  | off     |
+| Filter     | Stops at                                                      | Default |
+| ---------- | ------------------------------------------------------------- | ------- |
+| `uncaught` | a panic that no `Panic.catch` on its goroutine will stop      | on      |
+| `all`      | every panic, including one a `Panic.catch` turns into a value | off     |
 
-The program stops where the panic starts, before any deferred block runs, so every frame's
-variables can still be read. A panic in a deferred block replaces the one in progress (section 8),
-so it is a panic of its own and stops where it starts. `Panic.raise(p)` stops at the call of
-`raise`, by the same filters. `exceptionInfo` gives the panic's message as its description and its
-trace as section 8 writes it, which for a raised panic is the trace it was raised with.
+The program stops where the panic starts, before any deferred block runs, so every frame's variables
+can still be read. A panic in a deferred block replaces the one in progress (section 8), so it is a
+panic of its own and stops where it starts. `Panic.raise(p)` stops at the call of `raise`, by the
+same filters. `exceptionInfo` gives the panic's message as its description and its trace as section
+8 writes it, which for a raised panic is the trace it was raised with.
 
 ## 6. Evaluating
 
@@ -205,17 +205,16 @@ value at the stop, so an assignment to one is an error; an assignment to a field
 changes the program's value, since the record, array, or map is the program's own. The result is
 shown as a variable is (section 3), and expands as one does.
 
-The expression runs on a goroutine of its own while the program stays stopped. Every other
-goroutine stays where it is, so an expression that waits for one, by a channel operation or a lock
-another goroutine holds, never finishes on its own: after one second the evaluation is abandoned
-with an error, and the wait it left goes on. A goroutine the expression starts waits until the
-program resumes. A panic in the expression is the evaluation's error, and the program does not stop
-for it.
+The expression runs on a goroutine of its own while the program stays stopped. Every other goroutine
+stays where it is, so an expression that waits for one, by a channel operation or a lock another
+goroutine holds, never finishes on its own: after one second the evaluation is abandoned with an
+error, and the wait it left goes on. A goroutine the expression starts waits until the program
+resumes. A panic in the expression is the evaluation's error, and the program does not stop for it.
 
-| Context                       | Accepts                                                        |
-| ----------------------------- | -------------------------------------------------------------- |
-| `hover`                       | a name, or a name followed by fields: `user.address.city`      |
-| `watch`, `repl`, `clipboard`  | any expression                                                 |
+| Context                      | Accepts                                                   |
+| ---------------------------- | --------------------------------------------------------- |
+| `hover`                      | a name, or a name followed by fields: `user.address.city` |
+| `watch`, `repl`, `clipboard` | any expression                                            |
 
 Hover runs without the user asking, so it never calls a function: anything but a name or a field
 path is answered with an error, which the editor shows as nothing. `evaluate` without a frame, or
@@ -223,56 +222,55 @@ while the program runs, is answered with an error.
 
 **Breakpoint expressions.** A line breakpoint may have any of three, which `setBreakpoints` takes:
 
-- A `condition`: an expression evaluated, as `evaluate` does, in the scopes of the stop point,
-  each time a goroutine reaches it. The goroutine stops only when it is `true`. A condition that
-  does not parse makes the breakpoint unverified, with the error. One that names nothing visible
-  there, panics, or gives anything but a `bool` stops the goroutine and writes the error as an
-  `output` event of category `console`.
+- A `condition`: an expression evaluated, as `evaluate` does, in the scopes of the stop point, each
+  time a goroutine reaches it. The goroutine stops only when it is `true`. A condition that does not
+  parse makes the breakpoint unverified, with the error. One that names nothing visible there,
+  panics, or gives anything but a `bool` stops the goroutine and writes the error as an `output`
+  event of category `console`.
 - A `hitCondition`, counting the times the breakpoint is reached with its condition true: `N` or
   `== N` stops at the Nth time, `>= N` from it on, `> N` after it, and `% N` at every Nth. The count
   starts again when `setBreakpoints` sets the breakpoint again. Anything else makes the breakpoint
   unverified.
 - A `logMessage`, which makes the breakpoint a logpoint: instead of stopping, the goroutine writes
   the message as an `output` event of category `console`, with a line break, and goes on. Each
-  `{expr}` in the message is evaluated and written as `String.from` writes it; `{{` and `}}` are
-  `{` and `}`. An expression that fails writes its error in its place.
+  `{expr}` in the message is evaluated and written as `String.from` writes it; `{{` and `}}` are `{`
+  and `}`. An expression that fails writes its error in its place.
 
-The expressions run each time a goroutine reaches the stop point, also when a step or the entry
-ends there: the logpoint writes, the hit counts, and the stop is the step's or the entry's. A
-condition that waits, by a channel operation or a lock, holds its goroutine as a blocking call
-does, and a stop under way does not wait for it.
+The expressions run each time a goroutine reaches the stop point, also when a step or the entry ends
+there: the logpoint writes, the hit counts, and the stop is the step's or the entry's. A condition
+that waits, by a channel operation or a lock, holds its goroutine as a blocking call does, and a
+stop under way does not wait for it.
 
 **Setting variables.** `setVariable` gives a variable a new value: the value of an expression,
 evaluated as `evaluate` evaluates it in the frame the variable was listed for. A variable of
-`Locals`, `Closure`, or `Module` is the binding itself, so the program reads the new value from
-then on. A field of a record, an element of an array, and an entry of a map are changed in their
+`Locals`, `Closure`, or `Module` is the binding itself, so the program reads the new value from then
+on. A field of a record, an element of an array, and an entry of a map are changed in their
 container. The members of a set, the bytes of `Bytes`, and `(piped)` cannot be set, and are listed
-with the `readOnly` attribute. No type is
-checked, as `ant run` checks none (section 1, Types are advisory): a value of the wrong type fails
-where the program uses it.
+with the `readOnly` attribute. No type is checked, as `ant run` checks none (section 1, Types are
+advisory): a value of the wrong type fails where the program uses it.
 
 ## 7. Requests
 
-| Request                   | What the adapter does                                                  |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `initialize`              | states the capabilities of section 8                                   |
-| `launch`                  | loads the program (section 2)                                          |
-| `setBreakpoints`          | sets the line breakpoints of a source (section 4)                      |
-| `setExceptionBreakpoints` | sets the panic filters (section 5)                                     |
-| `configurationDone`       | starts the program                                                     |
-| `threads`                 | lists the live goroutines                                              |
-| `stackTrace`              | lists a stopped goroutine's frames, paged by `startFrame` and `levels` |
-| `scopes`                  | lists a frame's scopes (section 3)                                     |
-| `variables`               | lists a scope's or a value's children                                  |
-| `continue`                | resumes every goroutine                                                |
-| `next`, `stepIn`, `stepOut` | steps the goroutine named (section 4)                                |
-| `pause`                   | stops every goroutine (section 4)                                      |
-| `exceptionInfo`           | describes the panic the program stopped at                             |
-| `evaluate`                | evaluates an expression in a stopped frame (section 6)                 |
-| `setVariable`             | gives a variable a new value (section 6)                               |
-| `setFunctionBreakpoints`  | sets the function breakpoints (section 4)                              |
-| `terminate`               | interrupts the program (section 2)                                     |
-| `disconnect`              | ends the run and the command (section 2)                               |
+| Request                     | What the adapter does                                                  |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `initialize`                | states the capabilities of section 8                                   |
+| `launch`                    | loads the program (section 2)                                          |
+| `setBreakpoints`            | sets the line breakpoints of a source (section 4)                      |
+| `setExceptionBreakpoints`   | sets the panic filters (section 5)                                     |
+| `configurationDone`         | starts the program                                                     |
+| `threads`                   | lists the live goroutines                                              |
+| `stackTrace`                | lists a stopped goroutine's frames, paged by `startFrame` and `levels` |
+| `scopes`                    | lists a frame's scopes (section 3)                                     |
+| `variables`                 | lists a scope's or a value's children                                  |
+| `continue`                  | resumes every goroutine                                                |
+| `next`, `stepIn`, `stepOut` | steps the goroutine named (section 4)                                  |
+| `pause`                     | stops every goroutine (section 4)                                      |
+| `exceptionInfo`             | describes the panic the program stopped at                             |
+| `evaluate`                  | evaluates an expression in a stopped frame (section 6)                 |
+| `setVariable`               | gives a variable a new value (section 6)                               |
+| `setFunctionBreakpoints`    | sets the function breakpoints (section 4)                              |
+| `terminate`                 | interrupts the program (section 2)                                     |
+| `disconnect`                | ends the run and the command (section 2)                               |
 
 A request the adapter does not serve is answered with an error. `threads`, `stackTrace`, `scopes`,
 and `variables` answer with the goroutines and frames as they are when the program is stopped; while
@@ -280,11 +278,11 @@ it runs, `threads` lists the goroutines and the others answer with an error.
 
 ## 8. Capabilities
 
-The response to `initialize` states `supportsConfigurationDoneRequest`,
-`supportsTerminateRequest`, `supportsExceptionInfoRequest`, `supportsEvaluateForHovers`,
-`supportsConditionalBreakpoints`, `supportsHitConditionalBreakpoints`, `supportsLogPoints`,
-`supportsSetVariable`, `supportsFunctionBreakpoints`, and the two `exceptionBreakpointFilters` of
-section 5, and no other capability.
+The response to `initialize` states `supportsConfigurationDoneRequest`, `supportsTerminateRequest`,
+`supportsExceptionInfoRequest`, `supportsEvaluateForHovers`, `supportsConditionalBreakpoints`,
+`supportsHitConditionalBreakpoints`, `supportsLogPoints`, `supportsSetVariable`,
+`supportsFunctionBreakpoints`, and the two `exceptionBreakpointFilters` of section 5, and no other
+capability.
 
 ## 9. What `ant dap` does not do
 

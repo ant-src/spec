@@ -30,8 +30,8 @@ through its result type, or its parameters when it has none, of a `type` through
 definition, and of a `var` through its annotation, leaving out the body or initializer. A
 declaration without a doc comment prints only its signature.
 
-A name without a dot that is a namespace (section 10, Namespaces), a type with functions declared
-on it included, prints its own declaration, if it has one, as above, and then the signature of every
+A name without a dot that is a namespace (section 10, Namespaces), a type with functions declared on
+it included, prints its own declaration, if it has one, as above, and then the signature of every
 declaration owned by it, one after another in source order. A namespace that no type declares, such
 as `Array` or `Time`, has the doc of its section label (section 10, Declaration files), which stands
 in for the declaration: its name, then its doc indented. A module prints its doc, if it has one,

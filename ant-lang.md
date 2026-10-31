@@ -145,9 +145,9 @@ kept as written.
 
 A raw string is written between backticks, as in Go. Its value is the text between them, with no
 escapes and no interpolation: `\`, `"`, and `${` stand for themselves, so `` `C:\temp` `` holds a
-backslash and `` `${2}` `` holds a dollar sign. A raw string may span lines, with each line break one
-`\n`, as in a string, and it cannot contain a backtick: text with one is written as a string, or as
-raw strings joined with `+`. There are no character literals.
+backslash and `` `${2}` `` holds a dollar sign. A raw string may span lines, with each line break
+one `\n`, as in a string, and it cannot contain a backtick: text with one is written as a string, or
+as raw strings joined with `+`. There are no character literals.
 
 ```ant
 var greeting = "hello, ${name}"
@@ -373,9 +373,9 @@ p.x = 3.0
 
 Every record value has a name; there are no anonymous record literals. The head of a literal is an
 identifier path, so a type reached through a namespace (section 10, Namespaces) is written
-`Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a
-shorthand entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses.
-Map literals follow the same two rules (see Arrays and maps).
+`Geometry.Point{ x: 1.0 }`. Type arguments are never written there. A bare identifier is a shorthand
+entry: `Point{ x, y }` means `Point{ x: x, y: y }`, the same shorthand destructuring uses. Map
+literals follow the same two rules (see Arrays and maps).
 
 The name is part of the value: a literal stores the tag of its head in the record. The interpreter
 keeps the field names so that `ant run` can reject a literal with a missing or unknown field and
@@ -879,11 +879,11 @@ func wrap[T](v: T): Array[T] {
 }
 ```
 
-A type name is also a namespace holding the functions declared on it (section 6, Functions on
-types; section 10, Namespaces). It is an expression only as the head of a record literal, as the
-target of `is`, as the left side of `.` naming one of its functions, or, for a named primitive type,
-as its constructor. Anywhere else it is a compile error, since a type has no value. There are no
-classes, interfaces, or prototypes.
+A type name is also a namespace holding the functions declared on it (section 6, Functions on types;
+section 10, Namespaces). It is an expression only as the head of a record literal, as the target of
+`is`, as the left side of `.` naming one of its functions, or, for a named primitive type, as its
+constructor. Anywhere else it is a compile error, since a type has no value. There are no classes,
+interfaces, or prototypes.
 
 ### Assignability
 
@@ -1324,8 +1324,8 @@ Three characters are special: `<` begins a tag, `{` begins an interpolation, and
 syntax error. A literal brace is `&#123;` and `&#125;`, or `{"{"}`. Nothing else is: `//` and `/*`
 are text between tags, so `<p>see https://ant.dev</p>` holds the URL.
 
-`{expr}` interpolates any expression; braces nest inside it as in `${...}` of a string, so
-lambdas and record literals can appear there, and it may span lines. The value goes in by its kind:
+`{expr}` interpolates any expression; braces nest inside it as in `${...}` of a string, so lambdas
+and record literals can appear there, and it may span lines. The value goes in by its kind:
 
 | Value    | Becomes                                                    |
 | -------- | ---------------------------------------------------------- |
@@ -1856,18 +1856,19 @@ panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
   kind when it has none: `shape is Circle (Square{ side: 2 } is Square)`. A failed `!=` against the
   literal `null` names the other side instead, since both values are `null`:
   `user != null (user is null)`.
-- **The parts.** On the following lines comes `text = value`, indented by two spaces, for each
-  name, field access, index, and call inside `cond` that ran, in the order it finished:
+- **The parts.** On the following lines comes `text = value`, indented by two spaces, for each name,
+  field access, index, and call inside `cond` that ran, in the order it finished:
   `assert(isSorted(xs))` shows `xs = [3, 1, 2]`. Left out are literals, the callee of a call, the
-  object of a field access or an index (the access is shown), the comparison's two operands
-  (already in parentheses), the whole condition, the bodies of lambdas, and a part whose value is a
-  function. A text that repeats is shown once, with its first value. A part that `&&`, `||`, `??`,
-  or `?.` skipped did not run and is not shown.
+  object of a field access or an index (the access is shown), the comparison's two operands (already
+  in parentheses), the whole condition, the bodies of lambdas, and a part whose value is a function.
+  A text that repeats is shown once, with its first value. A part that `&&`, `||`, `??`, or `?.`
+  skipped did not run and is not shown.
 - **Values.** Every value is rendered in full by `String.from`, as inside an array, so a string is
   quoted: `name == "Anne" ("Ann" == "Anne")`. These are the values the evaluation already produced;
   nothing is evaluated a second time.
 - **Narrowing.** After `assert(cond)`, the rest of the block is narrowed as after
-  `if !cond { panic(...) }` (section 7, Narrowing), so `assert(user != null)` leaves `user` a `User`.
+  `if !cond { panic(...) }` (section 7, Narrowing), so `assert(user != null)` leaves `user` a
+  `User`.
 - **Not a value.** `assert` may only be called by name, since its message needs the condition as
   written, which exists only at a call site. Any other use of the name, such as
   `Array.map(flags, assert)`, is a syntax error. It is the one prelude name that is not a value.
@@ -2240,17 +2241,17 @@ nothing else:
   and constants that `prelude.d.ant`, or a host's declaration file, declares on its name
   (Declaration files, below).
 
-Who may declare into a namespace follows from what it owns. A module owns itself and its types, so
-a `func` in a module is declared on one of the module's own types or on none, and a `type` is never
-qualified. The prelude owns a name in every module, so its declarations name any owner, and an
-owner that no `type` declares is a namespace and nothing more: `Os` and `Time` are reached only
-through `.`, cannot stand in an annotation or after `is`, and are not values, so `var t = Time` is a
-compile error. An owner that a `type` does declare is a type as well, so `Mutex` is a type in an
-annotation and a namespace in `Mutex.new()`, with no conflict between the two, since a type is not
-a value (section 4, Type declarations). The interpreter has no notion of a namespace beyond the
-record: a module record, a tag, a constructor, and a prelude namespace all hold their declarations
-as fields (section 12, Expressions). The checker keeps each module's export table and each
-namespace's members so that `Geometry.Point` also resolves in a type.
+Who may declare into a namespace follows from what it owns. A module owns itself and its types, so a
+`func` in a module is declared on one of the module's own types or on none, and a `type` is never
+qualified. The prelude owns a name in every module, so its declarations name any owner, and an owner
+that no `type` declares is a namespace and nothing more: `Os` and `Time` are reached only through
+`.`, cannot stand in an annotation or after `is`, and are not values, so `var t = Time` is a compile
+error. An owner that a `type` does declare is a type as well, so `Mutex` is a type in an annotation
+and a namespace in `Mutex.new()`, with no conflict between the two, since a type is not a value
+(section 4, Type declarations). The interpreter has no notion of a namespace beyond the record: a
+module record, a tag, a constructor, and a prelude namespace all hold their declarations as fields
+(section 12, Expressions). The checker keeps each module's export table and each namespace's members
+so that `Geometry.Point` also resolves in a type.
 
 ### Scripts
 
@@ -2308,9 +2309,9 @@ stay for the inputs after it: `return` ends the input, `try` returns an `Err` fr
 returns the value after it, and `defer` registers on it, its deferred blocks running when the input
 ends. An input that returns an `Err` has it written to standard error as a script's is, and the REPL
 goes on; one that returns anything else has that value printed, as the value of its last expression
-would be. So `var page = try Http.get(url)` binds the response, or reports why there is none. In
-the REPL `_` read as a value is the result the last input printed, for one that printed any;
-written, it still discards.
+would be. So `var page = try Http.get(url)` binds the response, or reports why there is none. In the
+REPL `_` read as a value is the result the last input printed, for one that printed any; written, it
+still discards.
 
 ### Declaration files
 
@@ -2329,16 +2330,16 @@ var Math.PI: float64
 ```
 
 - A declaration is qualified by its owner, `Owner.name`, or unqualified. The owner is a namespace
-  (Namespaces): a type the file declares, as `Panic` owns `Panic.Frame` and `Panic.catch`, or a
-  name that nothing declares, as `Os` and `Time`, which naming as an owner makes a namespace. The
-  order does not matter: `type Panic.Frame` may come before `type Panic`.
+  (Namespaces): a type the file declares, as `Panic` owns `Panic.Frame` and `Panic.catch`, or a name
+  that nothing declares, as `Os` and `Time`, which naming as an owner makes a namespace. The order
+  does not matter: `type Panic.Frame` may come before `type Panic`.
 - A `func` has a signature and no body. A parameter may carry a default, as in a declared function
   (section 6).
 - A `type` with no body, `type Regex.Pattern`, is **opaque**: its values come only from the
   functions declared on it, and `is` cannot test them, as for the synchronization types (section
   11). A record type may give its fields defaults (section 4, Field defaults).
-- A `var` is a constant of a namespace, `var Owner.NAME: T`, with a type and no initializer, and
-  is always qualified.
+- A `var` is a constant of a namespace, `var Owner.NAME: T`, with a type and no initializer, and is
+  always qualified.
 - An unqualified `func` or `type` is a name of the prelude's own, as `print` and `Result` are.
 - A namespace that nothing declares takes its doc from a **section label**: a comment line holding
   its name alone, an empty comment line, and a paragraph, set off from the declarations by blank
@@ -2355,11 +2356,11 @@ lists every declaration in it, since all are visible.
 
 ## 11. Standard library
 
-The standard library is a set of namespaces in the prelude (section 10, Namespaces). Each holds
-the functions, types, and constants `prelude.d.ant` declares on its name, so a type a namespace
-declares is written through it, as in `Http.Response`; none has methods or state. Some are types as
-well: `Result`, `Error`, `Panic`, `Bytes`, `Html`, `Random`, `Cmd`, and the types of section 9,
-whose functions are declared on the type (section 6), so the name is a type in an annotation and a
+The standard library is a set of namespaces in the prelude (section 10, Namespaces). Each holds the
+functions, types, and constants `prelude.d.ant` declares on its name, so a type a namespace declares
+is written through it, as in `Http.Response`; none has methods or state. Some are types as well:
+`Result`, `Error`, `Panic`, `Bytes`, `Html`, `Random`, `Cmd`, and the types of section 9, whose
+functions are declared on the type (section 6), so the name is a type in an annotation and a
 namespace in an expression. `Array`, `Map`, and `Set` hold the functions of the three built-in
 container types, and `String` those of `string`. Every function takes its subject as the first
 argument so it composes with `|`. This section is the complete core library. The I/O namespaces
@@ -2817,15 +2818,15 @@ records: `Html.Element{ name: "script", ... }` is a record, not markup. `Html.No
 union, and a node kind added later will break exhaustive tests over it, on purpose.
 
 `String.from(h)` renders the markup, so `println(page)` prints it and a string embeds it:
-`"<!doctype html>${page}"` is a response body. An element renders as its start tag, its
-children, and its end tag, none for a void element. Attributes are written in order, each after one
-space, a value in double quotes and an empty value as the bare name. In a text node and an attribute
-value, `&`, `<`, `>`, `"`, and `'` are written `&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&#39;`. A raw
-node and the text of `<script>` and `<style>` are written as they are, which is safe because the
-parser allows those only literal text, except that `<style>` inside `<svg>` or `<math>` is escaped
-as text is. When the text of a `<pre>` or `<textarea>` starts with a line break, one more is written
-after the start tag, which the browser drops. An empty `Html` renders as the empty string, and as
-`<></>` inside a container. The same tree gives the same bytes in every implementation.
+`"<!doctype html>${page}"` is a response body. An element renders as its start tag, its children,
+and its end tag, none for a void element. Attributes are written in order, each after one space, a
+value in double quotes and an empty value as the bare name. In a text node and an attribute value,
+`&`, `<`, `>`, `"`, and `'` are written `&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&#39;`. A raw node
+and the text of `<script>` and `<style>` are written as they are, which is safe because the parser
+allows those only literal text, except that `<style>` inside `<svg>` or `<math>` is escaped as text
+is. When the text of a `<pre>` or `<textarea>` starts with a line break, one more is written after
+the start tag, which the browser drops. An empty `Html` renders as the empty string, and as `<></>`
+inside a container. The same tree gives the same bytes in every implementation.
 
 `len`, indexing, and `for` do not take `Html`, and `Json.stringify` panics on it (`stdlib.md`).
 
@@ -2891,8 +2892,8 @@ In `replacement`, `$n` and `${n}` expand to group `n`, `${name}` to a named grou
 and a group that took no part to `""`. A name after `$` is taken as long as it can be: `$1x` is
 `${1x}`, which is no group and so expands to `""`; write `${1}x`. In a string `"$1"` needs no
 escape, but `${` interpolates: write `"\${1}x"` or the raw string `` `${1}x` ``. `replaceWith` calls
-`f` with each `Match` in order and
-puts its result in the match's place, as written, with no expansion.
+`f` with each `Match` in order and puts its result in the match's place, as written, with no
+expansion.
 
 `Regex` is a namespace and not a type, like `Time` (section 10, Namespaces), so the annotation is
 `Regex.Pattern`. `p is Regex.Pattern` tests a value for the kind, as `t is Time.Instant` does
@@ -3208,9 +3209,9 @@ rule: at run time every field of a module record is readable.
 
 Operands evaluate left to right (section 5). Below, "must be" means the operation panics otherwise.
 
-- **Literals.** An integer literal is an `int`, a float literal a `float64`. A string evaluates
-  each `${...}` in order and renders it with `String.from`. A regular expression literal
-  yields the pattern built from it when its module was loaded, the same value at every evaluation.
+- **Literals.** An integer literal is an `int`, a float literal a `float64`. A string evaluates each
+  `${...}` in order and renders it with `String.from`. A regular expression literal yields the
+  pattern built from it when its module was loaded, the same value at every evaluation.
 - **Record literal `Head{ ... }`.** The head must evaluate to a record tag, not an alias tag.
   Entries evaluate in order; a spread copies every field of a value that must be a record; a later
   entry replaces an earlier one with the same name. Every name must be one the tag lists. Then each
@@ -3234,8 +3235,8 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   built. The result is a new `Html` in normal form (section 11).
 - **Variable.** The value bound to the name; a name no scope binds panics.
 - **Field read `a.b`.** `a` must be a record with a field `b`; the value is that field. A namespace
-  is a record (section 10, Namespaces), so this rule also covers `Array.map` and `Geometry.Point`;
-  a tag and a constructor have the functions declared on their type as fields, so it also covers
+  is a record (section 10, Namespaces), so this rule also covers `Array.map` and `Geometry.Point`; a
+  tag and a constructor have the functions declared on their type as fields, so it also covers
   `Point.distance`.
 - **Index read `a[i]`.** `a` must be an array, a map, or `Bytes`. For an array, `i` must be an `int`
   from `0` up to but excluding the length, and the value is that element; for `Bytes` likewise, and
@@ -3356,9 +3357,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **`defer { ... }`.** Registers the block with the innermost enclosing block. The value is `void`.
 - **`go { ... }`.** Starts a new goroutine that evaluates the block, and yields `void` at once.
 - **`panic(message)`.** Begins a panic in the current goroutine (below).
-- **`assert(cond, message)`.** `cond` evaluates, recording the values section 8 shows, and must be
-  a `bool`. When it is `true` the value is `void`. When it is `false`, `message` evaluates and must
-  be a string, and a panic begins with the message section 8 describes.
+- **`assert(cond, message)`.** `cond` evaluates, recording the values section 8 shows, and must be a
+  `bool`. When it is `true` the value is `void`. When it is `false`, `message` evaluates and must be
+  a string, and a panic begins with the message section 8 describes.
 
 ### Deferred blocks and panics
 
