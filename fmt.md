@@ -55,8 +55,10 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
   same spelling, except for the layout tokens this document names: newlines, semicolons that end a
   statement, and trailing commas, and for the line breaks inside strings, which become `\n` and
   keep the value (4.1). A string counts as its text pieces and the tokens of its interpolations, so
-  spacing inside `${...}` may change and nothing else in it does. It therefore
-  parses to the same tree, and `ant run` and `ant check` behave exactly as they did, error positions
+  spacing inside `${...}` may change and nothing else in it does. An HTML expression counts as
+  the tree it builds (`ant-lang.md` section 5, HTML expressions): its elements, attributes, text
+  after the white space rule, and the tokens of its interpolations, so white space in markup may
+  change only where that tree does not keep it (4.10). It therefore parses to the same tree, and `ant run` and `ant check` behave exactly as they did, error positions
   aside.
 - **Comments.** Every comment is kept, in order, with its text. Only the whitespace before it, the
   indentation of its first line, the spaces and tabs at the end of each of its lines, and its `\r\n`
@@ -90,14 +92,15 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 ### 4.1 Files
 
 - The output is UTF-8 with `\n` line endings. A `\r\n` or a lone `\r`, the other line breaks of
-  section 2, becomes `\n`, in a comment and a string too, except inside the markup of an HTML
-  expression, whose text is kept byte for byte (4.10). In a string or a raw string the value does
-  not change, since each line break there is one `\n` (section 2).
-- No line ends in spaces or tabs, except inside the text of a string or a raw string or the markup
-  of an HTML expression.
+  section 2, becomes `\n`, in a comment, a string, and markup too, except inside the verbatim
+  parts of an HTML expression, which are kept byte for byte (4.10). In a string or a raw string the
+  value does not change, since each line break there is one `\n` (section 2).
+- No line ends in spaces or tabs, except inside the text of a string or a raw string or a verbatim
+  part of an HTML expression.
 - The file starts with its first token or comment, and ends with exactly one `\n`.
 - Indentation is two spaces per level and never a tab, except on a line that starts inside a
-  string or a raw string, whose text and interpolations keep their indentation as written (4.9).
+  string or a raw string, whose text and interpolations keep their indentation as written (4.9),
+  or inside a verbatim part of an HTML expression (4.10).
   Any other tab outside a string, a raw string, a regular expression literal, or a comment becomes
   the spacing this section prescribes.
 
@@ -367,26 +370,84 @@ line break go (4.1). Comments inside an interpolation are kept as 4.8 says.
 
 ### 4.10 HTML expressions
 
-An HTML expression is formatted as a string is (4.9): its markup, tags and attributes and
-text, is kept byte for byte, line breaks and indentation included, and the code inside each `{...}`
-interpolation, attribute value, or spread is formatted as an expression, with no space after `{` or
-before `}`. A lambda or record literal inside keeps its own inner spaces. An interpolation adds no
-line breaks and removes none, and is not reindented. The lines of markup are not reindented either,
-although the white space rule of `ant-lang.md` section 5 would allow it; that may come later.
+Markup is laid out by the white space rule of `ant-lang.md` section 5 (HTML expressions). Outside
+`<pre>`, `<textarea>`, `<script>`, and `<style>`, a run of white space that holds a line break
+means one space, or nothing at the edge of the content, however long it is, so its indentation,
+its blank lines, and the spaces at the ends of its lines are free. The line break itself is not:
+`</li><li>` and `</li>` with `<li>` on the next line are different values. `ant fmt` therefore
+reindents markup and never adds or removes a line break in content. White space within one line
+of content, such as the two spaces of `a  b`, is kept as written.
+
+**Lines.** A line break the author wrote in markup stays, and the new line is indented:
+
+- inside the content of an element or a fragment, one level deeper than the line that holds its
+  start tag or `<>`, and at that line's level when it starts with the matching end tag;
+- inside a start tag, one level deeper than the line that holds its `<`, and at that line's level
+  when it starts with the `>` or `/>` that ends the tag.
+
+As with brackets (4.4), the level grows by one per line, not per element: after `<ul><li>` on one
+line, the lines inside both are one level deeper. A run of blank lines in content becomes one blank
+line, and a blank line directly after a start tag or `<>` or directly before an end tag is removed
+(4.2).
+
+**Tags.** In a start tag, one space separates the name from the first attribute and each attribute
+from the next on its line, with no space around `=` and none before `>`, and a self-closing tag
+ends in ` />`. An end tag is `</name>` or `</>`. Names and attribute values in quotes are kept as
+written.
+
+**Code.** The code inside each `{...}` interpolation, attribute value, or spread is laid out as a
+parenthesized expression is (4.4, 4.5), with the braces in place of the parentheses and no space
+after `{` or before `}`. When the author wrote a line break after the `{` or before the `}`, the
+expression starts a line one level deeper than the line that holds the `{`, and the `}` starts a
+line at that line's level. A lambda or record literal inside keeps its own inner spaces, and markup
+inside the code is laid out by this section, relative to its own lines. An interpolation of only
+comments, `{/* ... */}`, stays on its line unless the author broke it after the `{` or before the
+`}`.
 
 ```ant
 // before
-<li class={ if x.done {"done"} }>{ x.title+"!" }</li>
+func card(p: Post): Html {
+    <article class = "card"  >
+          <h2>{ p.title }</h2>
+
+
+        <p>{p.summary}
+   more text</p>
+      <ul>{Array.map(p.tags, {
+            <li>{x}</li>
+        })}</ul>
+    </article>
+}
 
 // after
-<li class={if x.done { "done" }}>{x.title + "!"}</li>
+func card(p: Post): Html {
+  <article class="card">
+    <h2>{p.title}</h2>
+
+    <p>{p.summary}
+      more text</p>
+    <ul>{Array.map(p.tags, {
+      <li>{x}</li>
+    })}</ul>
+  </article>
+}
 ```
+
+**Verbatim parts.** Two parts of markup belong to the value as written. They are kept byte for
+byte, `\r` and spaces at the ends of lines included, and are not reindented:
+
+- the content of `<pre>`, `<textarea>`, `<script>`, and `<style>`, from the `>` of the start tag to
+  the `<` of the end tag, with everything nested in it, except that the code of an interpolation
+  there is formatted as in a string (4.9), with its line breaks and indentation as written;
+- an attribute value in quotes.
 
 ## 5. What `ant fmt` does not do
 
 - It does not wrap long lines or join short ones; line breaks are the author's (section 3). In a
   broken list it moves the first item off the opening bracket's line and the closing bracket onto a
   line of its own (4.4), but it never splits or fills a row of items.
+- It does not reflow markup: it never moves the children of an element onto lines of their own or
+  joins them, since in content a line break is a space (4.10).
 - It does not sort imports, declarations, or record fields.
 - It does not remove redundant parentheses, simplify expressions, or rename anything.
 - It does not align anything except runs of trailing comments (4.8).
