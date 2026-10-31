@@ -56,7 +56,7 @@ child process, goes to standard output and standard error as under `ant run`.
     assertion failed: parse(c.input) == c.want (0 == 16)
       c.input = "0x10"
       c.want = 16
-      at test "0x10" (stack_test.ant:21:7)
+      at test "0x10" (stack_test.ant:24:13)
 ```
 
 The line names the file, as the path it was found by, and the test's full name, then the time the
