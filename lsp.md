@@ -169,11 +169,13 @@ the name of each parameter before a positional argument.
 **Code lenses** stand above each top-level test of a test file (`ant-lang.md` section 10, Tests),
 and above each subtest whose name is a string without interpolation: one titled `run test` with the
 command `ant.test.run`, and one titled `debug test` with the command `ant.test.debug`. Both take two
-arguments, the document's URI and the `-run` pattern that selects that test alone: each name, from
-the top-level test down, quoted as a regular expression between `^` and `$`, joined with `/`. The
-client carries the commands out, with `ant test -run` (`test.md`) and with a `launch` of `ant dap`
-whose `test` is the pattern (`dap.md`). The same tests are document symbols of kind `Function` with
-the detail `test`, each subtest under its test.
+arguments, the document's URI and the `-run` pattern that selects that test: each name, from the
+top-level test down, quoted as a regular expression with every `/` escaped as `\/` (`test.md`
+section 1), between `^` and `$`, and joined with `/`. A subtest's part also matches the name with
+` #2`, ` #3` appended, so the lens of a subtest in a loop, or of one whose name repeats, runs every
+run of it. The client carries the commands out, with `ant test -run` (`test.md`) and with a `launch`
+of `ant dap` whose `test` is the pattern (`dap.md`). The same tests are document symbols of kind
+`Function` with the detail `test`, each subtest under its test.
 
 **Code actions** fix what a diagnostic names when the fix is mechanical: they state the type of a
 `var` or the return type of a function where a message asks for an annotation (section 4,

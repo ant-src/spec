@@ -91,7 +91,9 @@ break continue defer else export false for func go if import
 in is null return select true try type var void while
 ```
 
-In a test file (section 10, Tests), `test` is a keyword as well; elsewhere it is a plain name.
+In a test file (section 10, Tests), `test` is a keyword as well, except after `.` or `?.` and before
+`:`, where it is a name, so a field, a named argument, or an import renamed as `test: check` can
+still be written; elsewhere it is a plain name.
 
 Reserved words, so that they stay available and JavaScript habits produce an error rather than an
 identifier:
@@ -2378,8 +2380,8 @@ test "name" { body }
 1. **Where.** At the top level of a test file it declares a test. Inside the body of a test, at any
    depth of blocks and loops but not inside a nested function, lambda, `go` block, or `defer` block,
    it is a statement that runs a **subtest**. Anywhere else it is a syntax error. `test` is a
-   keyword in test files only (section 2): elsewhere it is a plain name, and `Regex.test` is a field
-   in every file.
+   keyword in test files only, and there not after `.` or `?.` nor before `:` (section 2): elsewhere
+   it is a plain name, and `Regex.test` is a field in every file.
 2. **Name.** A top-level test's name is a string literal without interpolation, not empty, and
    unique in its file, so tools know every top-level test without running anything. A subtest's name
    may interpolate, and is evaluated when the statement runs; an empty one panics. When two subtests
@@ -3268,7 +3270,9 @@ Test.name(): string                   // the current test's full name, as "parse
 - **`Test.skip`** unwinds the goroutine as a panic does, running deferred blocks, but it is not a
   panic: `Panic.catch` does not stop it. In a subtest it skips the subtest. A test that is skipped
   after it failed stays failed. Called on a goroutine the test owns, it ends that goroutine and
-  marks the test skipped.
+  marks the test skipped. The test is skipped only when the skip ends the body or that goroutine: in
+  a deferred block that runs while a panic unwinds, `Test.skip` is dropped and the panic goes on, so
+  a test stays failed, and a body whose `Panic.catch` stops the panic goes on unskipped.
 - **`Test.parallel`** may be called once, from the test's body, and panics otherwise. The test stops
   at the call until every test of the same parent that did not call it has ended (for a top-level
   test, every such test of the file), then runs alongside the parent's other parallel tests, at most

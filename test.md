@@ -23,15 +23,15 @@ ant test [flags] [path ...]
 - `ant test`, like `ant run`, does not type-check (section 4, Checking and running). `ant check`
   accepts a test file and checks it with its companion and its imports.
 
-| Flag           | Meaning                                                                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `-run regexp`  | Run only the tests whose full name matches. The pattern is split on `/`, and each part must match the name at its level: `-run 'parse/0x'` |
-| `-skip regexp` | Leave out the tests that match, the same way                                                                                               |
-| `-v`           | Print every test as it starts and ends, with its output                                                                                    |
-| `-json`        | Print events as JSON lines instead of the report                                                                                           |
-| `-failfast`    | Start no test after the first failure                                                                                                      |
-| `-parallel n`  | The most tests that run at once after `Test.parallel()`; the default is the number of CPUs                                                 |
-| `-timeout d`   | End the run after `d`, a Go duration such as `30s` or `10m` (the default), and report the tests still running; `0` means no limit          |
+| Flag           | Meaning                                                                                                                           |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `-run regexp`  | Run only the tests whose full name matches. The pattern is split on `/` into levels (Filtering, below): `-run 'parse/0x'`         |
+| `-skip regexp` | Leave out the tests that match, the same way                                                                                      |
+| `-v`           | Print every test as it starts and ends, with its output                                                                           |
+| `-json`        | Print events as JSON lines instead of the report                                                                                  |
+| `-failfast`    | Start no test after the first failure                                                                                             |
+| `-parallel n`  | The most tests that run at once after `Test.parallel()`; the default is the number of CPUs                                        |
+| `-timeout d`   | End the run after `d`, a Go duration such as `30s` or `10m` (the default), and report the tests still running; `0` means no limit |
 
 **Filtering.** A part of `-run` is a regular expression (`Regex`, section 11) matched anywhere in
 the name of the test at its level: the first part against a top-level test's name, the second
@@ -41,6 +41,10 @@ level, as far as the pattern has parts, so `-run parse` runs `parse` and all its
 subtests are left out still runs its body, which is how its subtests are found. `-skip` leaves out a
 test when its full name has at least as many levels as the pattern and each matches, and with it its
 subtests. A test left out is neither run nor counted.
+
+The pattern is split on each `/` that is not escaped with a backslash and not inside brackets or
+parentheses, so a name that holds a `/` is matched by `\/` or `[/]`: `-run 'a\/b/c'` runs subtest
+`c` of the test `a/b`.
 
 ## 2. Output
 
@@ -82,7 +86,7 @@ it comes, indented by four spaces, and when it ends `--- PASS: file: name (0.00s
 the reason on the next line, or `--- FAIL:` with its failures.
 
 **JSON.** Under `-json`, the command writes one JSON object per line to standard output, and nothing
-else:
+else; what a program prints outside a test, as it initializes, goes to standard error instead:
 
 | `action`   | Other fields                                                    | When                           |
 | ---------- | --------------------------------------------------------------- | ------------------------------ |
