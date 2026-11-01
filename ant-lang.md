@@ -2369,8 +2369,8 @@ module, exported or not: a destructuring names private ones as it names exports,
 them with `.`, and the functions declared on an imported type come with it, private ones included.
 They do not reach the names that module imports, since there is no re-export. Any module may be
 imported so, wherever it lies, and nothing private leaks into a program, since only a test file can
-import a test file. A script has no declarations to import, since its top-level names are locals of
-its body (Scripts, above): logic worth testing moves into a library the script imports.
+import a test file. A script cannot be imported (Scripts, above), so logic worth testing moves into a
+library the script imports.
 
 **The `test` declaration.** `test`, a string literal, and a block:
 
