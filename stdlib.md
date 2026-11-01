@@ -27,8 +27,8 @@ type Info = { name: string, size: int, isDir: bool, isSymlink: bool, modified: T
 
 File.read(path: string): Result[string, Error]
 File.readBytes(path: string): Result[Bytes, Error]
-File.write(path: string, text: string): Result[void, Error]   // creates the file, or replaces what it held, keeping its mode
-File.writeBytes(path: string, bytes: Bytes): Result[void, Error]   // likewise
+File.write(path: string, text: string, replace: bool = true): Result[void, Error]   // creates the file, or replaces what it held, keeping its mode
+File.writeBytes(path: string, bytes: Bytes, replace: bool = true): Result[void, Error]   // likewise
 File.exists(path: string): bool                            // anything at path, a directory included; false at a dangling link
 File.stat(path: string, follow: bool = true): Result[File.Info, Error]   // follow: false describes a link itself
 File.chmod(path: string, mode: int): Result[void, Error]   // sets the bits in 0o7777 exactly
@@ -36,7 +36,7 @@ File.touch(path: string, time: Time.Instant | null = null): Result[void, Error] 
 File.remove(path: string): Result[void, Error]             // one file, or an empty directory
 File.removeAll(path: string): Result[void, Error]          // a whole tree; Ok when there is nothing to remove
 File.rename(from: string, to: string): Result[void, Error] // replaces a file at to
-File.copy(from: string, to: string): Result[void, Error]   // one file's contents and mode; replaces a file at to
+File.copy(from: string, to: string, replace: bool = true): Result[void, Error]   // one file's contents and mode; replaces a file at to
 File.copyAll(from: string, to: string): Result[void, Error]   // a file or a whole tree; to must not exist, or be an empty directory
 File.mkdir(path: string): Result[void, Error]              // with its parents; Ok when it exists
 File.tempFile(pattern: string, dir: string | null = null): Result[string, Error]   // a new empty file, mode 0o600, in dir or the host's temporary directory
@@ -48,7 +48,7 @@ File.list(dir: string): Result[Array[string], Error]       // the names in dir, 
 File.walk(dir: string): Result[Array[string], Error]       // every file below dir, as paths relative to it
 
 File.open(path: string): Result[File.Handle, Error]        // for reading
-File.create(path: string): Result[File.Handle, Error]      // for writing; truncates
+File.create(path: string, replace: bool = true): Result[File.Handle, Error]   // for writing; truncates
 File.append(path: string): Result[File.Handle, Error]      // for writing at the end; creates
 File.lock(path: string, ctx: Context | null = null): Result[File.Handle, Error]   // for reading and writing, holding the file's lock; waits for it
 File.tryLock(path: string): Result[File.Handle | null, Error]   // likewise; null when another handle holds the lock
@@ -194,6 +194,24 @@ when that is unset, on Unix, and `%TEMP%` on Windows. Both return the path. Noth
 they make, at exit or later, so the program removes it, usually as `defer { File.removeAll(dir) }`,
 and before `Os.exit`, which runs no deferred block.
 
+### Not replacing
+
+`write`, `writeBytes`, `create` and `copy` replace what is at the path. With `replace: false` they
+create the file only if nothing is there, in one step the OS makes atomic, Go's `O_CREATE|O_EXCL`,
+and are otherwise `Err` with the OS's message, such as `open out.txt: file exists`, having changed
+nothing. Anything at the path counts, a directory and a link included, even a link that leads
+nowhere, which is not followed, so a link planted at the name cannot redirect the write. It is the
+shell's `noclobber` and `cp -n`, and it holds even against a program that takes no lock:
+
+```ant
+try File.write(output, report, replace: false)   // never overwrites an earlier report
+```
+
+The `Err` does not say why, as no library `Error` does, so a program that treats an existing file
+differently from other failures checks `File.exists` after it. `append` never replaces, `copyAll`
+and `symlink` already refuse what exists, and `tempFile` picks a free name, so they have no such
+parameter; neither has `rename`, since Go has no rename that refuses to replace.
+
 ### Copies
 
 `copy` copies one file: its contents, and then its mode, exactly. It replaces a file at `to`, as
@@ -231,17 +249,17 @@ every link along it resolved, and is `Err` when the path, or a link on the way, 
 
 What each function does at a link:
 
-| Function                                                                                   | At a link                                                 |
-| ------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `read`, `write`, `open`, `create`, `append`, `chmod`, `touch`, `lock`, both ends of `copy` | follows it                                                |
-| `exists`                                                                                   | follows it, so a dangling link is `false`                 |
-| `stat`                                                                                     | follows it, unless `follow` is `false`                    |
-| `remove`, `rename`                                                                         | acts on the link, not on its target                       |
-| `removeAll`                                                                                | removes the link, never what it points at                 |
-| `list`                                                                                     | lists its name                                            |
-| `walk`                                                                                     | does not descend through it, and lists it as a file       |
-| `copyAll`                                                                                  | copies it as a link inside the tree; follows it at `from` |
-| `realPath`, `readLink`                                                                     | resolves it, or reads it                                  |
+| Function                                                                                   | At a link                                                                        |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `read`, `write`, `open`, `create`, `append`, `chmod`, `touch`, `lock`, both ends of `copy` | follows it; with `replace: false`, a link at the path, dangling or not, is `Err` |
+| `exists`                                                                                   | follows it, so a dangling link is `false`                                        |
+| `stat`                                                                                     | follows it, unless `follow` is `false`                                           |
+| `remove`, `rename`                                                                         | acts on the link, not on its target                                              |
+| `removeAll`                                                                                | removes the link, never what it points at                                        |
+| `list`                                                                                     | lists its name                                                                   |
+| `walk`                                                                                     | does not descend through it, and lists it as a file                              |
+| `copyAll`                                                                                  | copies it as a link inside the tree; follows it at `from`                        |
+| `realPath`, `readLink`                                                                     | resolves it, or reads it                                                         |
 
 ### Times
 
