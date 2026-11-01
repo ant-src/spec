@@ -1910,9 +1910,9 @@ func copy(src: string, dst: string): Result[void, Error] {
 }
 ```
 
-The last line closes `output` explicitly, since a write can fail when the buffer is flushed and a
-deferred block's value is discarded; the deferred close then does nothing. `input` is only read, so
-its deferred close is enough.
+The last line closes `output` explicitly, since a close can fail and a deferred block's value is
+discarded; the deferred close then does nothing. `input` is only read, so its deferred close is
+enough.
 
 ### Catching a panic
 
@@ -2543,9 +2543,12 @@ condition as written.
 
 `println` and `eprintln` are built into the checker too, so that they may be called with no
 argument, which writes an empty line. `print` writes no newline, so a prompt or a progress dot needs
-nothing else; output is buffered and flushed when the program reads standard input, blocks, or
-exits. `eprint` and `eprintln` write a warning or a usage line to standard error, which is not
-buffered, and flush standard output first (stdlib.md, Os).
+nothing else. `eprint` and `eprintln` write a warning or a usage line to standard error. None of
+them is buffered, so output comes out in program order (stdlib.md, Os). They return `void`, and a
+write they fail is ignored, as Go programs ignore what `fmt.Println` returns, except a write to a
+stream whose reader has gone, a broken pipe, which ends the program as SIGPIPE does; so
+`ant run gen.ant | head` stops when `head` has read enough. A program that must know a write
+succeeded writes with `File.writeLine(Os.stdout(), …)`, which returns a `Result`.
 
 ### Array
 

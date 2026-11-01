@@ -22,7 +22,7 @@ function is added when a program needs it, and what is here is complete as writt
 ## File
 
 ```
-type Handle                                                // opaque: an open file, a standard stream, or a connection
+type Handle                                                // opaque: an open file, a standard stream, a connection, or a buffer over one
 type Info = { name: string, size: int, isDir: bool, modified: Time.Instant }
 
 File.read(path: string): Result[string, Error]
@@ -49,9 +49,10 @@ File.writeText(f: File.Handle, text: string): Result[void, Error]   // writeLine
 File.readChunk(f: File.Handle, max: int, ctx: Context | null = null): Result[Bytes | null, Error]   // what is there, 1 to max bytes; null at end of file
 File.readExactly(f: File.Handle, n: int, ctx: Context | null = null): Result[Bytes | null, Error]   // n bytes; null at end of file; Err when it ends partway
 File.writeChunk(f: File.Handle, bytes: Bytes): Result[void, Error]
-File.flush(f: File.Handle): Result[void, Error]            // writes out what is buffered
 File.pipe(src: File.Handle, dst: File.Handle, ctx: Context | null = null): Result[void, Error]   // copies the rest of src to dst
-File.close(f: File.Handle): Result[void, Error]            // flushes, then closes; Ok on a standard stream and on a closed handle
+File.buffered(f: File.Handle, size: int = 4096): File.Handle   // a handle over f whose writes are held until full, flush or close
+File.flush(f: File.Handle): Result[void, Error]            // hands what was written to f to the OS; Ok on a handle not buffered
+File.close(f: File.Handle): Result[void, Error]            // a buffered handle writes out first; Ok on a standard stream and on a closed handle
 ```
 
 `File.list` returns names and `File.walk` paths: `walk` descends into every directory below `dir`,
@@ -76,18 +77,48 @@ a regular file never waits, so there the context is looked at only before the re
 the context ended loses nothing: what it had consumed is kept for the next read of the handle, which
 stays open, so a line that arrives late is read whole by the read that comes next. One goroutine may
 read a handle while another writes it; a second reader waits for the first and gives up on its own
-context; and `File.close` from any goroutine ends a read or a write in progress with an `Err`. A
-write to a connection is flushed as a write to a standard stream is, since the other end is waiting
-for it, and `File.pipe` flushes what it copied even when its context ended it; `File.flush` is for
-files.
+context; and `File.close` from any goroutine ends a read or a write in progress with an `Err`.
 
-A write to a file can succeed into the buffer and fail when the buffer is written out, so
-`File.close` reports what the flush and the close report, and a program that promises its output
-checks it, as `try File.close(output)`. A deferred close cannot report, since a deferred block's
-value is discarded. So a function that writes a file ends with an explicit close, and the deferred
-close of the same handle, there for the paths that leave early, then does nothing and is `Ok`, as
-every close after the first is. The handle is closed even when `File.close` is `Err`, so a write
-after it is `Err` and a second close does nothing.
+A write is handed to the OS before it returns, all of its bytes or `Err`, as in Go; nothing is held
+back, so nothing needs a flush. How many system calls it takes is not promised. `File.pipe` writes
+each chunk as it reads it: first what `src` had read ahead, then a chunk at a time until the end of
+`src`, so a source that waits, such as standard input or a connection, streams, and what it read
+before its context ended it has been written.
+
+`File.buffered` is the opt-in for a loop of many small writes, Go's `bufio.Writer` as a handle. A
+write to the handle it returns goes into a buffer of `size` bytes, which is written to `f` when a
+write does not fit, at `File.flush` and at `File.close`, and at nothing else: no wait, no read and
+no exit. A buffered handle neither flushed nor closed when the run ends loses what its buffer holds,
+as a Go program that returns from `main` without `Flush` does. A `size` below 1 gives the default.
+When `f` is itself buffered with a buffer of at least `size`, `File.buffered` returns `f`. A read of
+the buffered handle reads `f`, through its one read buffer, so a buffered connection can `readLine`
+a reply after `File.flush` sends the request. `File.flush` writes out every layer, the handle's
+buffer and then that of each buffered handle under it, so after it everything written has been
+handed to the OS; on a handle that is not buffered it does nothing and is `Ok`, so a function may
+flush a handle without knowing what it is. The first error from writing the buffer out is kept, and
+every later write and flush returns it, as does the first close. A write to `f` itself, or a `print`
+while `File.buffered(Os.stdout())` holds output, goes past the buffer and can come out before what
+the buffer holds.
+
+`File.close` of a buffered handle writes the buffer out and closes `f`, and reports the first error
+of the two, the kept error included; on a standard stream it writes out and leaves the stream open.
+When a write or flush of the buffered handle is in progress on another goroutine, as when it waits
+on a peer that stopped reading, the close does not wait behind it: it closes `f` at once, the write
+ends with `Err`, and what the buffer holds is lost. A close can fail, of a file as of a buffer, so a
+program that promises its output checks it, as `try File.close(output)`. A deferred close cannot
+report, since a deferred block's value is discarded. So a function that writes a file ends with an
+explicit close, and the deferred close of the same handle, there for the paths that leave early,
+then does nothing and is `Ok`, as every close after the first is. The handle is closed even when
+`File.close` is `Err`, so a write after it is `Err` and a second close does nothing.
+
+```ant
+func writeReport(path: string, rows: Array[string]): Result[void, Error] {
+  var out = File.buffered(try File.create(path))
+  defer { File.close(out) }
+  for row in rows { try File.writeLine(out, row) }
+  try File.close(out)
+}
+```
 
 ## Http
 
@@ -177,9 +208,9 @@ Net.peer(f: File.Handle): string | null                          // the other en
 ```
 
 A connection is a `File.Handle`, so `File.readLine`, `readAll`, `writeLine`, `writeText`, `pipe` and
-`close` need nothing new, and a line protocol is a loop over `readLine`. A write to a connection is
-flushed, as `File` says. Several goroutines may `accept` on one listener, each with a context of its
-own, and each connection goes to one of them. TCP only: there is no TLS, UDP or Unix socket.
+`close` need nothing new, and a line protocol is a loop over `readLine`. Several goroutines may
+`accept` on one listener, each with a context of its own, and each connection goes to one of them.
+TCP only: there is no TLS, UDP or Unix socket.
 
 ## Path
 
@@ -565,10 +596,10 @@ Os.which(program: string): string | null   // the path a Cmd naming program star
 ```
 
 `Os.openPipe` returns two handles the program closes, as it closes a file: a read of `read` waits
-for data and a context ends it, and a write to `write` is flushed. `read` is at end of file once
-every copy of `write` is closed, the program's included, so after `Cmd.start` the program closes its
-copy of each writing end it gave away. A pipe joins what `Cmd.pipe` does not: a child's output read
-as it comes, a child's input written a piece at a time, or both outputs watched apart:
+for data and a context ends it. `read` is at end of file once every copy of `write` is closed, the
+program's included, so after `Cmd.start` the program closes its copy of each writing end it gave
+away. A pipe joins what `Cmd.pipe` does not: a child's output read as it comes, a child's input
+written a piece at a time, or both outputs watched apart:
 
 ```ant
 var out = try Os.openPipe()
@@ -619,18 +650,15 @@ there `Cmd.run` shares the streams and holds nothing back.
 ### Streams
 
 The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.stdin())`,
-`File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new.
-`Os.stdout()`, `print` and `println` write to one buffer, so their output interleaves in program
-order, and a read of standard input flushes it first, so a prompt is seen before the program waits.
-Standard error is not buffered, and a write to it, by `eprint`, `eprintln` or `Os.stderr()`, flushes
-standard output first, so where the two streams reach one terminal they interleave in program order.
-The write therefore waits while standard output cannot be written, as when the reader of a full pipe
-is not reading. `File.close` on a stream does nothing and is `Ok`. In the REPL standard input
-belongs to the REPL, and `Os.stdin()` is at end of file, as is a child's standard input under
-`Cmd.run`. A read of standard input reads the stream only while a read waits, so between reads the
-input is left to a child the stream is handed to. A read that its context ended goes on waiting for
-the stream, which nothing can interrupt, and what it then reads is the program's, for its next read,
-not a child's.
+`File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new. The
+streams are not buffered, so what `print`, `eprint`, `Os.stdout()`, `Os.stderr()` and the program's
+children write comes out in the order it was written, and a prompt is seen before the read that
+follows it. A program that writes much buffers it: `File.buffered(Os.stdout())`. `File.close` on a
+stream does nothing and is `Ok`. In the REPL standard input belongs to the REPL, and `Os.stdin()` is
+at end of file, as is a child's standard input under `Cmd.run`. A read of standard input reads the
+stream only while a read waits, so between reads the input is left to a child the stream is handed
+to. A read that its context ended goes on waiting for the stream, which nothing can interrupt, and
+what it then reads is the program's, for its next read, not a child's.
 
 ## Cmd
 
@@ -688,8 +716,7 @@ they are. A `program` with no path separator is looked up in the program's own `
 included, finds nothing; `Os.which` returns what that lookup finds. A `program` with a separator is
 taken as it is, relative to `dir` when it is relative. The child inherits the parent's working
 directory and environment unless `dir` or `env` is given; `env` is the child's whole environment, so
-a program that adds one variable starts from `Os.environ()`. Starting a command flushes standard
-output first, so what the program printed comes before what the child prints.
+a program that adds one variable starts from `Os.environ()`.
 
 The functions differ in what they do with the command's streams and how long they wait:
 
@@ -734,13 +761,13 @@ command still running when the script ends is left running, as in Go; a program 
 stops it in a deferred block.
 
 A handle given to `Cmd.start` is lent: the child gets its own copy, and the handle stays open and
-the program's. Each handle given as an output is flushed first, so a header the program wrote comes
-before the child's output. A file with nothing read ahead, a pipe end, and a standard stream are
-handed over as they are; anything else, such as a file the program has read part of or a connection,
-goes through a copy the runtime runs, which ends a second after the child exits at the latest, and
-the program does not read that handle while the child runs. A child has only the three streams it
-was given. The same handle may be given twice: `stdout: p.write, stderr: p.write` merges the
-outputs, as `2>&1` does.
+the program's. A buffered handle given as an output is flushed first and its `f` handed over, so a
+header the program wrote comes before the child's output. A file with nothing read ahead, a pipe
+end, and a standard stream are handed over as they are; anything else, such as a file the program
+has read part of or a connection, goes through a copy the runtime runs, which ends a second after
+the child exits at the latest, and the program does not read that handle while the child runs. A
+child has only the three streams it was given. The same handle may be given twice:
+`stdout: p.write, stderr: p.write` merges the outputs, as `2>&1` does.
 
 A context bounds a wait, and the context of a call that starts a command bounds its life:
 
