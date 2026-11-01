@@ -104,12 +104,14 @@ the buffer holds.
 of the two, the kept error included; on a standard stream it writes out and leaves the stream open.
 When a write or flush of the buffered handle is in progress on another goroutine, as when it waits
 on a peer that stopped reading, the close does not wait behind it: it closes `f` at once, the write
-ends with `Err`, and what the buffer holds is lost. A close can fail, of a file as of a buffer, so a
-program that promises its output checks it, as `try File.close(output)`. A deferred close cannot
-report, since a deferred block's value is discarded. So a function that writes a file ends with an
-explicit close, and the deferred close of the same handle, there for the paths that leave early,
-then does nothing and is `Ok`, as every close after the first is. The handle is closed even when
-`File.close` is `Err`, so a write after it is `Err` and a second close does nothing.
+ends with `Err`, and the close is `Err` when what the buffer held is lost. Over a standard stream,
+which a close leaves open and which nothing can interrupt, the close waits for the write and then
+writes out. A close can fail, of a file as of a buffer, so a program that promises its output checks
+it, as `try File.close(output)`. A deferred close cannot report, since a deferred block's value is
+discarded. So a function that writes a file ends with an explicit close, and the deferred close of
+the same handle, there for the paths that leave early, then does nothing and is `Ok`, as every close
+after the first is. The handle is closed even when `File.close` is `Err`, so a write after it is
+`Err` and a second close does nothing.
 
 ```ant
 func writeReport(path: string, rows: Array[string]): Result[void, Error] {

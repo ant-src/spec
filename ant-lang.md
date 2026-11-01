@@ -2546,9 +2546,10 @@ argument, which writes an empty line. `print` writes no newline, so a prompt or 
 nothing else. `eprint` and `eprintln` write a warning or a usage line to standard error. None of
 them is buffered, so output comes out in program order (stdlib.md, Os). They return `void`, and a
 write they fail is ignored, as Go programs ignore what `fmt.Println` returns, except a write to a
-stream whose reader has gone, a broken pipe, which ends the program as SIGPIPE does; so
-`ant run gen.ant | head` stops when `head` has read enough. A program that must know a write
-succeeded writes with `File.writeLine(Os.stdout(), …)`, which returns a `Result`.
+stream whose reader has gone, a broken pipe, which ends the program as SIGPIPE does, or with status
+141 where SIGPIPE is ignored; so `ant run gen.ant | head` stops when `head` has read enough. A
+program that must know a write succeeded writes with `File.writeLine(Os.stdout(), …)`, which returns
+a `Result`.
 
 ### Array
 
