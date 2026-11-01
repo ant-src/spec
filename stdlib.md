@@ -214,13 +214,14 @@ parameter; neither has `rename`, since Go has no rename that refuses to replace.
 
 ### Copies
 
-`copy` copies one file: its contents, and then its mode, exactly. It replaces a file at `to`, as
-`write` and `rename` do, and is `Err` when `to` is a directory, since there is no "into" form:
-`Path.join` says where. It follows a link at either end: the contents copied are those of the link's
-target, and a link at `to` has its target replaced, or created when the link dangles, as `write`
-does through it. To replace the link itself, `remove` it first. The times are not copied, so the
-copy is new to a build tool, and the copy is not atomic: a reader can see `to` half-written, which a
-copy to a temporary file and a `rename` avoid.
+`copy` copies one regular file: its contents, and then its mode, exactly. A source that is not one,
+such as a FIFO or a device, is `Err`, and is not opened, since opening a FIFO waits for a writer and
+`/dev/zero` never ends. It replaces a file at `to`, as `write` and `rename` do, and is `Err` when
+`to` is a directory, since there is no "into" form: `Path.join` says where. It follows a link at
+either end: the contents copied are those of the link's target, and a link at `to` has its target
+replaced, or created when the link dangles, as `write` does through it. To replace the link itself,
+`remove` it first. The times are not copied, so the copy is new to a build tool, and the copy is not
+atomic: a reader can see `to` half-written, which a copy to a temporary file and a `rename` avoid.
 
 `copyAll` is the recursive form, named so the bigger operation has the longer name. It copies a file
 as `copy` does, or a whole tree: every directory and file with its mode, and every link inside the
@@ -290,13 +291,16 @@ if lock == null {
 The lock belongs to the handle. A second handle on the same file conflicts with it even in the same
 process, so a lock orders goroutines too. Closing the handle releases it, and the OS releases it
 when the process ends, however it ends, a crash and `kill -9` included, so a lock is never left
-stale, as a pid file is. Closing is the one release, so there is no unlock, and a `File.buffered`
-over the handle writes out at its close before the lock goes. The file stays after the close, since
-removing it would race with a process that has just opened it to lock it, and the next lock reuses
-it. A program may write its pid into the file for people to read; whether the lock is held is what
-`tryLock` answers, not what the file says. The lock is `flock`'s on Unix and `LockFileEx`'s on
-Windows: advisory on Unix, so it keeps out only processes that lock too, and mandatory on Windows,
-where other processes cannot read or write the file while it is held.
+stale, as a pid file is. A child process that another goroutine starts as the handle closes holds a
+copy of it until the child's program has started, so the release can come a moment after the close;
+a program that locks again at once uses `lock`, which waits, rather than `tryLock`. Closing is the
+one release, so there is no unlock, and a `File.buffered` over the handle writes out at its close
+before the lock goes. The file stays after the close, since removing it would race with a process
+that has just opened it to lock it, and the next lock reuses it. A program may write its pid into
+the file for people to read; whether the lock is held is what `tryLock` answers, not what the file
+says. The lock is `flock`'s on Unix and `LockFileEx`'s on Windows: advisory on Unix, so it keeps out
+only processes that lock too, and mandatory on Windows, where other processes cannot read or write
+the file while it is held.
 
 ## Http
 
