@@ -199,7 +199,9 @@ neither, it adds `import "./path.ant" { name }`, its path relative to the module
 
 - It does not run programs or tests. The editor runs `ant run` and `ant test`, and the extension for
   an editor may offer a command for it.
-- It does not watch the file system; it relies on the client's notifications.
+- It does not watch the file system; it relies on the client's notifications. A client that registers
+  file watchers dynamically is asked to watch `**/*.ant`, and the server keeps the workspace's files
+  as it last read them until the client reports a change.
 - It does not format a range or on type (section 4, Formatting).
 - It offers no code lens but those of tests, no call hierarchy, and no type hierarchy.
 - It serves one workspace per process; an editor that opens two starts two servers.
