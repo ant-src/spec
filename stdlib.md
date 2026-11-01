@@ -23,25 +23,36 @@ function is added when a program needs it, and what is here is complete as writt
 
 ```
 type Handle                                                // opaque: an open file, a standard stream, a connection, or a buffer over one
-type Info = { name: string, size: int, isDir: bool, modified: Time.Instant }
+type Info = { name: string, size: int, isDir: bool, isSymlink: bool, modified: Time.Instant, mode: int }
 
 File.read(path: string): Result[string, Error]
 File.readBytes(path: string): Result[Bytes, Error]
-File.write(path: string, text: string): Result[void, Error]   // creates the file, or replaces what it held
+File.write(path: string, text: string): Result[void, Error]   // creates the file, or replaces what it held, keeping its mode
 File.writeBytes(path: string, bytes: Bytes): Result[void, Error]   // likewise
-File.exists(path: string): bool                            // anything at path, a directory included
-File.stat(path: string): Result[File.Info, Error]
+File.exists(path: string): bool                            // anything at path, a directory included; false at a dangling link
+File.stat(path: string, follow: bool = true): Result[File.Info, Error]   // follow: false describes a link itself
+File.chmod(path: string, mode: int): Result[void, Error]   // sets the bits in 0o7777 exactly
+File.touch(path: string, time: Time.Instant | null = null): Result[void, Error]   // sets modified to time, or now; creates an empty file when missing
 File.remove(path: string): Result[void, Error]             // one file, or an empty directory
 File.removeAll(path: string): Result[void, Error]          // a whole tree; Ok when there is nothing to remove
-File.rename(from: string, to: string): Result[void, Error]
+File.rename(from: string, to: string): Result[void, Error] // replaces a file at to
+File.copy(from: string, to: string): Result[void, Error]   // one file's contents and mode; replaces a file at to
+File.copyAll(from: string, to: string): Result[void, Error]   // a file or a whole tree; to must not exist, or be an empty directory
 File.mkdir(path: string): Result[void, Error]              // with its parents; Ok when it exists
-File.tempDir(prefix: string): Result[string, Error]        // a fresh directory under the host's temporary directory, named prefix and a random suffix
+File.tempFile(pattern: string, dir: string | null = null): Result[string, Error]   // a new empty file, mode 0o600, in dir or the host's temporary directory
+File.tempDir(pattern: string, dir: string | null = null): Result[string, Error]    // a new empty directory, mode 0o700, likewise
+File.symlink(target: string, link: string): Result[void, Error]   // makes link, pointing at target
+File.readLink(path: string): Result[string, Error]         // a link's target, as stored
+File.realPath(path: string): Result[string, Error]         // absolute and clean, with every link resolved
 File.list(dir: string): Result[Array[string], Error]       // the names in dir, in lexical order
 File.walk(dir: string): Result[Array[string], Error]       // every file below dir, as paths relative to it
 
 File.open(path: string): Result[File.Handle, Error]        // for reading
 File.create(path: string): Result[File.Handle, Error]      // for writing; truncates
 File.append(path: string): Result[File.Handle, Error]      // for writing at the end; creates
+File.lock(path: string, ctx: Context | null = null): Result[File.Handle, Error]   // for reading and writing, holding the file's lock; waits for it
+File.tryLock(path: string): Result[File.Handle | null, Error]   // likewise; null when another handle holds the lock
+File.isTerminal(f: File.Handle): bool                      // f is a terminal, as [[ -t 1 ]] asks of standard output
 File.readLine(f: File.Handle, ctx: Context | null = null): Result[string | null, Error]   // the line without its \n or \r\n; null at end of file
 File.readAll(f: File.Handle, ctx: Context | null = null): Result[string, Error]           // the rest of the file
 File.writeLine(f: File.Handle, line: string): Result[void, Error]
@@ -57,8 +68,10 @@ File.close(f: File.Handle): Result[void, Error]            // a buffered handle 
 
 `File.list` returns names and `File.walk` paths: `walk` descends into every directory below `dir`,
 does not follow symbolic links, lists files and not directories, and returns them in lexical order.
-`modified` is the time of the last write. `remove` refuses a directory with entries; `removeAll` is
-the recursive form, named so the dangerous one is the longer name.
+`modified` is the time of the last write, and `mode` holds the permissions (see Modes). `isSymlink`
+is true only for `stat(path, follow: false)` of a link, since `stat` otherwise describes what the
+link points at. `remove` refuses a directory with entries; `removeAll` is the recursive form, named
+so the dangerous one is the longer name.
 
 `File.read`, `readLine`, and `readAll` take what they read as text, decoded as all text from outside
 is (section 11 of `ant-lang.md`, String); `File.readBytes`, `readChunk`, and `readExactly` keep the
@@ -121,6 +134,151 @@ func writeReport(path: string, rows: Array[string]): Result[void, Error] {
   try File.close(out)
 }
 ```
+
+`File.isTerminal` is true when `f` is a terminal, as `[[ -t 1 ]]` asks of standard output, so a
+program colours its output or shows progress only when a person is watching:
+`File.isTerminal(Os.stdout())`. It is false for a file, a pipe and a connection, and a handle from
+`File.buffered` answers for the handle under it.
+
+### Modes
+
+`mode` holds the permission bits and the setuid, setgid and sticky bits, `0o4000`, `0o2000` and
+`0o1000`, so it is a number in `0 ..= 0o7777`, written as an octal literal such as `0o644` (section
+2 of `ant-lang.md`) and printed by `String.fromInt(mode, base: 8)`. What kind of file it is, `isDir`
+and `isSymlink` say, not `mode`. `chmod` sets the bits exactly and is `Err` for a mode outside that
+range.
+
+A new file is created with `0o666` and a new directory with `0o777`, less the process's umask, as
+the shell creates them, so under the usual umask `022` they are `0o644` and `0o755`. That is how
+`write`, `writeBytes`, `create`, `append`, `mkdir`, `touch`, `lock` and `tryLock` create. A file
+that exists keeps its mode when they write it, as Go's `os.WriteFile` keeps it. `chmod`, `copy`,
+`tempFile` and `tempDir` set their modes exactly, without the umask.
+
+There is no mode parameter on `write` or `create`, since it could apply only to a file that is new.
+A file that must not be readable by others, such as a token, is written as a temporary file beside
+its destination, which is `0o600` from the start, and renamed into place, which also means a reader
+never sees it half-written:
+
+```ant
+func saveToken(path: string, token: string): Result[void, Error] {
+  var tmp = try File.tempFile(".token-*", dir: Path.dir(path))
+  defer { File.remove(tmp) }       // Err after the rename, and discarded
+  try File.write(tmp, token)       // still 0o600, since the file exists
+  try File.rename(tmp, path)
+}
+```
+
+These guarantees are Unix's, as Go's are. `rename` replaces `to` atomically on Unix, so a reader
+sees the old file or the new one; elsewhere it is not promised to be atomic, as Go's `os.Rename` is
+not. On Windows a mode is Go's reading of the read-only attribute, the only one there is: `stat`
+gives a file `0o444` when it is read-only and `0o666` when not, adding `0o111` for a directory, and
+`chmod` sets the attribute when `0o200` is clear and ignores the other bits. Who may read a file is
+decided there by its access control list, which a new file inherits from its directory, and Ant sets
+none, as Go does not. The default temporary directory on Windows is under the user's profile, so a
+temporary file there is the user's alone; one made elsewhere is as private as its directory.
+
+There is no test of whether a file could be written. The mode cannot tell, since the owner, the
+group, root, access control lists and read-only mounts decide as well, and an answer would be stale
+by the time it was used. A program tries instead: `File.tempFile("probe-*", dir: dir)` is `Ok` when
+it can create files in `dir`.
+
+### Temporary files
+
+`tempFile` and `tempDir` create a file or a directory under a name nothing else has, so only the
+user can use it: the file with mode `0o600`, created only if the name is free, so a link someone
+planted at the name cannot redirect it, and the directory with `0o700`. The name is `pattern` with
+its last `*` replaced by a random string, or with the random string appended when there is no `*`,
+as Go's `os.CreateTemp` names files, so `"report-*.csv"` keeps its extension. A `pattern` that holds
+a path separator is `Err`. `dir` is the host's temporary directory when null: `$TMPDIR`, or `/tmp`
+when that is unset, on Unix, and `%TEMP%` on Windows. Both return the path. Nothing removes what
+they make, at exit or later, so the program removes it, usually as `defer { File.removeAll(dir) }`,
+and before `Os.exit`, which runs no deferred block.
+
+### Copies
+
+`copy` copies one file: its contents, and then its mode, exactly. It replaces a file at `to`, as
+`write` and `rename` do, and is `Err` when `to` is a directory, since there is no "into" form:
+`Path.join` says where. It follows a link at either end: the contents copied are those of the link's
+target, and a link at `to` has its target replaced, or created when the link dangles, as `write`
+does through it. To replace the link itself, `remove` it first. The times are not copied, so the
+copy is new to a build tool, and the copy is not atomic: a reader can see `to` half-written, which a
+copy to a temporary file and a `rename` avoid.
+
+`copyAll` is the recursive form, named so the bigger operation has the longer name. It copies a file
+as `copy` does, or a whole tree: every directory and file with its mode, and every link inside the
+tree as a link with the same target, not followed, as `cp -R` copies them, so a cycle cannot loop; a
+link at `from` itself is followed. `to` must not exist, or, for a tree, be an empty directory, which
+becomes the root of the copy and keeps its own mode, so a `tempDir` stays `0o700`. Anything else at
+`to` is `Err` before anything is copied, so two trees are never merged. An error partway through
+leaves what was copied.
+
+Neither copies a thing onto itself, which would truncate the source before reading it. Before
+changing anything, both are `Err` when `from` and `to` are the same file, decided by identity,
+device and inode as Go's `os.SameFile` decides, not by name, so `./a` and a link at `to` that leads
+to `a` are caught; and `copyAll` is `Err` when `to`, with its links resolved, lies inside `from`, as
+`copyAll("src", "src/backup")` would copy its own copy.
+
+### Links
+
+`symlink` makes a symbolic link at `link` whose target is the text `target`, in the order of
+`ln -s target link`. A relative target is relative to the link's directory, not to the working
+directory, and nothing needs to exist at it. `symlink` is `Err` when anything is at `link`. On
+Windows it makes a directory link when `target` is an existing directory and a file link otherwise,
+and is `Err` without Developer Mode or administrator rights. `readLink` returns a link's target as
+stored, and is `Err` when `path` is not a link. `realPath` returns the path absolute and clean with
+every link along it resolved, and is `Err` when the path, or a link on the way, leads nowhere;
+`Path.abs`, by contrast, looks only at the text.
+
+What each function does at a link:
+
+| Function                                                                                   | At a link                                                 |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| `read`, `write`, `open`, `create`, `append`, `chmod`, `touch`, `lock`, both ends of `copy` | follows it                                                |
+| `exists`                                                                                   | follows it, so a dangling link is `false`                 |
+| `stat`                                                                                     | follows it, unless `follow` is `false`                    |
+| `remove`, `rename`                                                                         | acts on the link, not on its target                       |
+| `removeAll`                                                                                | removes the link, never what it points at                 |
+| `list`                                                                                     | lists its name                                            |
+| `walk`                                                                                     | does not descend through it, and lists it as a file       |
+| `copyAll`                                                                                  | copies it as a link inside the tree; follows it at `from` |
+| `realPath`, `readLink`                                                                     | resolves it, or reads it                                  |
+
+### Times
+
+`touch` sets a file's modified time, and its access time with it, to `time`, or to now when `time`
+is null, and creates an empty file when nothing is at `path`, as the shell's `touch` does; it never
+truncates. A stamp file is `try File.touch(stamp)`, and `modified` from `stat` reads it back,
+rounded as the file system keeps times: to 2 seconds on FAT, to the second on HFS+, to the
+nanosecond on ext4 and APFS. The access time is not in `File.Info`, since many systems are mounted
+not to keep it.
+
+### Locks
+
+`lock` and `tryLock` let one process at a time do something, such as a script that cron starts again
+while its last run is still going. Each opens `path` for reading and writing, creating it empty when
+it is missing and never truncating it, and takes an exclusive lock on the whole file. `lock` waits
+until no other handle holds the lock, or until `ctx` is done, and is then `Err` with the context's
+reason; `tryLock` does not wait, and is `Ok(null)` when another handle holds it. `Err` is left for a
+real failure, such as a directory that cannot be written.
+
+```ant
+var lock = try File.tryLock(Path.join([try Os.cacheDir(), "backup.lock"]))
+if lock == null {
+  eprintln("backup: already running")
+  Os.exit(1)
+}
+```
+
+The lock belongs to the handle. A second handle on the same file conflicts with it even in the same
+process, so a lock orders goroutines too. Closing the handle releases it, and the OS releases it
+when the process ends, however it ends, a crash and `kill -9` included, so a lock is never left
+stale, as a pid file is. Closing is the one release, so there is no unlock, and a `File.buffered`
+over the handle writes out at its close before the lock goes. The file stays after the close, since
+removing it would race with a process that has just opened it to lock it, and the next lock reuses
+it. A program may write its pid into the file for people to read; whether the lock is held is what
+`tryLock` answers, not what the file says. The lock is `flock`'s on Unix and `LockFileEx`'s on
+Windows: advisory on Unix, so it keeps out only processes that lock too, and mandatory on Windows,
+where other processes cannot read or write the file while it is held.
 
 ## Http
 
@@ -588,6 +746,12 @@ Os.arch(): string                     // the processor architecture: "arm64", "a
 Os.env(name: string): string | null
 Os.environ(): Map[string, string]     // every variable
 Os.cwd(): Result[string, Error]       // the working directory
+Os.home(): Result[string, Error]      // the user's home directory
+Os.configDir(): Result[string, Error] // where the user's programs keep their configuration
+Os.cacheDir(): Result[string, Error]  // where they keep what can be made again
+Os.pid(): int                         // this process's id
+Os.uid(): int | null                  // the effective user id, 0 for root; null on Windows
+Os.hostname(): Result[string, Error]
 Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 Os.stdin(): File.Handle               // the program's standard input
 Os.stdout(): File.Handle              // its standard output, which print and println write to as well
@@ -624,6 +788,20 @@ if len(Os.args()) == 0 {
 }
 var opener = if Os.platform() == "darwin" { "open" } else { "xdg-open" }
 ```
+
+`Os.home`, `Os.configDir` and `Os.cacheDir` are Go's `os.UserHomeDir`, `os.UserConfigDir` and
+`os.UserCacheDir`. The home directory is `$HOME` on Unix and `%USERPROFILE%` on Windows. The
+configuration directory is `$XDG_CONFIG_HOME`, or `~/.config` when that is unset, on Unix,
+`~/Library/Application Support` on macOS, and `%AppData%` on Windows; the cache directory is
+`$XDG_CACHE_HOME` or `~/.cache`, `~/Library/Caches`, and `%LocalAppData%`. Each is `Err` when the
+variable it rests on is unset, or an XDG variable holds a relative path. They are roots shared by
+every program, so a script keeps its files under a directory of its own name, made with
+`File.mkdir`, and a fixed path belongs there rather than in the shared temporary directory, where
+someone else can take the name first.
+
+`Os.pid` is this process's id, as `Cmd.pid` is a child's. `Os.uid` is the effective user id, the one
+that decides what the process may touch, so `Os.uid() == 0` asks what `[[ $EUID -eq 0 ]]` asks;
+Windows has no user ids, and there it is null.
 
 ### Interrupts
 

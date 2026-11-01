@@ -117,6 +117,7 @@ are ordinary identifiers bound by the prelude, not keywords.
 
 ```
 42          1_000_000     0xFF        0b1010    // integers
+0o755                                           // octal, for file modes
 3.14        1e9           2.5e-3                // floats
 "hello"     "line\nbreak" "\u{1F600}"           // strings
 "total: ${count} items"                         // interpolation
@@ -125,18 +126,19 @@ are ordinary identifiers bound by the prelude, not keywords.
 true        false         null
 ```
 
-An integer literal is decimal, `0x` hexadecimal, or `0b` binary, with `_` allowed between digits. A
-float literal has digits on both sides of the point, an exponent, or both; `.5`, `1.`, and `1.x` are
-errors, since a digit followed by a point always begins a float. The prefixes and the `e` of an
-exponent are lowercase, so `0XFF`, `0B1`, and `1E9` are errors; hexadecimal digits may be either
-case. A decimal integer, or the digits before a float's point, start with `0` only when they are
-`0`: `0`, `0.5`, and `0e3` are fine, while `007` and `00.5` are errors, since other languages read
-`007` as octal. There are no literal suffixes: an integer literal is always an `int` and a float
-literal is always a `float64`. `1` is never a float; write `1.0`. Other numeric types are reached
-through a conversion, as in `byte(255)` or `float32(1.5)`. An integer literal that does not fit an
-`int` is a syntax error, so the most negative `int` is written `Math.minInt`. So is a float literal
-out of the range of `float64`: one so large that it would round to infinity, such as `1e400`, or one
-whose digits are not all zero but that would round to `0.0`, such as `1e-400`.
+An integer literal is decimal, `0x` hexadecimal, `0o` octal, or `0b` binary, with `_` allowed
+between digits; octal is for file modes, as `0o644` (`stdlib.md`, File). A float literal has digits
+on both sides of the point, an exponent, or both; `.5`, `1.`, and `1.x` are errors, since a digit
+followed by a point always begins a float. The prefixes and the `e` of an exponent are lowercase, so
+`0XFF`, `0O7`, `0B1`, and `1E9` are errors; hexadecimal digits may be either case. A decimal
+integer, or the digits before a float's point, start with `0` only when they are `0`: `0`, `0.5`,
+and `0e3` are fine, while `007` and `00.5` are errors, since other languages read `007` as octal,
+which Ant writes `0o7`. There are no literal suffixes: an integer literal is always an `int` and a
+float literal is always a `float64`. `1` is never a float; write `1.0`. Other numeric types are
+reached through a conversion, as in `byte(255)` or `float32(1.5)`. An integer literal that does not
+fit an `int` is a syntax error, so the most negative `int` is written `Math.minInt`. So is a float
+literal out of the range of `float64`: one so large that it would round to infinity, such as
+`1e400`, or one whose digits are not all zero but that would round to `0.0`, such as `1e-400`.
 
 A string is written between double quotes. The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `\$`, and
 `\u{...}`, whose hexadecimal value must be a Unicode scalar value: at most `10FFFF` and not a
