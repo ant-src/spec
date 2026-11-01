@@ -186,14 +186,16 @@ Inference), add the fields a record literal leaves out, with placeholders for th
 import a name that is not defined, one action for each module that exports it (Imports, below),
 preferred when there is only one.
 
-**Imports.** A name is importable into a module when another module of the workspace exports it as
-a top-level `func`, `type`, or `var`; where a type is written, only a type is. A script, a
-declaration file, and a module that imports the module, directly or through others, are left out,
-since importing them is an error, and so is a test file unless the module is a test file too. The
-edit that imports a name adds it to the list of an `import` of its module that has one; with an
-`import` that binds the module as a namespace, it writes the use as `Namespace.name` instead; with
-neither, it adds `import "./path.ant" { name }`, its path relative to the module, after the last
-`import`, or after the module's doc comment when there is none.
+**Imports.** A name is importable into a module when another module of the workspace exports it as a
+top-level `func`, `type`, or `var`, and into a test file when another module declares it so,
+exported or not, since a test file's imports reach private names (ant-lang.md section 10, Tests);
+where a type is written, only a type is. A script, a declaration file, and a module that imports the
+module, directly or through others, are left out, since importing them is an error, and so is a test
+file unless the module is a test file too. The edit that imports a name adds it to the list of an
+`import` of its module that has one; with an `import` that binds the module as a namespace, it
+writes the use as `Namespace.name` instead; with neither, it adds `import "./path.ant" { name }`,
+its path relative to the module, after the last `import`, or after the module's doc comment when
+there is none.
 
 ## 5. What `ant lsp` does not do
 
