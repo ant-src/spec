@@ -655,12 +655,16 @@ The three streams are handles, so `File.readLine(Os.stdin())`, `File.readAll(Os.
 `File.writeLine(Os.stderr(), msg)` and `File.pipe(Os.stdin(), Os.stdout())` need nothing new. The
 streams are not buffered, so what `print`, `eprint`, `Os.stdout()`, `Os.stderr()` and the program's
 children write comes out in the order it was written, and a prompt is seen before the read that
-follows it. A program that writes much buffers it: `File.buffered(Os.stdout())`. `File.close` on a
-stream does nothing and is `Ok`. In the REPL standard input belongs to the REPL, and `Os.stdin()` is
-at end of file, as is a child's standard input under `Cmd.run`. A read of standard input reads the
-stream only while a read waits, so between reads the input is left to a child the stream is handed
-to. A read that its context ended goes on waiting for the stream, which nothing can interrupt, and
-what it then reads is the program's, for its next read, not a child's.
+follows it. A program that writes much buffers it: `File.buffered(Os.stdout())`. A write to standard
+output or standard error whose reader has gone, a broken pipe, ends the program as SIGPIPE ends a Go
+program, whichever function made it, a buffered handle's flush too; a shell reports status 141.
+Where no signal comes, on Windows or under a host that gives the program its own writer, `print`,
+`println`, `eprint` and `eprintln` end the program with status 141, and the `File` functions return
+`Err`. `File.close` on a stream does nothing and is `Ok`. In the REPL standard input belongs to the
+REPL, and `Os.stdin()` is at end of file, as is a child's standard input under `Cmd.run`. A read of
+standard input reads the stream only while a read waits, so between reads the input is left to a
+child the stream is handed to. A read that its context ended goes on waiting for the stream, which
+nothing can interrupt, and what it then reads is the program's, for its next read, not a child's.
 
 ## Cmd
 

@@ -66,12 +66,13 @@ fails a test is not caught by a `Panic.catch` of the program, so it stops the ru
 test failed.
 
 **Streams.** What the program writes to standard output and standard error is sent as `output`
-events of category `stdout` and `stderr`. Standard output is sent at least every 100 milliseconds
-and before every stop, so what a program wrote before it stops is shown when it stops. With no
-`stdin`, standard input is at end of file. A child the program starts (`stdlib.md`, `Cmd`) gets the
-same: its output goes to the same events, and it never reads or writes the adapter's own streams. A
-panic the runtime reports and the error of a `Result` returned from `main` are written to standard
-error as `ant run` writes them (section 8).
+events of category `stdout` and `stderr`. The two are sent in batches, in the order written, at most
+50 milliseconds after the write, and before every stop, every other `output` event and the `exited`
+event, so what a program wrote before it stops is shown when it stops. With no `stdin`, standard
+input is at end of file. A child the program starts (`stdlib.md`, `Cmd`) gets the same: its output
+goes to the same events, and it never reads or writes the adapter's own streams. A panic the runtime
+reports and the error of a `Result` returned from `main` are written to standard error as `ant run`
+writes them (section 8).
 
 **Ending.** `terminate` delivers an interrupt, as the first Ctrl-C does under `ant run`: to the
 context `Os.interrupt` returned, when the program asked for one and it is not done, and otherwise it
