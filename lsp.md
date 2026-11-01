@@ -111,6 +111,9 @@ closed.
 - After `is`: the types in scope and the kinds `is` tests (section 5, `is`).
 - In markup (section 5, HTML expressions): element names after `<`, the attributes an element takes
   inside a start tag, and the end tag after `</`.
+- Where a name or a type is written, once its first letter is typed: the importable names that start
+  with what is typed (Imports, below), each with the edit that imports it. The list is then marked
+  incomplete, so that the editor asks again as the word grows.
 
 Each item carries what hover would show, as its detail and documentation: a function's signature, a
 variable's type, and the first sentence of the doc comment (`doc.md` section 2). Items are offered
@@ -179,7 +182,18 @@ of `ant dap` whose `test` is the pattern (`dap.md`). The same tests are document
 
 **Code actions** fix what a diagnostic names when the fix is mechanical: they state the type of a
 `var` or the return type of a function where a message asks for an annotation (section 4,
-Inference), and add the fields a record literal leaves out, with placeholders for their values.
+Inference), add the fields a record literal leaves out, with placeholders for their values, and
+import a name that is not defined, one action for each module that exports it (Imports, below),
+preferred when there is only one.
+
+**Imports.** A name is importable into a module when another module of the workspace exports it as
+a top-level `func`, `type`, or `var`; where a type is written, only a type is. A script, a
+declaration file, and a module that imports the module, directly or through others, are left out,
+since importing them is an error, and so is a test file unless the module is a test file too. The
+edit that imports a name adds it to the list of an `import` of its module that has one; with an
+`import` that binds the module as a namespace, it writes the use as `Namespace.name` instead; with
+neither, it adds `import "./path.ant" { name }`, its path relative to the module, after the last
+`import`, or after the module's doc comment when there is none.
 
 ## 5. What `ant lsp` does not do
 
