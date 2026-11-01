@@ -2191,10 +2191,11 @@ export func distance(a: Point, b: Point): float64 {
 ```
 
 A module is a record. Its top-level scope is a record whose fields are its declarations, and
-`export` marks the fields other modules may see. `import` destructures that record: a record
-destructuring brings chosen exports into scope, with the usual `name: alias` renaming, and a bare
-name binds the whole record as a namespace (Namespaces, below), so `Geometry.distance` is a field
-read followed by a call and `Geometry.Point{ x: 1.0 }` is a field read that yields a tag.
+`export` marks the fields other modules may see; a test file sees them all (Tests, below). `import`
+destructures that record: a record destructuring brings chosen exports into scope, with the usual
+`name: alias` renaming, and a bare name binds the whole record as a namespace (Namespaces, below),
+so `Geometry.distance` is a field read followed by a call and `Geometry.Point{ x: 1.0 }` is a field
+read that yields a tag.
 
 ```ant
 import "./geometry.ant" { distance, Point }
@@ -2213,7 +2214,7 @@ Types and values import alike. A `type` export is its tag, so a record built in 
 `is` test written against the imported name in another, under whatever local name it was given. The
 exported functions declared on a type come with it: `import "./geometry.ant" { Point }` makes
 `Point.distance` available and `Point: P` makes it `P.distance`. A function without `export` is a
-compile error outside its module, like any other private field.
+compile error outside its module, like any other private field, except in a test file.
 
 Imports are live and read-only. `export var` is allowed; an imported name reads the exporting
 module's current value each time, and assigning to an imported name or to a field of a namespace
@@ -2328,7 +2329,9 @@ declarations, which `ant test` runs (`test.md`). `ant run` refuses a test file, 
 `import` in a file that is not one; a test file may import another, for shared helpers.
 
 ```ant
-// stack_test.ant, beside stack.ant
+// stack_test.ant
+import "./stack.ant" { Stack, parse } // parse is private
+
 test "push then pop returns the value" {
   var s = Stack.new()
   Stack.push(s, 1)
@@ -2361,17 +2364,13 @@ test "parse" {
 top-level statement, which would make it a script. What it exports only another test file can
 import, so helpers shared by several test files live in one, such as `helpers_test.ant`.
 
-- **Companion scope.** `foo_test.ant` beside a library `foo.ant`, in the same directory, is that
-  library's companion: it sees every top-level name of `foo.ant`, exported or not, and every name
-  `foo.ant` imports, without importing them, as though its top-level scope were nested in
-  `foo.ant`'s. A declaration or import of its own that would bind one of those names again is an
-  error, as shadowing an import is (section 10). `foo.ant` is initialized first, once, as an import
-  is.
-- **Black box.** A test file with no such library beside it, such as `api_test.ant` for a whole
-  directory, sees only what it imports.
-- A script cannot be a companion, since its top-level names are locals of its body (Scripts, above):
-  `foo_test.ant` beside a script `foo.ant` sees only what it imports, and logic worth testing moves
-  into a library the script imports.
+A test file sees only what it imports, but its imports reach every top-level declaration of a
+module, exported or not: a destructuring names private ones as it names exports, a namespace reads
+them with `.`, and the functions declared on an imported type come with it, private ones included.
+They do not reach the names that module imports, since there is no re-export. Any module may be
+imported so, wherever it lies, and nothing private leaks into a program, since only a test file can
+import a test file. A script has no declarations to import, since its top-level names are locals of
+its body (Scripts, above): logic worth testing moves into a library the script imports.
 
 **The `test` declaration.** `test`, a string literal, and a block:
 

@@ -18,10 +18,10 @@ ant test [flags] [path ...]
   named directly that is not a test file is a usage error.
 - Files run one after another, in the order the paths were given, and a directory's files in lexical
   order of their paths.
-- Each test file runs as a program of its own: its modules, its companion among them, are loaded and
-  initialized for that file, so the module state of one file never reaches another's.
+- Each test file runs as a program of its own: its modules are loaded and initialized for that file,
+  so the module state of one file never reaches another's.
 - `ant test`, like `ant run`, does not type-check (section 4, Checking and running). `ant check`
-  accepts a test file and checks it with its companion and its imports.
+  accepts a test file and checks it with its imports.
 
 | Flag           | Meaning                                                                                                                           |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
@@ -60,7 +60,7 @@ child process, goes to standard output and standard error as under `ant run`.
     assertion failed: parse(c.input) == c.want (0 == 16)
       c.input = "0x10"
       c.want = 16
-      at test "0x10" (stack_test.ant:24:13)
+      at test "0x10" (stack_test.ant:26:13)
 ```
 
 The line names the file, as the path it was found by, and the test's full name, then the time the
