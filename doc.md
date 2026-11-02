@@ -16,7 +16,7 @@ ant doc <file.ant> <name>   one exported declaration of a module: Point, Point.d
 ```
 
 A name is `Name` or `Owner.name`. `ant doc` looks it up without regard to case, so `array.MAP` finds
-`Array.map`, although identifiers in a program are case-sensitive (section 2). A `var` that
+`Array.map`, although identifiers in a program are case-sensitive (section 2). A `var` or `let` that
 destructures has no name of its own: a module lists it, but a name does not find it. An argument
 that ends in `.ant` is a module path; every other first argument is a prelude name. `ant doc` reads
 only the file it is given: it does not follow imports and does not run the checker, so a module with
@@ -27,7 +27,7 @@ of one is visible, so `ant doc` lists them all and a name finds any of them.
 For a single declaration, `ant doc` prints its signature as written in the source, followed by its
 doc comment with every non-empty line indented by four spaces. The signature of a `func` runs
 through its result type, or its parameters when it has none, of a `type` through its whole
-definition, and of a `var` through its annotation, leaving out the body or initializer. A
+definition, and of a `var` or `let` through its annotation, leaving out the body or initializer. A
 declaration without a doc comment prints only its signature.
 
 A name without a dot that is a namespace (section 10, Namespaces), a type with functions declared on

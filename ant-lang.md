@@ -40,13 +40,13 @@ module doc lines below may follow it. A `#!` anywhere else, after a space or on 
 syntax error.
 
 A doc comment is a run of line comments, each alone on its line, on consecutive lines, followed by a
-line break and then directly by a top-level `var`, `func`, or `type` declaration, or by the `export`
-that starts one, with nothing between but white space. It documents that declaration. A blank line,
-a block comment, a module doc line, or a comment that follows code on its line ends the run, so a
-comment separated from a declaration by a blank line documents nothing, and neither does a trailing
-comment on the line before it; in `var a = 1; var b = 2`, a doc comment above the line documents
-only `a`. The doc is the run's text with each line's `//`, the one space after it when present, and
-its trailing white space removed.
+line break and then directly by a top-level `var`, `let`, `func`, or `type` declaration, or by the
+`export` that starts one, with nothing between but white space. It documents that declaration. A
+blank line, a block comment, a module doc line, or a comment that follows code on its line ends the
+run, so a comment separated from a declaration by a blank line documents nothing, and neither does a
+trailing comment on the line before it; in `var a = 1; var b = 2`, a doc comment above the line
+documents only `a`. The doc is the run's text with each line's `//`, the one space after it when
+present, and its trailing white space removed.
 
 A line comment that starts with `//!` is a module doc line, and the module doc lines of a file
 document the module (section 10). They come before its first `import` or declaration, each alone on
@@ -88,7 +88,7 @@ Keywords:
 
 ```
 break continue defer else export false for func go if import
-in is null return select true try type var void while
+in is let null return select true try type var void while
 ```
 
 In a test file (section 10, Tests), `test` is a keyword as well, except after `.` or `?.` and before
@@ -100,7 +100,7 @@ identifier:
 
 ```
 as async await catch class const enum finally function interface
-let match switch this throw undefined
+match switch this throw undefined
 ```
 
 Neither list can name a variable, function, type, or parameter. A field can have any name: after `.`
@@ -256,14 +256,29 @@ var total = orders
 
 ## 3. Variables
 
-`var` declares a mutable binding. Every declaration has an initializer, and the type is inferred
-from it or written explicitly.
+`var` declares a mutable binding and `let` a fixed one. Every declaration has an initializer, and
+the type is inferred from it or written explicitly.
 
 ```ant
 var count = 0
 var name: string = "ant"
 var scores: Array[int] = []
+let limit = 100
 ```
+
+`let` takes every form `var` takes and goes wherever a `var` goes: a destructuring on the left
+(section 5), a `select` head, the top level, after `export`, and in a declaration file (section 10).
+Assigning a `let` name, with `=`, a compound operator, or inside an array destructuring assignment,
+is a compile error wherever the assignment is written, in a nested block, a lambda, a `go` or
+`defer` block, or another function of the module; `ant run` panics with `assignment to let name`
+when one is reached. A `let` is bound once, when its declaration runs, exactly as a `var` is, and
+follows the same scoping rules, which the rest of the specification states for `var` alone. It fixes
+the binding and nothing else: the fields, elements, and entries of a `let` value can still be
+assigned, so `let xs = [1]` allows `Array.push(xs, 2)`. The parameters of a function or lambda, a
+lambda's implicit `x`, and every name a `for` binds are `let` bindings too (sections 5 and 6), so
+every name is fixed unless a `var` declares it; `_` stays assignable, as the discard. Neither
+keyword is preferred: a `var` that is never reassigned is as valid as a `let`, and no tool reports
+or rewrites it.
 
 A name cannot be redeclared in the same scope, which is a syntax error; an inner scope may shadow an
 outer one, except that no declaration in any scope may shadow a prelude name (section 10). A `var`
@@ -283,7 +298,7 @@ if count = 5 { ... }    // compile error: void is not bool
 ```
 
 An assignment target is a variable, a field such as `p.x`, an element such as `xs[i]`, or an array
-destructuring of targets such as `[a, b]` (section 5). There is no `++`, `--`, or `const`.
+destructuring of targets such as `[a, b]` (section 5). There is no `++` or `--`.
 
 ## 4. Types
 
@@ -1104,11 +1119,13 @@ if s is Circle && s.radius > 1.0 { ... }          // s: Circle after the &&
 
 `for` iterates over an array, a map, a set, a string, `Bytes`, or a sequence function; over a map it
 yields each `Entry`, over a set each member, over a string each code point as a one-character
-string, and over `Bytes` each byte as a `byte`. Each iteration binds a fresh variable, so a closure
-created in the body keeps that iteration's value. `while` repeats while a condition holds. Both have
-type `void`, except that a `while` whose condition is the literal `true` and whose body contains no
-`break` has type `never`, since only `return` or a panic can leave it. `break` and `continue` work
-as in JavaScript, without labels.
+string, and over `Bytes` each byte as a `byte`. Each iteration binds a fresh `let`, so a closure
+created in the body keeps that iteration's value, and assigning the loop variable is a compile
+error: `for x in xs { x = x * 2 }` would not change `xs`, so it is rejected rather than allowed to
+look as if it did. `while` repeats while a condition holds. Both have type `void`, except that a
+`while` whose condition is the literal `true` and whose body contains no `break` has type `never`,
+since only `return` or a panic can leave it. `break` and `continue` work as in JavaScript, without
+labels.
 
 ```ant
 for user in users {
@@ -1168,12 +1185,12 @@ select {
 A clause is a head and a block, one clause per line; a `;` between clauses is a syntax error. A head
 is one of five blocking calls of section 11 and `stdlib.md`, written as the call would be and not
 performed: `Channel.receive(c)`, `Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or
-`Time.sleep(d)`. `var x =` before a head binds the call's result in the block: a receive binds
-`T | null`, `null` when the channel is closed, a send binds `bool`, and a binding on a head that
-returns `void` is a compile error. A head takes no context, since the context is its own clause, and
-a head given one is a compile error. An `else` block, written last, runs when no head can proceed at
-once, so a `select` with `else` never waits. The block begins at the head's `{`, which the header
-rule above finds: a `{` after a `)` ends a header.
+`Time.sleep(d)`. `var x =` or `let x =` before a head binds the call's result in the block: a
+receive binds `T | null`, `null` when the channel is closed, a send binds `bool`, and a binding on a
+head that returns `void` is a compile error. A head takes no context, since the context is its own
+clause, and a head given one is a compile error. An `else` block, written last, runs when no head
+can proceed at once, so a `select` with `else` never waits. The block begins at the head's `{`,
+which the header rule above finds: a `{` after a `)` ends a header.
 
 The heads' operands evaluate first, in order, once. Then the `select` waits until one head can
 proceed, performs it, binds its result, and runs its block, whose value is the value of the
@@ -1204,12 +1221,12 @@ an `else` that is not last, a binding on `else`, a head that is not a call of on
 
 ### Destructuring
 
-`var` and `for` accept a destructuring on the left side instead of a name. A record destructuring
-`{ x, y }` binds the fields `x` and `y`, and `{ x: px }` binds the field `x` as `px`; fields not
-mentioned are ignored. An array destructuring `[a, b]` binds elements by position and ignores extra
-elements, and `[head, ...tail]` binds the rest as a new array. Each position holds a name, `_` to
-discard, or another destructuring, so they nest. A destructuring has at least one field or position,
-so `var [] = xs` and `var {} = r` are syntax errors.
+`var`, `let`, and `for` accept a destructuring on the left side instead of a name. A record
+destructuring `{ x, y }` binds the fields `x` and `y`, and `{ x: px }` binds the field `x` as `px`;
+fields not mentioned are ignored. An array destructuring `[a, b]` binds elements by position and
+ignores extra elements, and `[head, ...tail]` binds the rest as a new array. Each position holds a
+name, `_` to discard, or another destructuring, so they nest. A destructuring has at least one field
+or position, so `var [] = xs` and `var {} = r` are syntax errors.
 
 Destructuring is binding plus indexing, and it fails the way indexing does. An array with fewer
 elements than the fixed positions panics, as `xs[1]` would on a one-element array. A nested record
@@ -1486,12 +1503,14 @@ but not its last item, or a statement of a script's top level, whose value is di
 ## 6. Functions
 
 `func` declares a named function at the top level of a module; inside a block, bind a function with
-`var`. Such a function may call itself, since the closure finds the name when it runs, but its type
-must be stated before its body is checked, by a return type on the `func` or a type on the `var`:
-inferring it from a body that calls it would meet its own inference in progress. Parameters are
-annotated; the return type is inferred unless the function is exported or recursive (section 4,
-Inference). The body is a block, so the last expression is the result and `return` is only needed to
-leave early.
+`let` or `var`. Such a function may call itself, since the closure finds the name when it runs, but
+its type must be stated before its body is checked, by a return type on the `func` or a type on the
+binding: inferring it from a body that calls it would meet its own inference in progress. Parameters
+are annotated and are `let` bindings: a body reads them and may change their values through them,
+but assigning a parameter is a compile error, so a body that normalizes one binds a new name, as in
+`var c = ctx ?? Context.new()`. The return type is inferred unless the function is exported or
+recursive (section 4, Inference). The body is a block, so the last expression is the result and
+`return` is only needed to leave early.
 
 ```ant
 func clamp(value: int, low: int, high: int): int {
@@ -1527,7 +1546,8 @@ return type, exactly like a declaration. A lambda is a bare block with one impli
 `x`. At run time a lambda accepts zero or one argument, so it also serves where a zero-parameter
 function is expected; the checker gives it the arity of the expected function type. In a lambda of
 arity zero, `x` is not in scope, and reading it is a compile error; at run time a lambda called
-without an argument binds `x` to `void`.
+without an argument binds `x` to `void`. An anonymous function's parameters and a lambda's `x` are
+`let` bindings, as a declaration's parameters are.
 
 ```ant
 var add = func(a: int, b: int) { a + b }
@@ -1642,8 +1662,8 @@ compile error.
 
 ### Narrowing
 
-The checker narrows after a test, as in the last example, but only for a local variable or a
-parameter:
+The checker narrows after a test, as in the last example, but only for a local variable, a
+parameter, or a top-level `let` (below):
 
 - A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`. The
   `else` branch gets the complement: the union minus the tested member.
@@ -1666,6 +1686,24 @@ reassign it. Bind it to a local first, or use `?.` or `??`. A top-level `var` of
 including an imported one, never narrows either, because any call may reassign it; read it into a
 local first in the same way.
 
+A top-level `let`, of a library or a script, and an imported `let` narrow in any function, lambda,
+or block that tests them, like a local never assigned after its declaration. Nothing can reassign
+them, and reading one before its initializer has run panics rather than returning a stale value, so
+the narrowing is sound. A test outside a `func` declaration does not reach into it, for the reason
+given below for scripts.
+
+```ant
+// settings.ant
+export let Override: Settings | null = loadOverride()
+
+// app.ant
+import "./settings.ant" { Override }
+
+func port(): int {
+  if Override != null { Override.port } else { 8080 }    // ok; with var, a compile error
+}
+```
+
 A script's top-level `var`s are different: a script cannot be imported, so only its own code assigns
 them, and they are locals of the script body (section 10). They narrow in its top-level code like
 any local, and the script's `func` declarations are nested bodies under the rule below. A `func`
@@ -1683,9 +1721,9 @@ block, and the rule has two directions:
 - A local assigned inside a nested body never narrows in the enclosing function, since the
   assignment may run at any moment.
 - Inside a nested body, outer locals start at their declared type, since the body may run after a
-  later reassignment. The exception is a local never assigned after its declaration: it keeps its
-  narrowing there, because nothing can change it, so the narrowing holds whenever and wherever the
-  body runs.
+  later reassignment. The exception is a local never assigned after its declaration, which a `let`
+  states and the checker otherwise infers for a `var`: it keeps its narrowing there, because nothing
+  can change it, so the narrowing holds whenever and wherever the body runs.
 
 ```ant
 var user = find(id)                          // User | null, never reassigned
@@ -2099,6 +2137,13 @@ particular result:
 An implementation may also detect a race and end the program with a report and exit status 1, since
 the state of a racy program is not worth continuing.
 
+A `let` is written once, by its initialization, and a goroutine whose `go` comes after the
+declaration is ordered after that write (Visibility, below), so its reads of a local `let`, a
+parameter, or a loop variable never race. A top-level `let` can race only with its own
+initialization, when a goroutine started during module initialization reads it before the
+initializer runs, which is already a program error for a `var`. The guarantee covers the binding
+alone: whether its value can race is the value's business.
+
 _Implementation note._ The guarantee costs one word per value, so that a variable, field, or element
 store is a single machine word and cannot tear, plus an atomic header load per array operation with
 `push` and `pop` under a lock, and one lock per map or set operation, shared between reads, since a
@@ -2177,9 +2222,9 @@ unit and the goroutine goes on to the next.
 ## 10. Modules
 
 Each file is a module: a sequence of `import` declarations followed by items, which are `var`,
-`func`, and `type` declarations and statements, in any order. A declaration prefixed with `export`
-is visible to other modules; everything else is private. The module's `//!` lines, before its first
-`import`, document it (section 2).
+`let`, `func`, and `type` declarations and statements, in any order. A declaration prefixed with
+`export` is visible to other modules; everything else is private. The module's `//!` lines, before
+its first `import`, document it (section 2).
 
 ```ant
 // geometry.ant
@@ -2216,13 +2261,13 @@ exported functions declared on a type come with it: `import "./geometry.ant" { P
 `Point.distance` available and `Point: P` makes it `P.distance`. A function without `export` is a
 compile error outside its module, like any other private field, except in a test file.
 
-Imports are live and read-only. `export var` is allowed; an imported name reads the exporting
-module's current value each time, and assigning to an imported name or to a field of a namespace
-from outside the module is a compile error. Two imports binding the same local name, or a top-level
-declaration that shadows an imported name, are syntax errors, so every name in a file has one
-visible origin. The prelude names count as imports in every module: `print`, `println`, `eprint`,
-`eprintln`, `panic`, `len`, the type and conversion names such as `int` and `Result`, and the
-namespaces. Unlike other imports, a prelude name cannot be shadowed in an inner scope either, so
+Imports are live and read-only. `export var` and `export let` are allowed; an imported name reads
+the exporting module's current value each time, and assigning to an imported name or to a field of a
+namespace from outside the module is a compile error. Two imports binding the same local name, or a
+top-level declaration that shadows an imported name, are syntax errors, so every name in a file has
+one visible origin. The prelude names count as imports in every module: `print`, `println`,
+`eprint`, `eprintln`, `panic`, `len`, the type and conversion names such as `int` and `Result`, and
+the namespaces. Unlike other imports, a prelude name cannot be shadowed in an inner scope either, so
 `int` and `x is int` mean one thing everywhere; the parser enforces it, since the prelude is a fixed
 list. There is no re-export. An import cycle is an error in both commands, since no module in it
 could be initialized after its imports: `ant run` stops before any module runs.
@@ -2320,7 +2365,8 @@ ends. An input that returns an `Err` has it written to standard error as a scrip
 goes on; one that returns anything else has that value printed, as the value of its last expression
 would be. So `var page = try Http.get(url)` binds the response, or reports why there is none. In the
 REPL `_` read as a value is the result the last input printed, for one that printed any; written, it
-still discards.
+still discards. A `let` holds for the rest of the session: a later input may declare other names
+again, but not a name bound by `let`, and it cannot assign one.
 
 ### Tests
 
@@ -2369,8 +2415,8 @@ module, exported or not: a destructuring names private ones as it names exports,
 them with `.`, and the functions declared on an imported type come with it, private ones included.
 They do not reach the names that module imports, since there is no re-export. Any module may be
 imported so, wherever it lies, and nothing private leaks into a program, since only a test file can
-import a test file. A script cannot be imported (Scripts, above), so logic worth testing moves into a
-library the script imports.
+import a test file. A script cannot be imported (Scripts, above), so logic worth testing moves into
+a library the script imports.
 
 **The `test` declaration.** `test`, a string literal, and a block:
 
@@ -2432,7 +2478,7 @@ holds declarations only, with doc comments as in a module (section 2):
 type Panic.Frame = { function: string, path: string, line: int, column: int }
 type Regex.Pattern
 func Regex.compile(source: string, flags: string = ""): Result[Regex.Pattern, Error]
-var Math.PI: float64
+let Math.PI: float64
 ```
 
 - A declaration is qualified by its owner, `Owner.name`, or unqualified. The owner is a namespace
@@ -2444,8 +2490,8 @@ var Math.PI: float64
 - A `type` with no body, `type Regex.Pattern`, is **opaque**: its values come only from the
   functions declared on it, and `is` cannot test them, as for the synchronization types (section
   11). A record type may give its fields defaults (section 4, Field defaults).
-- A `var` is a constant of a namespace, `var Owner.NAME: T`, with a type and no initializer, and is
-  always qualified.
+- A `let` is a constant of a namespace, `let Owner.NAME: T`, with a type and no initializer, and is
+  always qualified. A `var` in a declaration file is a compile error.
 - An unqualified `func` or `type` is a name of the prelude's own, as `print` and `Result` are.
 - A namespace that nothing declares takes its doc from a **section label**: a comment line holding
   its name alone, an empty comment line, and a paragraph, set off from the declarations by blank
@@ -3330,16 +3376,17 @@ the distinction never shows.
 
 ### Names and scopes
 
-A block opens a scope. `var` binds a name in the current scope from its declaration to the end of
-the block, each name at most once per scope, which the parser enforces (section 3); a function
-body's scope starts with the parameters. Lookup walks outward through the enclosing scopes to the
-module scope and then to the prelude. A closure keeps a reference to the scopes it was created in,
-so it sees later assignments to the variables it captured, and a closure made in a `var`'s
-initializer sees that `var` once it is bound. The initializer runs first, so a call that reaches the
-variable before it is bound panics, as for a top-level `var`. Each iteration of a `for` opens a
-fresh scope for the loop variable. A `type` in a block is bound when the block starts, so it is
-visible throughout the block, and every time to the same tag or constructor: one per declaration for
-the whole run.
+A block opens a scope. `var` and `let` bind a name in the current scope from the declaration to the
+end of the block, each name at most once per scope, which the parser enforces (section 3); a
+function body's scope starts with the parameters. A binding records whether it is a `let`, as the
+parameters and a `for`'s loop variables are, and assigning one panics. Lookup walks outward through
+the enclosing scopes to the module scope and then to the prelude. A closure keeps a reference to the
+scopes it was created in, so it sees later assignments to the variables it captured, and a closure
+made in a `var`'s initializer sees that `var` once it is bound. The initializer runs first, so a
+call that reaches the variable before it is bound panics, as for a top-level `var`. Each iteration
+of a `for` opens a fresh scope for the loop variable. A `type` in a block is bound when the block
+starts, so it is visible throughout the block, and every time to the same tag or constructor: one
+per declaration for the whole run.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
@@ -3566,7 +3613,8 @@ only panic in the ways the last column lists, which depend on values known at ru
 | variable                                          | no scope binds the name                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
 | `_`                                               | read                                                                                                                                                                                                                                                                                           |                                                                                                                                                                                                                                 |
 | library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                                                              | the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                                                      |
-| `var`                                             |                                                                                                                                                                                                                                                                                                | read or assigned before its initializer has run: a top-level `var`, or a local through a call made from its own initializer                                                                                                     |
+| `var`, `let`                                      |                                                                                                                                                                                                                                                                                                | read or assigned before its initializer has run: a top-level `var` or `let`, or a local through a call made from its own initializer                                                                                            |
+| assignment                                        | the target is a `let`, a parameter, a lambda's `x`, or a name a `for` binds                                                                                                                                                                                                                    |                                                                                                                                                                                                                                 |
 | `panic`                                           |                                                                                                                                                                                                                                                                                                | always                                                                                                                                                                                                                          |
 | `assert`                                          | the condition is not a `bool`, or the message is not a string                                                                                                                                                                                                                                  | the condition is `false`                                                                                                                                                                                                        |
 | any call                                          |                                                                                                                                                                                                                                                                                                | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                          |

@@ -106,11 +106,11 @@ argument, is a frame directly above the one that called the prelude function.
 | `Closure` | for a lambda or a `go` block, the bindings of the enclosing bodies it sees       |
 | `Module`  | the top-level variables of the frame's module                                    |
 
-A binding is shown once its declaration has run: a `var` below the position, or a module variable
-whose initializer has not run, is left out. A name an inner binding shadows is left out. A `defer`
-block runs in the environment of the block that registered it, so its bindings, and that block's,
-are its `Locals`. At a pipeline stage, `Locals` starts with `(piped)`, the value flowing into the
-stage. A scope with nothing to show is left out.
+A binding is shown once its declaration has run: a `var` or `let` below the position, or a module
+variable whose initializer has not run, is left out. A name an inner binding shadows is left out. A
+`defer` block runs in the environment of the block that registered it, so its bindings, and that
+block's, are its `Locals`. At a pipeline stage, `Locals` starts with `(piped)`, the value flowing
+into the stage. A scope with nothing to show is left out.
 
 **Variables.** A variable's value is written as `String.from` writes it (section 11), with a string
 in double quotes, and cut to 200 characters. Its type is the value's runtime type: the record or
@@ -137,7 +137,7 @@ stopped; references are valid until the program resumes.
 
 - before each statement of a block: a function body, a script body, a lambda, a `go` block, a
   `defer` block, a loop body, a branch of `if`, a clause of `select`, and a plain block;
-- before each top-level `var` of a library module, as its initializer runs (section 10);
+- before each top-level `var` and `let` of a library module, as its initializer runs (section 10);
 - before each stage of a pipeline of two or more stages (section 5, Pipes): after the value flowing
   into the stage is computed and before the stage's arguments are. The stage's position is that of
   its `|`.
@@ -256,9 +256,10 @@ stop under way does not wait for it.
 evaluated as `evaluate` evaluates it in the frame the variable was listed for. A variable of
 `Locals`, `Closure`, or `Module` is the binding itself, so the program reads the new value from then
 on. A field of a record, an element of an array, and an entry of a map are changed in their
-container. The members of a set, the bytes of `Bytes`, and `(piped)` cannot be set, and are listed
-with the `readOnly` attribute. No type is checked, as `ant run` checks none (section 1, Types are
-advisory): a value of the wrong type fails where the program uses it.
+container. A `let`, a parameter, a loop variable, the members of a set, the bytes of `Bytes`, and
+`(piped)` cannot be set, and are listed with the `readOnly` attribute. No type is checked, as
+`ant run` checks none (section 1, Types are advisory): a value of the wrong type fails where the
+program uses it.
 
 ## 7. Requests
 

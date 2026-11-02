@@ -164,10 +164,11 @@ declarations enclosing the position, innermost first.
 
 **Semantic tokens** say what each identifier is, so that an editor can color a namespace, a type, a
 type parameter, a function, a parameter, a variable, a field, and a markup element and attribute
-differently; a declaration is marked as such, and a prelude name as `defaultLibrary`.
+differently; a declaration is marked as such, a prelude name as `defaultLibrary`, and a name that
+cannot be reassigned, a `let`, a parameter, or a loop variable, as `readonly`.
 
-**Inlay hints** show the type the checker inferred after the name of a `var` that states none, and
-the name of each parameter before a positional argument.
+**Inlay hints** show the type the checker inferred after the name of a `var` or `let` that states
+none, and the name of each parameter before a positional argument.
 
 **Code lenses** stand above each top-level test of a test file (`ant-lang.md` section 10, Tests),
 and above each subtest whose name is a string without interpolation: one titled `run test` with the
@@ -181,13 +182,13 @@ of `ant dap` whose `test` is the pattern (`dap.md`). The same tests are document
 `Function` with the detail `test`, each subtest under its test.
 
 **Code actions** fix what a diagnostic names when the fix is mechanical: they state the type of a
-`var` or the return type of a function where a message asks for an annotation (section 4,
+`var` or `let` or the return type of a function where a message asks for an annotation (section 4,
 Inference), add the fields a record literal leaves out, with placeholders for their values, and
 import a name that is not defined, one action for each module that exports it (Imports, below),
 preferred when there is only one.
 
 **Imports.** A name is importable into a module when another module of the workspace exports it as a
-top-level `func`, `type`, or `var`, and into a test file when another module declares it so,
+top-level `func`, `type`, `var`, or `let`, and into a test file when another module declares it so,
 exported or not, since a test file's imports reach private names (ant-lang.md section 10, Tests);
 where a type is written, only a type is. A script, a declaration file, and a module that imports the
 module, directly or through others, are left out, since importing them is an error, and so is a test
@@ -201,9 +202,9 @@ there is none.
 
 - It does not run programs or tests. The editor runs `ant run` and `ant test`, and the extension for
   an editor may offer a command for it.
-- It does not watch the file system; it relies on the client's notifications. A client that registers
-  file watchers dynamically is asked to watch `**/*.ant`, and the server keeps the workspace's files
-  as it last read them until the client reports a change.
+- It does not watch the file system; it relies on the client's notifications. A client that
+  registers file watchers dynamically is asked to watch `**/*.ant`, and the server keeps the
+  workspace's files as it last read them until the client reports a change.
 - It does not format a range or on type (section 4, Formatting).
 - It offers no code lens but those of tests, no call hierarchy, and no type hierarchy.
 - It serves one workspace per process; an editor that opens two starts two servers.
