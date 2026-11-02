@@ -46,6 +46,7 @@ File.readLink(path: string): Result[string, Error]         // a link's target, a
 File.realPath(path: string): Result[string, Error]         // absolute and clean, with every link resolved
 File.list(dir: string): Result[Array[string], Error]       // the names in dir, in lexical order
 File.walk(dir: string): Result[Array[string], Error]       // every file below dir, as paths relative to it
+File.glob(pattern: string, dir: string = ".", hidden: bool = false): Result[Array[string], Error]   // the paths below dir that match pattern, in lexical order
 
 File.open(path: string): Result[File.Handle, Error]        // for reading
 File.create(path: string, replace: bool = true): Result[File.Handle, Error]   // for writing; truncates
@@ -259,8 +260,39 @@ What each function does at a link:
 | `removeAll`                                                                                | removes the link, never what it points at                                        |
 | `list`                                                                                     | lists its name                                                                   |
 | `walk`                                                                                     | does not descend through it, and lists it as a file                              |
+| `glob`                                                                                     | `**` does not descend through it; another element of the pattern goes through it |
 | `copyAll`                                                                                  | copies it as a link inside the tree; follows it at `from`                        |
 | `realPath`, `readLink`                                                                     | resolves it, or reads it                                                         |
+
+### Globs
+
+`glob` returns the files and directories below `dir` whose path relative to `dir` matches `pattern`
+(see Path for the syntax), as paths relative to `dir`, so `Path.join([dir, p])` reaches each, as
+`walk`'s do. `dir` is a parameter and not part of the pattern so that a directory whose name holds
+`*` or `[` needs no escaping. An absolute pattern ignores `dir` and gives absolute paths.
+
+```ant
+for path in try File.glob("*.txt") { println(path) }        // a.txt, b.txt; not .notes.txt
+var tests = try File.glob("**/*_test.ant", dir: root)
+var dirs = try File.glob("*/")                              // directories only: src/, tests/
+```
+
+The paths are cleaned, each comes once, and they are in lexical order element by element, the order
+of `walk`, so `a/x` comes before `a-b/x`. A pattern that ends in a separator matches directories
+only, a link to one included, and each path keeps the separator, as `src/`. Nothing matching is `Ok`
+with an empty array, never the pattern back as the shell gives it. `glob` reads only the directories
+the pattern leads into: `src/*/main.ant` reads `src` and its subdirectories, not the rest of `dir`.
+
+An element without wildcards is looked up as it is, through a link, and the path that comes back is
+spelled as the pattern spells it, so on a file system that ignores case `README.MD` finds
+`README.md` and returns `README.MD`. A wildcard element reads the directory and matches each name,
+going through a link to a directory to the next element, as `ls link/*` does. `**` does not descend
+through a link, as `walk` does not, and matches the link by its name. A dangling link is matched by
+its name.
+
+`glob` is `Err` on a malformed pattern before it reads anything, when `dir` is not a directory, and
+when a directory the pattern leads into cannot be read, as `walk` is; a directory missing below
+`dir`, as `missing/*.txt` asks for, is no match.
 
 ### Times
 
@@ -407,6 +439,7 @@ Path.clean(p: string): string                    // the shortest equivalent path
 Path.isAbs(p: string): bool
 Path.abs(p: string): Result[string, Error]       // against the working directory
 Path.rel(base: string, target: string): Result[string, Error]   // target as a path from base
+Path.match(pattern: string, path: string, hidden: bool = false): Result[bool, Error]   // path matches the glob pattern; Err when the pattern is malformed
 ```
 
 `Path.join` of no parts, or of empty ones only, is `.`, as `Path.clean("")` is.
@@ -414,6 +447,36 @@ Path.rel(base: string, target: string): Result[string, Error]   // target as a p
 `Path.rel` works on the text, cleaned, and is `Err` when no relative path leads from `base` to
 `target`: when one is absolute and the other is not, when they are on different Windows volumes, or
 when `base` climbs out with `..` further than `target` does, as from `../a` to `b`.
+
+`Path.match` matches the whole of `path` against a glob pattern, the syntax `File.glob` takes. Both
+are split into elements at the separator, and each element of the pattern matches one element of the
+path, except `**`:
+
+| Pattern  | Matches                                                                             |
+| -------- | ----------------------------------------------------------------------------------- |
+| `*`      | any run of code points within one element, the empty one included                   |
+| `?`      | one code point                                                                      |
+| `[abc]`  | one code point of the set; `[a-z]` a range of code points                           |
+| `[^a-z]` | one code point not in the set; `[!a-z]` is the same                                 |
+| `\*`     | `*` itself, and likewise any code point, on Unix; on Windows `\` is a separator     |
+| `**`     | as a whole element, zero or more elements; as the last, one or more; elsewhere, `*` |
+| other    | itself                                                                              |
+
+This is the syntax of Go's `filepath.Match` with `**` and `[!...]` added. In a set, `-` and `]` are
+written `\-` and `\]` on Unix; a set left open, an empty set, a range whose end comes before its
+start, and a `\` at the end of an element are malformed. On Windows both `/` and `\` separate, so a
+pattern written with `/` works on every system, and brackets escape instead: `[*]`, `[?]`, `[[]`.
+`**/*.ant` matches `a.ant` and `x/y/a.ant`; `src/**` matches everything below `src`, but not `src`.
+
+A wildcard does not match a `.` that begins an element: `*` matches `a.txt` and not `.env`, `?ab`
+does not match `.ab`, and `**` does not take an element that begins with `.`, so it does not descend
+into `.git`. An element of the pattern that begins with a literal `.`, as `.*`, matches them, and
+`hidden: true` lifts the rule. The elements `.` and `..` are matched only by themselves. Wildcards
+compare code points exactly on every system, as Go's do, so `*.TXT` does not match `a.txt`.
+
+`Path.match` looks only at the text, as the other `Path` functions do, and does not clean `path`:
+`Path.match("*.txt", "./a.txt")` is `Ok(false)`, and a name alone is `Path.match(p, Path.base(x))`.
+A pattern that ends in a separator matches a path that does.
 
 ## Time
 
