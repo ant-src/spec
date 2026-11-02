@@ -165,7 +165,8 @@ declarations enclosing the position, innermost first.
 **Semantic tokens** say what each identifier is, so that an editor can color a namespace, a type, a
 type parameter, a function, a parameter, a variable, a field, and a markup element and attribute
 differently; a declaration is marked as such, a prelude name as `defaultLibrary`, and a name that
-cannot be reassigned, a `let`, a parameter, or a loop variable, as `readonly`.
+cannot be reassigned, a `let`, a parameter, a lambda's `x`, a loop variable, or a namespace constant
+such as `Math.PI`, as `readonly`.
 
 **Inlay hints** show the type the checker inferred after the name of a `var` or `let` that states
 none, and the name of each parameter before a positional argument.
