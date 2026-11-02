@@ -269,7 +269,8 @@ What each function does at a link:
 `glob` returns the files and directories below `dir` whose path relative to `dir` matches `pattern`
 (see Path for the syntax), as paths relative to `dir`, so `Path.join([dir, p])` reaches each, as
 `walk`'s do. `dir` is a parameter and not part of the pattern so that a directory whose name holds
-`*` or `[` needs no escaping. An absolute pattern ignores `dir` and gives absolute paths.
+`*` or `[` needs no escaping. An absolute pattern ignores `dir` and gives absolute paths, as does
+one with a root and no volume on Windows, `\x`, which is on the drive of the working directory.
 
 ```ant
 for path in try File.glob("*.txt") { println(path) }        // a.txt, b.txt; not .notes.txt
@@ -288,7 +289,8 @@ spelled as the pattern spells it, so on a file system that ignores case `README.
 `README.md` and returns `README.MD`. A wildcard element reads the directory and matches each name,
 going through a link to a directory to the next element, as `ls link/*` does. `**` does not descend
 through a link, as `walk` does not, and matches the link by its name. A dangling link is matched by
-its name.
+its name. An element `..` steps back on the text, as `Path.join` does, so `link/../x` is `x` below
+`dir`, not beside the link's target, as Go's `filepath.Glob` has it.
 
 `glob` is `Err` on a malformed pattern before it reads anything, when `dir` is not a directory, and
 when a directory the pattern leads into cannot be read, as `walk` is; a directory missing below
