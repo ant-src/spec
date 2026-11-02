@@ -1695,7 +1695,9 @@ given below for scripts.
 ```ant
 // settings.ant
 export let Override: Settings | null = loadOverride()
+```
 
+```ant
 // app.ant
 import "./settings.ant" { Override }
 
