@@ -2041,7 +2041,8 @@ several things.
 
 Work whose shape is known when it starts, every element of an array, every job on a channel, or a
 few different tasks, runs through `Parallel` (section 11). Each of its calls starts the goroutines,
-at most `limit` at once, waits for all of them, and raises a callback's panic in the caller:
+at most `limit` at once where it takes a limit, waits for all of them, and raises a callback's panic
+in the caller:
 
 ```ant
 func fetchAll(urls: Array[string], ctx: Context): Array[Result[Http.Response, Error]] | null {
