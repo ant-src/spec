@@ -972,6 +972,17 @@ error: annotate the result, or use `func` with annotated parameters. Inside a ge
 own type parameters are types the caller chooses, so a call in its body binds nothing to them: a
 lambda whose body has another type is an error there, as `var t: T = 1` is.
 
+An argument checked against a union parameter solves it member by member. Each member of the
+argument's type pairs with the parameter's member that has the same discriminator, a kind, a tag or
+a shape, or for a sync type its own declaration, and a member that is a bare type parameter takes
+whatever is left. So `Array[Job]` against `Array[T] | Channel[T]` sets `T` to `Job`, as
+`Channel[Job]` does, and `string | null` against `T | null` sets `T` to `string`.
+
+A lambda inside an array literal argument is checked in that argument's turn, against the element's
+function type once the other arguments have fixed its parameter, and its body solves the result as a
+lambda argument's does: in `Parallel.race([{ 1 }, { 2 }])` the first lambda sets `T` to `int` and
+the second is checked against it.
+
 ```ant
 Array.map([1, 2, 3], { x * 2 })           // T = int from the array, U = int from the body
 var ys: Array[string] = []                // the expected type fixes the element type
@@ -2028,23 +2039,13 @@ reference value created by its `new` function, and section 11 lists their operat
 (section 5) waits on several of them at once, and Waiting, below, shows how a program waits for
 several things.
 
+Work whose shape is known when it starts, every element of an array, every job on a channel, or a
+few different tasks, runs through `Parallel` (section 11). Each of its calls starts the goroutines,
+at most `limit` at once, waits for all of them, and raises a callback's panic in the caller:
+
 ```ant
-func fetchAll(urls: Array[string]): Array[Result[Http.Response, Error]] {
-  var results: Array[Result[Http.Response, Error]] = Array.filled(Array.length(urls), Result.err(Error{ message: "pending" }))
-  var lock = Mutex.new()
-  var wg = WaitGroup.new()
-
-  for entry in Array.entries(urls) {
-    WaitGroup.add(wg, 1)
-    go {
-      defer { WaitGroup.done(wg) }
-      var response = Http.get(entry.value)
-      Mutex.withLock(lock, { results[entry.index] = response })
-    }
-  }
-
-  WaitGroup.wait(wg)
-  results
+func fetchAll(urls: Array[string], ctx: Context): Array[Result[Http.Response, Error]] | null {
+  Parallel.map(urls, func(url: string, work: Context) { Http.get(url, ctx: work) }, limit: 20, ctx: ctx)
 }
 ```
 
@@ -2114,11 +2115,11 @@ func lineOrTimeout(input: File.Handle, wait: Time.Duration): Line | Timeout {
 }
 ```
 
-A worker pool is a channel of jobs that each worker drains with `Channel.values`, a channel of
-results, and a `WaitGroup` that says when to close it. A future is a channel of capacity one. A
-ticker is `Time.ticker` (`stdlib.md`), a channel that a `select` reads beside the others. A
-goroutine that should stop checks `Context.isDone` between steps and passes the context into its
-waits; one that ignores its context runs until the run ends.
+A worker pool is `Parallel.each` over a channel of jobs, and the first of several tasks to end, or
+to succeed, is `Parallel.race` or `Parallel.any` (section 11). A ticker is `Time.ticker`
+(`stdlib.md`), a channel that a `select` reads beside the others. A goroutine that should stop
+checks `Context.isDone` between steps and passes the context into its waits; one that ignores its
+context runs until the run ends.
 
 ### Data races
 
@@ -2176,6 +2177,8 @@ sense of Go's memory model:
   A clause of `select` that is performed is a send or a receive.
 - `Context.cancel`, and the passing of a deadline, happen before the return of every wait the
   context ends.
+- Every action of a `Parallel` callback, its deferred blocks included, happens before the call
+  returns or raises the callback's panic (section 11).
 
 `Cond` adds nothing; its mutex supplies the order. A goroutine's exit is ordered with nothing, so a
 program that needs a goroutine's result waits on a `WaitGroup`, not on the goroutine being gone. A
@@ -2209,6 +2212,28 @@ var config = Once.value({ load() })          // lazy initialization without a nu
 println(config().name)
 ```
 
+A `Parallel` callback hands back a result the same way: it writes an array slot or a record field,
+and the caller reads it after the call with no lock, since the call orders every callback before its
+own return (Visibility). `Parallel.map` itself is this pattern for a whole array. Written by hand,
+it is a goroutine per element writing its own slot and a `WaitGroup` for the join, which starts
+every goroutine at once and leaves a slot `null` when its goroutine panics:
+
+```ant
+func fetchAllByHand(urls: Array[string]): Array[Result[Http.Response, Error] | null] {
+  var results: Array[Result[Http.Response, Error] | null] = Array.filled(len(urls), null)
+  var wg = WaitGroup.new()
+  for entry in Array.entries(urls) {
+    WaitGroup.add(wg, 1)
+    go {
+      defer { WaitGroup.done(wg) }
+      results[entry.index] = Http.get(entry.value)
+    }
+  }
+  WaitGroup.wait(wg)
+  results
+}
+```
+
 ### Panics in goroutines
 
 A panic ends the goroutine it occurs in, after running that goroutine's deferred blocks. The runtime
@@ -2220,6 +2245,11 @@ that a test owns reports its panic to the test instead, which fails (section 10,
 A goroutine that runs many units of work, such as a worker reading jobs or a server's handler loop,
 calls each through `Panic.catch` (section 8, Catching a panic), so that a bug in one unit ends that
 unit and the goroutine goes on to the next.
+
+A panic that leaves a `Parallel` callback is not reported where it occurs. The call cancels its
+scope, waits for the other callbacks, and raises the panic again in the caller with its original
+message and trace, as `Panic.raise` does. It is reported once, where it finally ends a goroutine,
+and not at all when a `Panic.catch` stops it.
 
 ## 10. Modules
 
@@ -2524,9 +2554,10 @@ argument so it composes with `|`. This section is the complete core library. The
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
 carry a default, which a call omits or names as for a declared function (section 6). A callback
 whose result the library ignores is typed with a type parameter, never with `void`, so any lambda
-fits; the library discards the value itself. A function marked `mutates` changes its first argument
-and returns `void`, the removed element, or whether it changed anything; every other function leaves
-its arguments untouched and returns a new value.
+fits; the library discards the value itself. The one exception is `Parallel.run`, whose callbacks
+are a list, so one type parameter would force one result type on all of them. A function marked
+`mutates` changes its first argument and returns `void`, the removed element, or whether it changed
+anything; every other function leaves its arguments untouched and returns a new value.
 
 A function that takes an array or a map and a callback reads the elements or entries once, when it
 is called, and calls the callback on those. A callback that changes the collection changes it, but
@@ -3305,6 +3336,99 @@ wraps the value, and `Context.isDone(ctx)` tells a cancellation from a close. A 
 channels at once, or on a channel and a context, a group or a timer, is a `select` (section 5),
 which takes nothing from any channel until its choice is made.
 
+### Parallel
+
+Structured fan-out over goroutines (section 9). Each call runs its callbacks on goroutines of its
+own, returns only after all of them have ended, and raises a callback's panic in the caller. Every
+callback receives the call's scope context, which a callback passes to its waits; a callback that
+waited on the caller's `ctx` instead would not see a sibling's panic or a `race` winner.
+
+```
+Parallel.map[T, U](xs: Array[T], f: func(T, Context): U, limit: int, ctx: Context | null = null): Array[U] | null
+                                                               // f on every element, at most limit at once, results in input order; null when some element was never admitted; panics if limit < 1
+Parallel.each[T, R](xs: Array[T] | Channel[T], f: func(T, Context): R, limit: int, ctx: Context | null = null): void
+                                                               // f on every element, or on every value received until the channel closes, at most limit at once; panics if limit < 1
+Parallel.run(fs: Array[func(Context): void], ctx: Context | null = null): void
+                                                               // every f at once
+Parallel.race[T](fs: Array[func(Context): T], ctx: Context | null = null): T | null
+                                                               // the first value returned, Err included; null when cancelled first; panics if fs is empty
+Parallel.any[T, E](fs: Array[func(Context): Result[T, E]], ctx: Context | null = null): Result[T, Array[E]] | null
+                                                               // the first Ok; Err of every error, in input order, when all fail; null when cancelled first
+```
+
+A lambda has one parameter, so `map` and `each` take a two-parameter `func`; the callbacks of
+`run`, `race`, and `any` are lambdas whose `x` is the scope context:
+
+```ant
+var fetch = func(url: string, work: Context) { Http.get(url, ctx: work) }
+var responses = Parallel.map(urls, fetch, limit: 20, ctx: ctx) ?? return Result.err(Error{ message: "cancelled" })
+var pages = try (responses | Result.all())
+
+Parallel.each(jobs, func(job: Job, work: Context) { process(job, work) }, limit: 8, ctx: ctx)
+
+type Loaded = { user: User | null, orders: Array[Order] }
+var loaded = Loaded{ user: null, orders: [] }
+Parallel.run([
+  { loaded.user = loadUser(id, x) },
+  { loaded.orders = loadOrders(id, x) },
+], ctx: ctx)
+
+var reply = Parallel.any([
+  { Http.get(primary, ctx: x) },
+  { Http.get(mirror, ctx: x) },
+], ctx: ctx) ?? return Result.err(Error{ message: "cancelled" })
+```
+
+The rules:
+
+1. **Scope.** Each call makes a scope context, a child of `ctx`, or of the run's context when `ctx`
+   is `null`. The call cancels it on every exit, success included, and never cancels `ctx`. The
+   call neither returns nor panics until every callback it started has ended, deferred blocks
+   included. Cancellation is cooperative: a callback that ignores its context holds the call until
+   it ends.
+2. **Admission.** `map` and `each` admit array elements in index order, or channel values in
+   receive order, at most `limit` at once; the limit is per call, so nested calls multiply. Each
+   admitted callback runs exactly once, on a goroutine of its own, and holds its slot until its
+   deferred blocks have run. The order callbacks run or finish in is unspecified. `run`, `race`, and
+   `any` admit the whole list together, or none of it when `ctx` is done already. Admission stops
+   when the scope context is done.
+3. **Channels.** `each` receives only when a slot is free, and under the scope context. A value it
+   receives is admitted, so cancellation never drops one. It neither closes nor drains the channel,
+   and tells a `null` value from a close, so `Channel[T | null]` works. A producer blocked in
+   `Channel.send` is not woken by `each` ending; it needs a context of its own.
+4. **Outcome.** `map` returns `null` only when some element was never admitted; otherwise it returns
+   every result, even when `ctx` ended after the last admission. `race` takes the first value
+   returned, `Err` included, and `any` the first `Ok`; an `Err` in `any` cancels nothing, and when
+   every callback fails, `any` returns `Err` of the errors in input order. Both cancel the scope
+   once they have a winner, and return `null` when the scope ends before one. `each` and `run`
+   report nothing; a program that needs to know which elements ran records it per element, or uses
+   `map`. Library functions never look inside a callback's value beyond this: fail-fast on `Err` is
+   `Context.cancel` on a context the program owns.
+5. **Panics.** If a panic leaves a callback, the call cancels the scope, waits for the others, and
+   then raises that panic in the caller, whatever rule 4 chose, as `Panic.raise` does (section 9,
+   Panics in goroutines). A later panic in the same call is reported and dropped.
+6. **Visibility.** Every action of a callback happens before the call returns or panics (section 9,
+   Visibility), so a slot or field a callback wrote can be read after the call with no lock.
+   Callbacks that touch the same location as each other still need synchronization.
+7. **Empty input.** A `limit` below 1 panics even when `xs` is empty. Otherwise empty input never
+   consults `ctx`: `map` returns `[]`, `each` and `run` return at once, `any` returns `Err([])`, and
+   `race([])` panics, since it has no value to return.
+
+`limit` is required: a program that wants a goroutine per element passes `len(xs)`, which keeps the
+choice visible. `run`, `race`, and `any` take no limit, since their lists are written in the source.
+A `race` or `any` whose `T` includes `null` cannot tell a `null` winner from cancellation; it wraps
+the value in a record. A `run` callback that ends in a value discards it with `_ = …`.
+
+| Case                                                      | Result                                                                    |
+| --------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `ctx` done already, non-empty input                       | No callback runs; `map`, `race`, and `any` return `null`                  |
+| `ctx` ends while `map` still has elements to admit        | Admitted callbacks see their context end; after the join, `null`          |
+| `ctx` ends after `map` admitted its last element          | Every result, possibly `Err` values with the context's reason             |
+| `limit: 1` and a callback with `defer`                    | The deferred block ends before the next element starts                    |
+| `ctx` ends just after `each` received a value             | That value's callback still runs, with a done context                     |
+| A `race` or `any` loser panics after the winner returned  | The call panics with the loser's panic                                    |
+| Every `any` callback returns `Err`                        | `Err` of every error in input order, unless the scope ended before the last |
+
 ### Test
 
 The functions a test body needs beyond `assert`, `Panic.catch`, and `defer` (section 10, Tests).
@@ -3574,6 +3698,10 @@ memory, and the sync objects of section 9 are the only synchronization. The runt
 a data race cannot corrupt memory or crash the interpreter, as section 9 spells out; the values a
 racing program observes are otherwise unspecified, and an implementation may end a racing program
 with a report. The program ends when the script body ends, whatever other goroutines are doing.
+
+A `Parallel` call owns the goroutines it starts: it neither returns nor panics until every one of
+them has ended, deferred blocks included. A `go` inside a callback starts a goroutine the call does
+not own, which may outlive it.
 
 ### Running a test
 
