@@ -1053,6 +1053,9 @@ var high = Bits.shiftRight(word, 8)
 ### Pipes
 
 `a | f(b, c)` means `f(a, b, c)`. The right side must be a call. The pipe replaces method chaining.
+It binds looser than every other operator but assignment, so a pipeline used as an operand is
+parenthesized: `(s | String.trim()) == ""`. A binary operator after a pipe stage, as in
+`s | String.trim() == ""`, is a compile error that says so.
 
 ```ant
 var names = users
