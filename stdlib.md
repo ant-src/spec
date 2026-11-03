@@ -577,9 +577,11 @@ a reading that a program subtracts, not a span it passes.
 `ticker` is Go's ticker: a channel that receives the time every `d`, counted from the call, so a
 slow reader does not shift the beat. It holds one tick; a tick that finds it full is dropped, so a
 reader that falls behind gets one tick and not a burst. It stops when `ctx` is done, or when the run
-ends without one, and is never closed, so a receive or a `select` clause on it waits for the next
-tick or for the context. A ticker is a `select` clause like any channel:
-`var at = Channel.receive(ticks) { ... }`.
+ends without one, as Go's `Ticker.Stop`: once the context is done no receive gets a tick, not even
+the one held, and `Channel.length` is 0. The channel is never closed, so a receive or a `select`
+clause on it waits for the next tick or for the context. Only the ticker sends on it, as Go's is
+receive-only, so `Channel.send` and `Channel.close` on it panic. A ticker is a `select` clause like
+any channel: `var at = Channel.receive(ticks) { ... }`.
 
 Every type holds nanoseconds, and an `Instant` spans 100 million days each way from the epoch, about
 270,000 years, as Temporal's does; the plain types span a day more each way. A result beyond the

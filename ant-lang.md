@@ -3314,9 +3314,9 @@ Context.deadline(ctx: Context): Time.Instant | null            // the earliest d
 Context.wait(ctx: Context): void                               // blocks until done
 
 Channel.new[T](capacity: int = 0): Channel[T]                            // 0 is a rendezvous; panics if capacity < 0 or is above 2^31 − 1
-Channel.send[T](c: Channel[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; panics if c is closed
+Channel.send[T](c: Channel[T], v: T, ctx: Context | null = null): bool   // blocks until taken or buffered; false when ctx ends first; panics if c is closed or a ticker's
 Channel.receive[T](c: Channel[T], ctx: Context | null = null): T | null  // blocks; null when closed and drained, or when ctx ends first
-Channel.close[T](c: Channel[T]): void                                    // panics if c is closed already
+Channel.close[T](c: Channel[T]): void                                    // panics if c is closed already or a ticker's
 Channel.isClosed[T](c: Channel[T]): bool
 Channel.length[T](c: Channel[T]): int                                    // values buffered now
 Channel.values[T](c: Channel[T], ctx: Context | null = null): Seq[T]     // every value until closed, or until ctx ends
@@ -3357,8 +3357,8 @@ Parallel.any[T, E](fs: Array[func(Context): Result[T, E]], ctx: Context | null =
                                                                // the first Ok; Err of every error, in input order, when all fail; null when cancelled first
 ```
 
-A lambda has one parameter, so `map` and `each` take a two-parameter `func`; the callbacks of
-`run`, `race`, and `any` are lambdas whose `x` is the scope context:
+A lambda has one parameter, so `map` and `each` take a two-parameter `func`; the callbacks of `run`,
+`race`, and `any` are lambdas whose `x` is the scope context:
 
 ```ant
 var fetch = func(url: string, work: Context) { Http.get(url, ctx: work) }
@@ -3383,16 +3383,15 @@ var reply = Parallel.any([
 The rules:
 
 1. **Scope.** Each call makes a scope context, a child of `ctx`, or of the run's context when `ctx`
-   is `null`. The call cancels it on every exit, success included, and never cancels `ctx`. The
-   call neither returns nor panics until every callback it started has ended, deferred blocks
-   included. Cancellation is cooperative: a callback that ignores its context holds the call until
-   it ends.
-2. **Admission.** `map` and `each` admit array elements in index order, or channel values in
-   receive order, at most `limit` at once; the limit is per call, so nested calls multiply. Each
-   admitted callback runs exactly once, on a goroutine of its own, and holds its slot until its
-   deferred blocks have run. The order callbacks run or finish in is unspecified. `run`, `race`, and
-   `any` admit the whole list together, or none of it when `ctx` is done already. Admission stops
-   when the scope context is done.
+   is `null`. The call cancels it on every exit, success included, and never cancels `ctx`. The call
+   neither returns nor panics until every callback it started has ended, deferred blocks included.
+   Cancellation is cooperative: a callback that ignores its context holds the call until it ends.
+2. **Admission.** `map` and `each` admit array elements in index order, or channel values in receive
+   order, at most `limit` at once; the limit is per call, so nested calls multiply. Each admitted
+   callback runs exactly once, on a goroutine of its own, and holds its slot until its deferred
+   blocks have run. The order callbacks run or finish in is unspecified. `run`, `race`, and `any`
+   admit the whole list together, or none of it when `ctx` is done already. Admission stops when the
+   scope context is done.
 3. **Channels.** `each` receives only when a slot is free, and under the scope context. A value it
    receives is admitted, so cancellation never drops one. It neither closes nor drains the channel,
    and tells a `null` value from a close, so `Channel[T | null]` works. A producer blocked in
@@ -3420,15 +3419,15 @@ choice visible. `run`, `race`, and `any` take no limit, since their lists are wr
 A `race` or `any` whose `T` includes `null` cannot tell a `null` winner from cancellation; it wraps
 the value in a record. A `run` callback that ends in a value discards it with `_ = …`.
 
-| Case                                                      | Result                                                                    |
-| --------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `ctx` done already, non-empty input                       | No callback runs; `map`, `race`, and `any` return `null`                  |
-| `ctx` ends while `map` still has elements to admit        | Admitted callbacks see their context end; after the join, `null`          |
-| `ctx` ends after `map` admitted its last element          | Every result, possibly `Err` values with the context's reason             |
-| `limit: 1` and a callback with `defer`                    | The deferred block ends before the next element starts                    |
-| `ctx` ends just after `each` received a value             | That value's callback still runs, with a done context                     |
-| A `race` or `any` loser panics after the winner returned  | The call panics with the loser's panic                                    |
-| Every `any` callback returns `Err`                        | `Err` of every error in input order, unless the scope ended before the last |
+| Case                                                     | Result                                                                      |
+| -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `ctx` done already, non-empty input                      | No callback runs; `map`, `race`, and `any` return `null`                    |
+| `ctx` ends while `map` still has elements to admit       | Admitted callbacks see their context end; after the join, `null`            |
+| `ctx` ends after `map` admitted its last element         | Every result, possibly `Err` values with the context's reason               |
+| `limit: 1` and a callback with `defer`                   | The deferred block ends before the next element starts                      |
+| `ctx` ends just after `each` received a value            | That value's callback still runs, with a done context                       |
+| A `race` or `any` loser panics after the winner returned | The call panics with the loser's panic                                      |
+| Every `any` callback returns `Err`                       | `Err` of every error in input order, unless the scope ended before the last |
 
 ### Test
 
