@@ -3643,7 +3643,7 @@ Reflect.entries(d: Reflect.Value): Array[Entry[Reflect.Value, Reflect.Value]]   
 Reflect.field(d: Reflect.Value, name: string): Reflect.Value                 // the field name; panics if d's type is not a record type that lists it
 Reflect.payload(d: Reflect.Value): Reflect.Value                             // the base value of a named primitive; panics if d's type is not one
 
-Reflect.makeNumber(t: Reflect.ErasedType, n: Number): Reflect.Value | null   // n converted to the Int or Float type t, as the conversions do; null where the conversion would panic; panics if t is neither
+Reflect.makeScalar(t: Reflect.ErasedType, v: Reflect.Scalar): Reflect.Value | null   // v boxed at the scalar type t, a number converted as the conversions do; null where v is not of t's kind or the conversion would panic; panics if t is not a scalar type
 Reflect.makeArray(t: Reflect.ErasedType, items: Array[Reflect.Value]): Reflect.Value   // a new array; panics if t is not an array type, or an item's type is not assignable to its element type
 Reflect.makeSet(t: Reflect.ErasedType, members: Array[Reflect.Value]): Reflect.Value   // a new set, duplicates collapsed; panics if t is not a set type, or a member's type is not assignable to its member type
 Reflect.makeMap(t: Reflect.ErasedType, entries: Array[Entry[Reflect.Value, Reflect.Value]]): Reflect.Value   // a new map, a later entry with an == key replacing an earlier one; panics if t is not a map type, or a key's or value's type is not assignable to its slot
@@ -3743,20 +3743,23 @@ list, so through an anonymous record type it reaches only the fields that type l
 record has more. `scalar` gives a leaf in its own kind, so an encoder can render any number with
 `String.from` without testing ten kinds.
 
-**Builders.** `makeNumber` converts as the conversion functions do (section 12), except that a
-conversion that would panic returns `null`: a fraction, a value out of range, `NaN`, or an infinity
-for an integer type. A float target rounds. `makeArray`, `makeSet`, and `makeMap` need an array,
-set, or map type; a later map entry with an `==` key replaces an earlier one, and duplicate set
-members collapse, as in literals and `Set.of`. `makeRecord` needs a named record type: an anonymous
-record type has no tag to put in the value, and every record value has a name (section 4, Records).
-Every key of `fields` must be a field of the type; each field the map leaves out takes its default,
-evaluated as a literal evaluates it, and a field with no default must be given. The record gets the
-tag, so `is` and `==` work on it as on any literal. `makeTagged` needs a named primitive type and a
-payload whose type is its base. Each builder panics, with a message that names the type and the
-slot, when its contract is broken: the wrong shape of `t`, a part whose type is not assignable to
-its slot, or a missing or unknown field. A library can test each of these first with `Reflect.shape`
-and `Reflect.assignable`, so in a correct library they are bugs, which is what a panic is for
-(section 8).
+**Builders.** `makeScalar` is the inverse of `scalar`: it boxes a leaf at the scalar type `t`, so a
+decoder that holds only a slot's erased type boxes every leaf through one call. It returns `null`
+where the value is not of `t`'s kind, so the same call is the decoder's test that a leaf fits. A
+number converts to any number type as the conversion functions do (section 12), except that a
+conversion that would panic returns `null` too: a fraction, a value out of range, `NaN`, or an
+infinity for an integer type. A float target rounds. `makeArray`, `makeSet`, and `makeMap` need an
+array, set, or map type; a later map entry with an `==` key replaces an earlier one, and duplicate
+set members collapse, as in literals and `Set.of`. `makeRecord` needs a named record type: an
+anonymous record type has no tag to put in the value, and every record value has a name (section 4,
+Records). Every key of `fields` must be a field of the type; each field the map leaves out takes its
+default, evaluated as a literal evaluates it, and a field with no default must be given. The record
+gets the tag, so `is` and `==` work on it as on any literal. `makeTagged` needs a named primitive
+type and a payload whose type is its base. Each builder panics, with a message that names the type
+and the slot, when its contract is broken: the wrong shape of `t`, a part whose type is not
+assignable to its slot, or a missing or unknown field. A library can test each of these first with
+`Reflect.shape` and `Reflect.assignable`, so in a correct library they are bugs, which is what a
+panic is for (section 8).
 
 **Unchecked runs.** `ant run` does not check annotations, and it does not check `Reflect.valueOf`
 deeply either. It checks that the value has the kind and tag that the type's discriminator names,
