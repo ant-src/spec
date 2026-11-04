@@ -2641,8 +2641,11 @@ let Math.PI: float64
 - A `func` has a signature and no body. A parameter may carry a default, as in a declared function
   (section 6).
 - A `type` with no body, `type Regex.Pattern`, is **opaque**: its values come only from the
-  functions declared on it, and `is` cannot test them, as for the synchronization types (section
-  11). A record type may give its fields defaults (section 4, Field defaults).
+  functions declared on it. In a host's declaration file `is` cannot test them, as for the
+  synchronization types (section 11). The prelude's own bodiless types are the exception the table
+  of Kinds lists (section 4): `Bytes` and `Html` are kinds of their own, and `Regex.Pattern` and the
+  time types carry a tag, so `is` tests them by name. A record type may give its fields defaults
+  (section 4, Field defaults).
 - A `let` is a constant of a namespace, `let Owner.NAME: T`, with a type and no initializer, and is
   always qualified. A `var` in a declaration file is a compile error.
 - An unqualified `func` or `type` is a name of the prelude's own, as `print` and `Result` are.
@@ -3598,7 +3601,7 @@ type Reflect.Decl                        // opaque: a named type's declaration, 
 type Reflect.Value                       // opaque: a value together with a type it belongs to
 
 type Reflect.Shape = Reflect.Null | Reflect.Void | Reflect.Never | Reflect.Bool | Reflect.Int | Reflect.Float
-  | Reflect.String | Reflect.Array | Reflect.Map | Reflect.Set | Reflect.Record | Reflect.Named
+    | Reflect.String | Reflect.Array | Reflect.Map | Reflect.Set | Reflect.Record | Reflect.Tagged
   | Reflect.Union | Reflect.Func | Reflect.Opaque
 type Reflect.Null = {}
 type Reflect.Void = {}
@@ -3610,12 +3613,12 @@ type Reflect.String = {}
 type Reflect.Array = { element: Reflect.ErasedType }
 type Reflect.Map = { key: Reflect.ErasedType, value: Reflect.ErasedType }
 type Reflect.Set = { member: Reflect.ErasedType }
-type Reflect.Record = { name: string | null, decl: Reflect.Decl | null, args: Array[Reflect.ErasedType], fields: Array[Reflect.Field] }
+type Reflect.Record = { decl: Reflect.Decl | null, args: Array[Reflect.ErasedType], fields: Array[Reflect.Field] }
 type Reflect.Field = { name: string, type: Reflect.ErasedType, hasDefault: bool }
-type Reflect.Named = { name: string, decl: Reflect.Decl, args: Array[Reflect.ErasedType], base: Reflect.ErasedType }   // a named primitive type
+type Reflect.Tagged = { decl: Reflect.Decl, args: Array[Reflect.ErasedType], base: Reflect.ErasedType }   // a named primitive type
 type Reflect.Union = { members: Array[Reflect.ErasedType] }
 type Reflect.Func = { params: Array[Reflect.ErasedType], result: Reflect.ErasedType }
-type Reflect.Opaque = { name: string, decl: Reflect.Decl, args: Array[Reflect.ErasedType] }
+type Reflect.Opaque = { decl: Reflect.Decl, args: Array[Reflect.ErasedType] }
 type Reflect.Scalar = null | void | bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 | string
 
 Reflect.erase[T](t: Reflect.Type[T]): Reflect.ErasedType
@@ -3625,7 +3628,6 @@ Reflect.mapOf[K, V](k: Reflect.Type[K], v: Reflect.Type[V]): Reflect.Type[Map[K,
 Reflect.nullable[T](t: Reflect.Type[T]): Reflect.Type[T | null]
 Reflect.shape(t: Reflect.ErasedType): Reflect.Shape                          // one level; aliases expanded, unions flattened
 Reflect.assignable(from: Reflect.ErasedType, to: Reflect.ErasedType): bool   // section 4, Assignability, on two closed types
-Reflect.default(t: Reflect.ErasedType, name: string): Reflect.Value          // the default of the field name, evaluated afresh; panics if t is not a named record type, has no field name, or the field has no default
 
 Reflect.valueOf[T](t: Reflect.Type[T], value: T): Reflect.Value              // the box; a union t is resolved to value's member
 Reflect.to[T](d: Reflect.Value, t: Reflect.Type[T]): T                       // the value; panics if d's type is not assignable to T
@@ -3656,29 +3658,29 @@ another when the types are `==` and the values are `==`, and renders as `Reflect
 **Shapes.** `Reflect.shape` gives one level of a type's structure, with aliases expanded and unions
 flattened, as a member of `Reflect.Shape` narrowed with `is`:
 
-- **Records.** `name` is the declared name, or `null` for an anonymous record type. `args` are the
-  type arguments, and `fields` come in declaration order, with each field's type already
-  substituted: in `Box[int]`, the field `value` has type `int`. `hasDefault` says whether a literal,
-  and so `Reflect.makeRecord`, may leave the field out, and `Reflect.default` gives the default
-  itself.
-- **Named primitives.** `base` is the base type. `Id[User]` and `Id[Account]` share a tag but are
+- **Records.** `decl` is the declaration, which renders as the declared name, or `null` for an
+  anonymous record type. `args` are the type arguments, and `fields` come in declaration order, with
+  each field's type already substituted: in `Box[int]`, the field `value` has type `int`.
+  `hasDefault` says whether a literal, and so `Reflect.makeRecord`, may leave the field out.
+- **Tagged primitives.** `base` is the base type. `Id[User]` and `Id[Account]` share a tag but are
   different type values, because their `args` differ.
 - **Declarations.** `decl` is the declaration a named record, named primitive, or opaque type comes
   from, `null` for an anonymous record type. Two are `==` when they are the same declaration,
   whatever the type arguments, so `Box[int]` and `Box[string]` share one. A `Reflect.Decl` hashes,
   renders as the declared name, and does nothing else. It is the key for anything that applies to
   every instantiation of a generic type, such as a codec for all of `Box[T]` that reads the
-  arguments from `args`. `name` cannot be that key, because two modules may each declare a `Config`.
+  arguments from `args`. A declared name cannot be that key, because two modules may each declare a
+  `Config`; `String.from` of a `Reflect.Decl` gives the name where a message wants it.
 - **Unions.** Members are flattened and deduplicated, aliases are expanded, and the members come in
   the order they were written. `T | null` is a union with a `Reflect.Null` member, and
   `Result[int, Error]` is a union of the records `Ok[int]` and `Err[Error]`.
 - **Opaque.** Everything whose values reflection does not take apart: `Bytes`, `Html`,
   `Regex.Pattern`, the time types, the sync, random, and resource types, the opaque types of a
-  declaration file, and the four types of this section. `name` renders the type. Every opaque type
-  is declared, in `prelude.d.ant` or another declaration file, so `decl` is always set, and `args`
-  are its type arguments, so a codec keyed by `decl` covers every `Channel[T]`. Code that handles a
-  type specially tests for it by comparing type values, `t == Reflect.erase(type(Bytes))`, not by
-  name.
+  declaration file, and the four types of this section. `String.from(t)` renders the type. Every
+  opaque type is declared, in `prelude.d.ant` or another declaration file, so `decl` is always set,
+  and `args` are its type arguments, so a codec keyed by `decl` covers every `Channel[T]`. Code that
+  handles a type specially tests for it by comparing type values, `t == Reflect.erase(type(Bytes))`,
+  not by name.
 - **One level.** Children are `Reflect.ErasedType` values, so a recursive type is a finite graph
   that a program walks as deep as it needs.
 
@@ -3699,15 +3701,6 @@ type parameters, and no default parameters to consider. It is the relation the r
 builders, and `Reflect.to` use, and it is exposed so that a library can test before it calls a
 function that would panic.
 
-`Reflect.default(t, name)` evaluates the default of field `name` of the named record type `t` and
-boxes it at the field's substituted type, resolved to a member as a reader resolves it (below). The
-evaluation is the one a literal performs (section 4, Field defaults): afresh on every call, in the
-scope of the declaration, so `tags: Array[string] = []` gives a new array each time, and a default
-that reads a variable reads its current value. The checker has checked the default against the
-field's type for every type argument, so the box keeps the invariant below. An encoder that leaves
-out fields equal to their defaults compares `Reflect.field(d, f.name) == Reflect.default(t, f.name)`
-for each field whose `hasDefault` is set.
-
 **The invariant.** In a checked program, the value in a `Reflect.Value` belongs to the box's type.
 Every function above keeps it:
 
@@ -3715,9 +3708,10 @@ Every function above keeps it:
 - A reader returns a child at the type the parent's type gives that child: the element type, the key
   and value types, the field's substituted type, or the base. When that type is a union, the reader
   resolves it to the member the child's value belongs to. The union rules guarantee there is exactly
-  one, found from the value's kind or tag alone (section 4, Unions): a record whose tag no named
-  member has goes to the anonymous member, and a value of a sync type goes to the one sync member.
-  So `Reflect.type` is never a union, and an encoder never has to choose a member.
+  one, found from the value's kind or tag alone (section 4, Unions): an anonymous record member
+  takes any record, since no named record type may stand beside it, and a value of a type `is`
+  cannot test goes to the one such member. So `Reflect.type` is never a union, and an encoder never
+  has to choose a member.
 - A builder makes a new container or record, which nothing else refers to, and checks every part
   with `Reflect.assignable` against the slot's type. That relation is the checker's own, so the new
   value is one the checker could have built with a literal.
@@ -3779,7 +3773,7 @@ func render(d: Reflect.Value): string {
     "{" + String.join(parts, " ") + "}"
   } else if s is Reflect.Array {
     "[" + String.join(Array.map(Reflect.items(d), render), " ") + "]"
-  } else if s is Reflect.Named {
+    } else if s is Reflect.Tagged {
     render(Reflect.payload(d))
   } else {
     String.from(Reflect.scalar(d))
