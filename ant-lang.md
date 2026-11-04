@@ -930,11 +930,14 @@ classes, interfaces, or prototypes.
 hold, and the parentheses end it, so `type(int | null)` is the union and `type(int) | f()` pipes a
 type value. `type` followed by `(` is always a type expression, and `type` followed by a name is
 always a declaration, since a declaration cannot start with `(`. One token decides, wherever the
-form appears, so a block or an `if` branch can end in one:
-`if wide { type(int64) } else { type(int32) }`. It is a keyword form, not a call: its contents are
-type syntax, `type` alone is not a value that could be passed or piped, and it takes a type, never a
-value. Unlike Python's `type(x)` or JavaScript's `typeof x`, it does not ask what a value is, and
-`type(config)` on a variable is a compile error that says so.
+form appears, so a block can end in one, as in `func elem(): Reflect.Type[int] { type(int) }`. An
+`if` that picks a type at run time erases both branches,
+`if wide { Reflect.erase(type(int64)) } else { Reflect.erase(type(int32)) }`, since
+`Reflect.Type[int64]` and `Reflect.Type[int32]` are two types that no union may hold (section 11,
+Reflect). It is a keyword form, not a call: its contents are type syntax, `type` alone is not a
+value that could be passed or piped, and it takes a type, never a value. Unlike Python's `type(x)`
+or JavaScript's `typeof x`, it does not ask what a value is, and `type(config)` on a variable is a
+compile error that says so.
 
 ```ant
 type Config = { name: string }
@@ -3601,7 +3604,7 @@ type Reflect.Decl                        // opaque: a named type's declaration, 
 type Reflect.Value                       // opaque: a value together with a type it belongs to
 
 type Reflect.Shape = Reflect.Null | Reflect.Void | Reflect.Never | Reflect.Bool | Reflect.Int | Reflect.Float
-    | Reflect.String | Reflect.Array | Reflect.Map | Reflect.Set | Reflect.Record | Reflect.Tagged
+  | Reflect.String | Reflect.Array | Reflect.Map | Reflect.Set | Reflect.Record | Reflect.Tagged
   | Reflect.Union | Reflect.Func | Reflect.Opaque
 type Reflect.Null = {}
 type Reflect.Void = {}
@@ -3632,6 +3635,7 @@ Reflect.assignable(from: Reflect.ErasedType, to: Reflect.ErasedType): bool   // 
 Reflect.valueOf[T](t: Reflect.Type[T], value: T): Reflect.Value              // the box; a union t is resolved to value's member
 Reflect.to[T](d: Reflect.Value, t: Reflect.Type[T]): T                       // the value; panics if d's type is not assignable to T
 Reflect.type(d: Reflect.Value): Reflect.ErasedType                           // d's type, never a union or an alias
+Reflect.same(a: Reflect.Value, b: Reflect.Value): bool                       // one record, array, map, or set, as Record.same and the other three report; == for any other kind
 
 Reflect.scalar(d: Reflect.Value): Reflect.Scalar                             // the value; panics if d's type is not null, void, bool, a number, or string
 Reflect.items(d: Reflect.Value): Array[Reflect.Value]                        // an array's elements or a set's members, in a new array; panics if d's type is neither
@@ -3656,7 +3660,8 @@ another when the types are `==` and the values are `==`, and renders as `Reflect
 `Json.stringify` panics on all four, as it does on a tag.
 
 **Shapes.** `Reflect.shape` gives one level of a type's structure, with aliases expanded and unions
-flattened, as a member of `Reflect.Shape` narrowed with `is`:
+flattened, as a member of `Reflect.Shape` narrowed with `is`. Every call builds a fresh description
+that nothing else holds, so a caller may keep it or change it:
 
 - **Records.** `decl` is the declaration, which renders as the declared name, or `null` for an
   anonymous record type. `args` are the type arguments, and `fields` come in declaration order, with
@@ -3672,8 +3677,10 @@ flattened, as a member of `Reflect.Shape` narrowed with `is`:
   arguments from `args`. A declared name cannot be that key, because two modules may each declare a
   `Config`; `String.from` of a `Reflect.Decl` gives the name where a message wants it.
 - **Unions.** Members are flattened and deduplicated, aliases are expanded, and the members come in
-  the order they were written. `T | null` is a union with a `Reflect.Null` member, and
-  `Result[int, Error]` is a union of the records `Ok[int]` and `Err[Error]`.
+  the order they were written. The order is for display only: type values compare members as a set
+  (section 4, Types as values), so `int | null` and `null | int` are `==` and list their members
+  differently. `T | null` is a union with a `Reflect.Null` member, and `Result[int, Error]` is a
+  union of the records `Ok[int]` and `Err[Error]`.
 - **Opaque.** Everything whose values reflection does not take apart: `Bytes`, `Html`,
   `Regex.Pattern`, the time types, the sync, random, and resource types, the opaque types of a
   declaration file, and the four types of this section. `String.from(t)` renders the type. Every
@@ -3727,9 +3734,14 @@ is.
 **Readers.** `items` and `entries` return a new array of boxes, read when they are called, as every
 library function reads its arguments. The boxes refer to the original elements, which may be mutable
 values the program goes on changing through their static types; that is the ordinary sharing of
-section 4. `field` takes a name from the type's field list, so through an anonymous record type it
-reaches only the fields that type lists, even when the record has more. `scalar` gives a leaf in its
-own kind, so an encoder can render any number with `String.from` without testing ten kinds.
+section 4. So a walker over a value that may refer to itself keeps the boxes on its path and tests
+each child against them with `Reflect.same`, which reports identity for a record, array, map, or
+set, as `Record.same` and the other three do (section 4, Records), and `==` for any other kind. The
+readers never detect a cycle themselves: whether to panic, as `Json.stringify` does, or to print
+`...`, as `String.from` does, is the walker's policy. `field` takes a name from the type's field
+list, so through an anonymous record type it reaches only the fields that type lists, even when the
+record has more. `scalar` gives a leaf in its own kind, so an encoder can render any number with
+`String.from` without testing ten kinds.
 
 **Builders.** `makeNumber` converts as the conversion functions do (section 12), except that a
 conversion that would panic returns `null`: a fraction, a value out of range, `NaN`, or an infinity
@@ -3749,9 +3761,10 @@ and `Reflect.assignable`, so in a correct library they are bugs, which is what a
 **Unchecked runs.** `ant run` does not check annotations, and it does not check `Reflect.valueOf`
 deeply either. It checks that the value has the kind and tag that the type's discriminator names,
 which it needs anyway to resolve a union, and trusts the rest as it trusts `var xs: Array[int]`.
-Builders, readers, and `Reflect.to` check types fully, since those checks compare type values and
-cost nothing per element. So a mistyped unchecked program fails where it uses a wrong element, not
-at the box, as it does with a wrong annotation; `ant check` is what rules that out.
+Builders and `Reflect.to` compare type values, one `Reflect.assignable` test per argument, element,
+or field, and a reader resolves a union from a child's kind or tag; none of them walks a value. So a
+mistyped unchecked program fails where it uses a wrong element, not at the box, as it does with a
+wrong annotation; `ant check` is what rules that out.
 
 **Visibility.** Reflection reaches every type that a nameable type leads to. A field of an exported
 `Config` may have a private type, and `Reflect.shape` will show it and the builders will build it.
@@ -3759,7 +3772,10 @@ That matches what the runtime already does: `==`, `String.from`, and `Json.strin
 field of every value whatever module declared its type, and every field of a record is readable and
 writable by anyone who holds the record (section 4, Records). Privacy applies to names and not to
 data (section 10), and a type whose invariant matters guards it with functions on the type (section
-6). Reflection cannot name a private type that the program cannot already reach.
+6). `makeRecord` and `makeTagged` build a value of such a type without those functions, as a literal
+in the declaring module does, so an invariant they keep is a convention of the program's own code,
+not one reflection upholds. Reflection cannot name a private type that the program cannot already
+reach.
 
 ```ant
 type Celsius = float64
@@ -3773,7 +3789,7 @@ func render(d: Reflect.Value): string {
     "{" + String.join(parts, " ") + "}"
   } else if s is Reflect.Array {
     "[" + String.join(Array.map(Reflect.items(d), render), " ") + "]"
-    } else if s is Reflect.Tagged {
+  } else if s is Reflect.Tagged {
     render(Reflect.payload(d))
   } else {
     String.from(Reflect.scalar(d))
