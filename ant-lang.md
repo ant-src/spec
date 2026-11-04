@@ -14,8 +14,9 @@ language as a programmer sees it, not the compiler or the runtime.
 - **Errors are values.** `Result` carries expected failures and `null` carries absence. `panic` is
   for bugs.
 - **Types are advisory.** `ant check` reads annotations and `ant run` discards them. The interpreter
-  keeps only a type's name, as a tag, and a record's field names in order (section 4). No evaluation
-  rule consults a written type.
+  keeps only a type's name, as a tag, a record's field names in order, and each `type` declaration's
+  body, which it resolves only for a type expression (section 4). No evaluation rule consults a
+  written type, except a type expression and the reflection functions (section 11, Reflect).
 - **Minimal syntax.** The grammar needs one token of lookahead and no feedback from the type
   checker.
 
@@ -90,6 +91,10 @@ Keywords:
 break continue defer else export false for func go if import
 in is let null return select true try type var void while
 ```
+
+`type` followed by a name begins a type declaration, and `type` followed by `(` begins a type
+expression, `type(T)` (section 4, Types as values). The next token decides, wherever the keyword
+appears.
 
 In a test file (section 10, Tests), `test` is a keyword as well, except after `.` or `?.` and before
 `:`, where it is a name, so a field, a named argument, or an import renamed as `test: check` can
@@ -332,9 +337,12 @@ first.
 A `type` declaration is the one thing the interpreter keeps of the type language. It binds the name
 to a fresh tag, or, for a named primitive type, to a constructor function that carries one. A record
 tag also keeps the names of its fields in declaration order and the default of each field that has
-one; the rest of the body is discarded (see Type declarations and Field defaults). Every `type`
-declaration binds a tag or a constructor, even an alias, but only record literals, constructor
-calls, and `is` tests use tags, and the checker allows a literal head only on a record type.
+one (see Type declarations and Field defaults). The tag or constructor also keeps the declaration's
+type parameters and body, as the parser built them, which nothing reads until a type expression
+`type(T)` reaches the declaration (see Types as values); no other evaluation rule consults them.
+Every `type` declaration binds a tag or a constructor, even an alias, but only record literals,
+constructor calls, `is` tests, and type expressions use tags, and the checker allows a literal head
+only on a record type.
 
 ### Primitives
 
@@ -634,28 +642,31 @@ A kind is what the runtime sees, not a type. Types that share a kind stay distin
 and neither pair is assignable either way. Only the `is` column decides what a program can tell
 apart at run time.
 
-| Type                                                                            | Kind                         | `is`                       | `==` compares                                | `String.from`                              | In a union                                                                   |
-| ------------------------------------------------------------------------------- | ---------------------------- | -------------------------- | -------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------- |
-| `int8` … `uint64`, `float32`, `float64`, `int`, `byte`                          | the numeric kind of its name | its name                   | the value; IEEE 754 for floats               | `42`, `1.5`                                | once                                                                         |
-| `bool`                                                                          | `bool`                       | `bool`                     | the value                                    | `true`                                     | once                                                                         |
-| `string`                                                                        | `string`                     | `string`                   | the code points                              | itself; quoted inside a container          | once                                                                         |
-| `null`                                                                          | `null`                       | `null`                     | nothing; all are equal                       | `null`                                     | once                                                                         |
-| `void`                                                                          | `void`                       | `void`                     | nothing; all are equal                       | `void`                                     | once                                                                         |
-| `Bytes`                                                                         | bytes                        | `Bytes`                    | the bytes                                    | `Bytes(89 50)`                             | once                                                                         |
-| `Html`                                                                          | html                         | `Html`                     | the nodes: kinds, names, attributes, strings | the markup                                 | once                                                                         |
-| `Array[T]`                                                                      | array                        | `Array`                    | the length and the elements in order         | `[1, 2]`                                   | once, whatever `T`                                                           |
-| `Map[K, V]`                                                                     | map                          | `Map`                      | the key set and the value per key            | `Map{ "a": 1 }`                            | once, whatever `K` and `V`                                                   |
-| `Set[T]`                                                                        | set                          | `Set`                      | the members                                  | `Set.of([1, 2])`                           | once, whatever `T`                                                           |
-| a named record type                                                             | record                       | its name, which is the tag | the tag and the fields                       | `Point{ x: 1.0, y: 2.0 }`                  | once per tag                                                                 |
-| an anonymous record type                                                        | record                       | none                       | as for the record's tag                      | as for the record's tag                    | at most one, and no named record type                                        |
-| a named primitive type                                                          | tagged primitive             | its name, which is the tag | the tag and the payload                      | `UserId("u-1")`                            | once per tag                                                                 |
-| a function type                                                                 | func                         | `func`                     | identity                                     | `func`; a constructor as its type's name   | once, whatever the signature                                                 |
-| a time type of `stdlib.md`                                                      | time                         | its name, `Time.Instant`   | the tag and the fields                       | an RFC 9557 string, or a zone's identifier | once per tag                                                                 |
-| `Regex.Pattern`                                                                 | regex                        | `Regex.Pattern`            | the normalized source and the flags          | `/a\/b/i`                                  | once                                                                         |
-| `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, `Context` | sync                         | none                       | identity                                     | its type's name, `Mutex`                   | at most one type of these rows                                               |
-| `Random`                                                                        | random                       | none                       | identity                                     | `Random`                                   | at most one type of these rows                                               |
-| `File.Handle`, `Net.Listener`, `Cmd.Process`                                    | resource                     | none                       | identity                                     | its type's name, `File.Handle`             | at most one type of these rows                                               |
-| a type parameter                                                                | its argument's               | none                       | as for its argument                          | as for its argument                        | only `null`, `void`, type parameters, and named types without type arguments |
+| Type                                                                            | Kind                         | `is`                       | `==` compares                                | `String.from`                               | In a union                                                                   |
+| ------------------------------------------------------------------------------- | ---------------------------- | -------------------------- | -------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------- |
+| `int8` … `uint64`, `float32`, `float64`, `int`, `byte`                          | the numeric kind of its name | its name                   | the value; IEEE 754 for floats               | `42`, `1.5`                                 | once                                                                         |
+| `bool`                                                                          | `bool`                       | `bool`                     | the value                                    | `true`                                      | once                                                                         |
+| `string`                                                                        | `string`                     | `string`                   | the code points                              | itself; quoted inside a container           | once                                                                         |
+| `null`                                                                          | `null`                       | `null`                     | nothing; all are equal                       | `null`                                      | once                                                                         |
+| `void`                                                                          | `void`                       | `void`                     | nothing; all are equal                       | `void`                                      | once                                                                         |
+| `Bytes`                                                                         | bytes                        | `Bytes`                    | the bytes                                    | `Bytes(89 50)`                              | once                                                                         |
+| `Html`                                                                          | html                         | `Html`                     | the nodes: kinds, names, attributes, strings | the markup                                  | once                                                                         |
+| `Array[T]`                                                                      | array                        | `Array`                    | the length and the elements in order         | `[1, 2]`                                    | once, whatever `T`                                                           |
+| `Map[K, V]`                                                                     | map                          | `Map`                      | the key set and the value per key            | `Map{ "a": 1 }`                             | once, whatever `K` and `V`                                                   |
+| `Set[T]`                                                                        | set                          | `Set`                      | the members                                  | `Set.of([1, 2])`                            | once, whatever `T`                                                           |
+| a named record type                                                             | record                       | its name, which is the tag | the tag and the fields                       | `Point{ x: 1.0, y: 2.0 }`                   | once per tag                                                                 |
+| an anonymous record type                                                        | record                       | none                       | as for the record's tag                      | as for the record's tag                     | at most one, and no named record type                                        |
+| a named primitive type                                                          | tagged primitive             | its name, which is the tag | the tag and the payload                      | `UserId("u-1")`                             | once per tag                                                                 |
+| a function type                                                                 | func                         | `func`                     | identity                                     | `func`; a constructor as its type's name    | once, whatever the signature                                                 |
+| a time type of `stdlib.md`                                                      | time                         | its name, `Time.Instant`   | the tag and the fields                       | an RFC 9557 string, or a zone's identifier  | once per tag                                                                 |
+| `Regex.Pattern`                                                                 | regex                        | `Regex.Pattern`            | the normalized source and the flags          | `/a\/b/i`                                   | once                                                                         |
+| `Mutex`, `RwMutex`, `WaitGroup`, `Once`, `Cond`, `Atomic`, `Channel`, `Context` | sync                         | none                       | identity                                     | its type's name, `Mutex`                    | at most one type of these rows                                               |
+| `Random`                                                                        | random                       | none                       | identity                                     | `Random`                                    | at most one type of these rows                                               |
+| `File.Handle`, `Net.Listener`, `Cmd.Process`                                    | resource                     | none                       | identity                                     | its type's name, `File.Handle`              | at most one type of these rows                                               |
+| `Reflect.Type[T]`, `Reflect.ErasedType`                                         | type                         | none                       | the type denoted (Types as values)           | the type in annotation syntax, `Array[int]` | at most one type of these rows                                               |
+| `Reflect.Decl`                                                                  | declaration                  | none                       | identity                                     | the declared name, `Box`                    | at most one type of these rows                                               |
+| `Reflect.Value`                                                                 | reflected value              | none                       | the type, then the value                     | `Reflect.Value(42: int)`                    | at most one type of these rows                                               |
+| a type parameter                                                                | its argument's               | none                       | as for its argument                          | as for its argument                         | only `null`, `void`, type parameters, and named types without type arguments |
 
 A tag, the value a `type` declaration binds, is not a type in this table: no annotation names it. It
 compares by identity and renders as its type's name. Section 11 gives the full rendering of numbers,
@@ -717,10 +728,11 @@ written. `type Either[A, B] = A | B` is allowed, since two type parameters may s
 `Either[Box[int], Box[string]]` repeats a tag and `Either[Box[int], { value: string }]` is the
 `Mixed` type above, so both are compile errors at the use.
 
-The sync types, `Random`, `File.Handle`, `Net.Listener`, and `Cmd.Process` have no discriminator
-either, because `is` does not accept them. A union may contain at most one of them, and it is
-narrowed by testing the other members: after `m != null`, an `m` of type `Mutex | null` is a
-`Mutex`.
+The sync types, `Random`, `File.Handle`, `Net.Listener`, `Cmd.Process`, and the four types of
+section 11, Reflect, `Reflect.Type[T]`, `Reflect.ErasedType`, `Reflect.Decl`, and `Reflect.Value`,
+have no discriminator either, because `is` does not accept them. A union may contain at most one of
+them, and it is narrowed by testing the other members: after `m != null`, an `m` of type
+`Mutex | null` is a `Mutex`.
 
 ### Tagged unions
 
@@ -851,6 +863,11 @@ means:
   interchangeable with its body: `type Id = int | string` is the union written out, and
   `type Shape = Circle | Rect` likewise.
 
+Whatever the body, the declaration keeps it, with its type parameters and the scope it was declared
+in, for a type expression that reaches the type (see Types as values). A record's fields then have
+their types beside the names and defaults the tag already keeps, an alias has the body it expands
+to, and a named primitive type has its base.
+
 A type may refer to itself through a record, array, map, set, or function type, so
 `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of
 plain aliases, is a compile error.
@@ -903,8 +920,105 @@ func wrap[T](v: T): Array[T] {
 A type name is also a namespace holding the functions declared on it (section 6, Functions on types;
 section 10, Namespaces). It is an expression only as the head of a record literal, as the target of
 `is`, as the left side of `.` naming one of its functions, or, for a named primitive type, as its
-constructor. Anywhere else it is a compile error, since a type has no value. There are no classes,
-interfaces, or prototypes.
+constructor. Anywhere else it is a compile error, since a type has no value. A type as a value is
+written `type(T)` (see Types as values), which takes any type, not only a name. There are no
+classes, interfaces, or prototypes.
+
+### Types as values
+
+`type(T)` is a **type expression**: the type `T` as a value. `T` is any type an annotation could
+hold, and the parentheses end it, so `type(int | null)` is the union and `type(int) | f()` pipes a
+type value. `type` followed by `(` is always a type expression, and `type` followed by a name is
+always a declaration, since a declaration cannot start with `(`. One token decides, wherever the
+form appears, so a block or an `if` branch can end in one:
+`if wide { type(int64) } else { type(int32) }`. It is a keyword form, not a call: its contents are
+type syntax, `type` alone is not a value that could be passed or piped, and it takes a type, never a
+value. Unlike Python's `type(x)` or JavaScript's `typeof x`, it does not ask what a value is, and
+`type(config)` on a variable is a compile error that says so.
+
+```ant
+type Config = { name: string }
+
+var a = type(int)                          // Reflect.Type[int]
+var b = type(Array[Config])                // Reflect.Type[Array[Config]]
+var c = type(int | null)                   // Reflect.Type[int | null]
+println(b)                                 // Array[Config]
+println(a == type(int64))                  // true: int is int64
+```
+
+- **Static type.** `type(T)` has type `Reflect.Type[T]` (section 11, Reflect), an opaque generic
+  type of the prelude. It is invariant like every generic type, and `T` is solved from the argument
+  as usual, so `func decode[T](text: string, t: Reflect.Type[T]): T` called as
+  `decode(text, type(Config))` returns a `Config`. A call solves type parameters from its arguments
+  left to right (Inference), so a function that takes both a `Reflect.Type[T]` and a value of type
+  `T` takes the type first. Then the token fixes `T` and the value is checked against it:
+  `Reflect.valueOf(type(int | null), 42)` and `Reflect.valueOf(type(Array[int]), [])` both check,
+  where with the value first `42` would fix `T` as `int` and `[]` would have no element type.
+- **Closed types only.** `T` may not mention a type parameter of an enclosing function or type,
+  since the runtime has nothing bound to that name. That is a compile error, which says to take a
+  `Reflect.Type[T]` parameter instead and to build larger types from it with the builders below. A
+  generic type needs its arguments, as in an annotation: `type(Box)` is a compile error and
+  `type(Box[int])` is fine.
+- **A type name alone is still not a value.** The rule of Type declarations stands: `Config` in
+  expression position is a compile error except as a literal head, an `is` target, a namespace, or a
+  constructor. `type(Config)` is the value.
+- **Evaluation.** The runtime resolves the names in `T` as `is` resolves its target (section 12):
+  the primitive names, `null`, `void`, `never`, `Array`, `Map`, `Set`, `Bytes`, `Html`, and `func`
+  by name, and any other path by evaluating it, which must give a tag or a constructor. A name that
+  gives neither panics in an unchecked program. Names in a type resolve to the same tags at every
+  evaluation (section 12, Names and scopes), so each type expression yields one value for the whole
+  run, as a regular expression literal does, and an implementation computes it once.
+- **Equality.** A type value is immutable. Two are `==` when they denote the same type in the sense
+  of this section: aliases expanded, unions flattened and compared as sets of members, named types
+  compared by tag and type arguments, anonymous record types by field names and types, and function
+  types by parameters and result. A recursive alias such as `Json.Value` is compared as a cyclic
+  value is: a pair already under comparison counts as equal. Hashing agrees, so a type value can be
+  a map key, which is how a library keeps a table of per-type codecs. `String.from` renders the type
+  in annotation syntax, with an alias by the name it was written with: `Array[Config]`,
+  `int | null`, `Json.Value`.
+- **Kept bodies.** A `type` declaration keeps its body, with its type parameters and the scope it
+  was declared in, as the syntax the parser built (Type declarations). The body is resolved to a
+  type only when a type expression first reaches the declaration, and the result is kept. So a
+  recursive type such as `type Tree = { value: int, children: Array[Tree] }` needs no value of
+  itself to build, and a program that never reflects pays nothing beyond keeping syntax it had
+  parsed anyway. A local type's body names only the types of its block, whose tags are the same on
+  every run, so resolving the body once is correct for every run. Prelude types have bodies too, the
+  declarations of `prelude.d.ant` (section 10, Declaration files), so `type(Result[int, Error])` and
+  `type(Json.Value)` can be taken apart; an opaque type, declared with no body, stays opaque.
+  Annotations on variables, parameters, and results are still discarded, so a function value cannot
+  report its signature: a function is reflected only at a type the program writes, as in
+  `Reflect.valueOf(type(func(int): string), f)`.
+
+`Reflect.ErasedType` is a type value whose static type is not known, and `Reflect.erase(t)` is the
+conversion from a `Reflect.Type[T]`. The conversion is always written: `Reflect.Type[T]` is not
+assignable to `Reflect.ErasedType`, since Ant converts nothing implicitly, and the call marks where
+the static type is given up, as `Reflect.to` marks where it comes back. Code that walks a type
+recurses on erased types, since the element type of an `Array[E]` is not known statically one level
+down; the typed form is needed at the two ends only, the caller's `type(T)` and the final
+`Reflect.to`.
+
+Closedness means a generic function holds a `Reflect.Type[T]` but cannot write `type(Array[T])`.
+Four builders compose a type value from smaller ones and keep the static type:
+
+```
+Reflect.arrayOf[T](t: Reflect.Type[T]): Reflect.Type[Array[T]]
+Reflect.setOf[T](t: Reflect.Type[T]): Reflect.Type[Set[T]]
+Reflect.mapOf[K, V](k: Reflect.Type[K], v: Reflect.Type[V]): Reflect.Type[Map[K, V]]
+Reflect.nullable[T](t: Reflect.Type[T]): Reflect.Type[T | null]
+```
+
+Each result is `==` to the type expression it stands for: `Reflect.arrayOf(type(int))` is
+`type(Array[int])`, and `Reflect.nullable(type(int | null))` is `type(int | null)`, since unions
+flatten. There is no builder for a user's generic type, because `Box` without arguments is not a
+type and no value stands for it. A function generic over `Box[T]` takes a `Reflect.Type[Box[T]]`
+from its caller, who writes `type(Box[Config])`.
+
+```ant
+func listOf[T](t: Reflect.Type[T]): Reflect.Type[Array[T]] { Reflect.arrayOf(t) }
+
+println(listOf(type(int)) == type(Array[int]))      // true
+println(Reflect.nullable(type(int | null)))         // int | null
+```
 
 ### Assignability
 
@@ -1009,7 +1123,10 @@ primitive types).
 
 ## 5. Expressions
 
-Every construct is an expression with a type. Statements are expressions whose value is `void`.
+Every construct is an expression with a type. Statements are expressions whose value is `void`. A
+type expression `type(T)` is an expression as well, whose value is the type `T` (section 4, Types as
+values). It is a primary expression, as a literal or a parenthesized expression is, so a postfix
+chain or a pipe may follow it: `type(int) | f()`.
 
 Evaluation is strictly left to right: the callee before its arguments, arguments in written order,
 and record fields, array elements, and map entries in written order. An assignment evaluates the
@@ -2334,14 +2451,14 @@ nothing else:
 Who may declare into a namespace follows from what it owns. A module owns itself and its types, so a
 `func` in a module is declared on one of the module's own types or on none, and a `type` is never
 qualified. The prelude owns a name in every module, so its declarations name any owner, and an owner
-that no `type` declares is a namespace and nothing more: `Os` and `Time` are reached only through
-`.`, cannot stand in an annotation or after `is`, and are not values, so `var t = Time` is a compile
-error. An owner that a `type` does declare is a type as well, so `Mutex` is a type in an annotation
-and a namespace in `Mutex.new()`, with no conflict between the two, since a type is not a value
-(section 4, Type declarations). The interpreter has no notion of a namespace beyond the record: a
-module record, a tag, a constructor, and a prelude namespace all hold their declarations as fields
-(section 12, Expressions). The checker keeps each module's export table and each namespace's members
-so that `Geometry.Point` also resolves in a type.
+that no `type` declares is a namespace and nothing more: `Os`, `Time`, and `Reflect` are reached
+only through `.`, cannot stand in an annotation or after `is`, and are not values, so `var t = Time`
+is a compile error. An owner that a `type` does declare is a type as well, so `Mutex` is a type in
+an annotation and a namespace in `Mutex.new()`, with no conflict between the two, since a type is
+not a value (section 4, Type declarations). The interpreter has no notion of a namespace beyond the
+record: a module record, a tag, a constructor, and a prelude namespace all hold their declarations
+as fields (section 12, Expressions). The checker keeps each module's export table and each
+namespace's members so that `Geometry.Point` also resolves in a type.
 
 ### Scripts
 
@@ -3465,6 +3582,224 @@ Test.name(): string                   // the current test's full name, as "parse
   as a server the test starts. It is the same context at every call within one test, and its reason
   is `cancelled`.
 
+### Reflect
+
+Reflection: types as values, taken apart one level at a time, and values boxed with a type they
+belong to. A type expression `type(T)` makes a type value (section 4, Types as values); the
+functions here read its structure, box and unbox values, and build new values of a type known only
+at run time, checking each part. With these, typed decoding and encoding for a data format are
+ordinary library code, and the format keeps every policy: how a union is chosen, what a missing or
+unknown field means, how keys and numbers are spelled.
+
+```
+type Reflect.Type[T]                     // opaque: the type T as a value, written type(T)
+type Reflect.ErasedType                  // opaque: a type value whose static type is not known; Reflect.erase makes one
+type Reflect.Decl                        // opaque: a named type's declaration, without its type arguments
+type Reflect.Value                       // opaque: a value together with a type it belongs to
+
+type Reflect.Shape = Reflect.Null | Reflect.Void | Reflect.Never | Reflect.Bool | Reflect.Int | Reflect.Float
+  | Reflect.String | Reflect.Array | Reflect.Map | Reflect.Set | Reflect.Record | Reflect.Named
+  | Reflect.Union | Reflect.Func | Reflect.Opaque
+type Reflect.Null = {}
+type Reflect.Void = {}
+type Reflect.Never = {}
+type Reflect.Bool = {}
+type Reflect.Int = { bits: int, signed: bool }       // int8 … uint64; int is { bits: 64, signed: true } and byte { bits: 8, signed: false }
+type Reflect.Float = { bits: int }                   // float32, float64
+type Reflect.String = {}
+type Reflect.Array = { element: Reflect.ErasedType }
+type Reflect.Map = { key: Reflect.ErasedType, value: Reflect.ErasedType }
+type Reflect.Set = { member: Reflect.ErasedType }
+type Reflect.Record = { name: string | null, decl: Reflect.Decl | null, args: Array[Reflect.ErasedType], fields: Array[Reflect.Field] }
+type Reflect.Field = { name: string, type: Reflect.ErasedType, hasDefault: bool }
+type Reflect.Named = { name: string, decl: Reflect.Decl, args: Array[Reflect.ErasedType], base: Reflect.ErasedType }   // a named primitive type
+type Reflect.Union = { members: Array[Reflect.ErasedType] }
+type Reflect.Func = { params: Array[Reflect.ErasedType], result: Reflect.ErasedType }
+type Reflect.Opaque = { name: string, decl: Reflect.Decl, args: Array[Reflect.ErasedType] }
+type Reflect.Scalar = null | void | bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 | string
+
+Reflect.erase[T](t: Reflect.Type[T]): Reflect.ErasedType
+Reflect.arrayOf[T](t: Reflect.Type[T]): Reflect.Type[Array[T]]                // type(Array[T]), for a T held as a type value
+Reflect.setOf[T](t: Reflect.Type[T]): Reflect.Type[Set[T]]
+Reflect.mapOf[K, V](k: Reflect.Type[K], v: Reflect.Type[V]): Reflect.Type[Map[K, V]]
+Reflect.nullable[T](t: Reflect.Type[T]): Reflect.Type[T | null]
+Reflect.shape(t: Reflect.ErasedType): Reflect.Shape                          // one level; aliases expanded, unions flattened
+Reflect.assignable(from: Reflect.ErasedType, to: Reflect.ErasedType): bool   // section 4, Assignability, on two closed types
+Reflect.default(t: Reflect.ErasedType, name: string): Reflect.Value          // the default of the field name, evaluated afresh; panics if t is not a named record type, has no field name, or the field has no default
+
+Reflect.valueOf[T](t: Reflect.Type[T], value: T): Reflect.Value              // the box; a union t is resolved to value's member
+Reflect.to[T](d: Reflect.Value, t: Reflect.Type[T]): T                       // the value; panics if d's type is not assignable to T
+Reflect.type(d: Reflect.Value): Reflect.ErasedType                           // d's type, never a union or an alias
+
+Reflect.scalar(d: Reflect.Value): Reflect.Scalar                             // the value; panics if d's type is not null, void, bool, a number, or string
+Reflect.items(d: Reflect.Value): Array[Reflect.Value]                        // an array's elements or a set's members, in a new array; panics if d's type is neither
+Reflect.entries(d: Reflect.Value): Array[Entry[Reflect.Value, Reflect.Value]]   // a map's entries, in a new array; panics if d's type is not a map
+Reflect.field(d: Reflect.Value, name: string): Reflect.Value                 // the field name; panics if d's type is not a record type that lists it
+Reflect.payload(d: Reflect.Value): Reflect.Value                             // the base value of a named primitive; panics if d's type is not one
+
+Reflect.makeNumber(t: Reflect.ErasedType, n: Number): Reflect.Value | null   // n converted to the Int or Float type t, as the conversions do; null where the conversion would panic; panics if t is neither
+Reflect.makeArray(t: Reflect.ErasedType, items: Array[Reflect.Value]): Reflect.Value   // a new array; panics if t is not an array type, or an item's type is not assignable to its element type
+Reflect.makeSet(t: Reflect.ErasedType, members: Array[Reflect.Value]): Reflect.Value   // a new set, duplicates collapsed; panics if t is not a set type, or a member's type is not assignable to its member type
+Reflect.makeMap(t: Reflect.ErasedType, entries: Array[Entry[Reflect.Value, Reflect.Value]]): Reflect.Value   // a new map, a later entry with an == key replacing an earlier one; panics if t is not a map type, or a key's or value's type is not assignable to its slot
+Reflect.makeRecord(t: Reflect.ErasedType, fields: Map[string, Reflect.Value]): Reflect.Value   // a new record, omitted fields from their defaults; panics if t is not a named record type, a key is not one of its fields, a field's type is not assignable to the field's type, or a field with no default is left out
+Reflect.makeTagged(t: Reflect.ErasedType, payload: Reflect.Value): Reflect.Value   // a new tagged value; panics if t is not a named primitive type, or the payload's type is not its base
+```
+
+`Reflect` is a namespace nothing declares, like `Os` (section 10, Namespaces), and no program may
+shadow it. Its four opaque types have no `is` discriminator, so a union holds at most one of them,
+as for the sync types (section 4, Unions). A `Reflect.Type[T]` or `Reflect.ErasedType` is `==` to
+another when they denote the same type and renders as the type; a `Reflect.Decl` is `==` to another
+when they are the same declaration and renders as the declared name; a `Reflect.Value` is `==` to
+another when the types are `==` and the values are `==`, and renders as `Reflect.Value(42: int)`.
+`Json.stringify` panics on all four, as it does on a tag.
+
+**Shapes.** `Reflect.shape` gives one level of a type's structure, with aliases expanded and unions
+flattened, as a member of `Reflect.Shape` narrowed with `is`:
+
+- **Records.** `name` is the declared name, or `null` for an anonymous record type. `args` are the
+  type arguments, and `fields` come in declaration order, with each field's type already
+  substituted: in `Box[int]`, the field `value` has type `int`. `hasDefault` says whether a literal,
+  and so `Reflect.makeRecord`, may leave the field out, and `Reflect.default` gives the default
+  itself.
+- **Named primitives.** `base` is the base type. `Id[User]` and `Id[Account]` share a tag but are
+  different type values, because their `args` differ.
+- **Declarations.** `decl` is the declaration a named record, named primitive, or opaque type comes
+  from, `null` for an anonymous record type. Two are `==` when they are the same declaration,
+  whatever the type arguments, so `Box[int]` and `Box[string]` share one. A `Reflect.Decl` hashes,
+  renders as the declared name, and does nothing else. It is the key for anything that applies to
+  every instantiation of a generic type, such as a codec for all of `Box[T]` that reads the
+  arguments from `args`. `name` cannot be that key, because two modules may each declare a `Config`.
+- **Unions.** Members are flattened and deduplicated, aliases are expanded, and the members come in
+  the order they were written. `T | null` is a union with a `Reflect.Null` member, and
+  `Result[int, Error]` is a union of the records `Ok[int]` and `Err[Error]`.
+- **Opaque.** Everything whose values reflection does not take apart: `Bytes`, `Html`,
+  `Regex.Pattern`, the time types, the sync, random, and resource types, the opaque types of a
+  declaration file, and the four types of this section. `name` renders the type. Every opaque type
+  is declared, in `prelude.d.ant` or another declaration file, so `decl` is always set, and `args`
+  are its type arguments, so a codec keyed by `decl` covers every `Channel[T]`. Code that handles a
+  type specially tests for it by comparing type values, `t == Reflect.erase(type(Bytes))`, not by
+  name.
+- **One level.** Children are `Reflect.ErasedType` values, so a recursive type is a finite graph
+  that a program walks as deep as it needs.
+
+```ant
+type Server = { host: string, port: int = 8080, tags: Array[string] = [] }
+
+var s = Reflect.shape(Reflect.erase(type(Server)))
+if s is Reflect.Record {
+  for f in s.fields { println("${f.name}: ${f.type}, default: ${f.hasDefault}") }
+}
+// host: string, default: false
+// port: int, default: true
+// tags: Array[string], default: true
+```
+
+`Reflect.assignable` is section 4's relation applied to two closed types, so it has no inference, no
+type parameters, and no default parameters to consider. It is the relation the readers, the
+builders, and `Reflect.to` use, and it is exposed so that a library can test before it calls a
+function that would panic.
+
+`Reflect.default(t, name)` evaluates the default of field `name` of the named record type `t` and
+boxes it at the field's substituted type, resolved to a member as a reader resolves it (below). The
+evaluation is the one a literal performs (section 4, Field defaults): afresh on every call, in the
+scope of the declaration, so `tags: Array[string] = []` gives a new array each time, and a default
+that reads a variable reads its current value. The checker has checked the default against the
+field's type for every type argument, so the box keeps the invariant below. An encoder that leaves
+out fields equal to their defaults compares `Reflect.field(d, f.name) == Reflect.default(t, f.name)`
+for each field whose `hasDefault` is set.
+
+**The invariant.** In a checked program, the value in a `Reflect.Value` belongs to the box's type.
+Every function above keeps it:
+
+- `Reflect.valueOf(t, v)` gets it from the checker, which has already checked that `v` is a `T`.
+- A reader returns a child at the type the parent's type gives that child: the element type, the key
+  and value types, the field's substituted type, or the base. When that type is a union, the reader
+  resolves it to the member the child's value belongs to. The union rules guarantee there is exactly
+  one, found from the value's kind or tag alone (section 4, Unions): a record whose tag no named
+  member has goes to the anonymous member, and a value of a sync type goes to the one sync member.
+  So `Reflect.type` is never a union, and an encoder never has to choose a member.
+- A builder makes a new container or record, which nothing else refers to, and checks every part
+  with `Reflect.assignable` against the slot's type. That relation is the checker's own, so the new
+  value is one the checker could have built with a literal.
+- `Reflect.to(d, t)` returns the value only when the stored type is assignable to `T`, which is the
+  check an assignment would have made statically.
+
+Nothing in the runtime inspects contents to decide a type, and that is what makes the design sound
+with mutable containers. An empty `Array[int]` never becomes an `Array[string]`, because the box
+remembers that it was an `Array[int]`. Nothing mutates through a `Reflect.Value`: a builder makes a
+new value, and a value taken out with `Reflect.to` is written through its static type, as any value
+is.
+
+**Readers.** `items` and `entries` return a new array of boxes, read when they are called, as every
+library function reads its arguments. The boxes refer to the original elements, which may be mutable
+values the program goes on changing through their static types; that is the ordinary sharing of
+section 4. `field` takes a name from the type's field list, so through an anonymous record type it
+reaches only the fields that type lists, even when the record has more. `scalar` gives a leaf in its
+own kind, so an encoder can render any number with `String.from` without testing ten kinds.
+
+**Builders.** `makeNumber` converts as the conversion functions do (section 12), except that a
+conversion that would panic returns `null`: a fraction, a value out of range, `NaN`, or an infinity
+for an integer type. A float target rounds. `makeArray`, `makeSet`, and `makeMap` need an array,
+set, or map type; a later map entry with an `==` key replaces an earlier one, and duplicate set
+members collapse, as in literals and `Set.of`. `makeRecord` needs a named record type: an anonymous
+record type has no tag to put in the value, and every record value has a name (section 4, Records).
+Every key of `fields` must be a field of the type; each field the map leaves out takes its default,
+evaluated as a literal evaluates it, and a field with no default must be given. The record gets the
+tag, so `is` and `==` work on it as on any literal. `makeTagged` needs a named primitive type and a
+payload whose type is its base. Each builder panics, with a message that names the type and the
+slot, when its contract is broken: the wrong shape of `t`, a part whose type is not assignable to
+its slot, or a missing or unknown field. A library can test each of these first with `Reflect.shape`
+and `Reflect.assignable`, so in a correct library they are bugs, which is what a panic is for
+(section 8).
+
+**Unchecked runs.** `ant run` does not check annotations, and it does not check `Reflect.valueOf`
+deeply either. It checks that the value has the kind and tag that the type's discriminator names,
+which it needs anyway to resolve a union, and trusts the rest as it trusts `var xs: Array[int]`.
+Builders, readers, and `Reflect.to` check types fully, since those checks compare type values and
+cost nothing per element. So a mistyped unchecked program fails where it uses a wrong element, not
+at the box, as it does with a wrong annotation; `ant check` is what rules that out.
+
+**Visibility.** Reflection reaches every type that a nameable type leads to. A field of an exported
+`Config` may have a private type, and `Reflect.shape` will show it and the builders will build it.
+That matches what the runtime already does: `==`, `String.from`, and `Json.stringify` walk every
+field of every value whatever module declared its type, and every field of a record is readable and
+writable by anyone who holds the record (section 4, Records). Privacy applies to names and not to
+data (section 10), and a type whose invariant matters guards it with functions on the type (section
+6). Reflection cannot name a private type that the program cannot already reach.
+
+```ant
+type Celsius = float64
+type Reading = { sensor: string, value: Celsius, tags: Array[string] = [] }
+
+// A value's structure, read along its type.
+func render(d: Reflect.Value): string {
+  var s = Reflect.shape(Reflect.type(d))
+  if s is Reflect.Record {
+    var parts = Array.map(s.fields, { "${x.name}=" + render(Reflect.field(d, x.name)) })
+    "{" + String.join(parts, " ") + "}"
+  } else if s is Reflect.Array {
+    "[" + String.join(Array.map(Reflect.items(d), render), " ") + "]"
+  } else if s is Reflect.Named {
+    render(Reflect.payload(d))
+  } else {
+    String.from(Reflect.scalar(d))
+  }
+}
+
+var r = Reading{ sensor: "a1", value: Celsius(21.5) }
+println(render(Reflect.valueOf(type(Reading), r)))     // {sensor=a1 value=21.5 tags=[]}
+
+// A value built from parts, each checked against its slot.
+var t = Reflect.erase(type(Reading))
+var built = Reflect.makeRecord(t, Map{
+  sensor: Reflect.valueOf(type(string), "b2"),
+  value: Reflect.makeTagged(Reflect.erase(type(Celsius)), Reflect.valueOf(type(float64), 19.0)),
+})
+var reading = Reflect.to(built, type(Reading))         // a Reading, tags filled from its default
+println(reading.sensor)                                // b2
+println(reading is Reading)                            // true
+```
+
 ## 12. Dynamic semantics
 
 This section is the contract of `ant run`. It defines what every construct does to values, and it is
@@ -3479,29 +3814,33 @@ Every value has a kind, fixed when the value is created. The table of Kinds in s
 types have which kind, how `==` compares them, and how they render; this one says only what a value
 of each kind holds:
 
-| Kind                             | Values                                                                                                                                                                                                                                                                                                                                                    |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the ten numeric kinds            | a number carries its width, because overflow and conversion depend on it                                                                                                                                                                                                                                                                                  |
-| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                                                                                                                           |
-| array                            | a growable sequence of values                                                                                                                                                                                                                                                                                                                             |
-| map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                                                                                                                                      |
-| set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                                                                                                                                 |
-| record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                                                                                                                               |
-| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                                                                                                                               |
-| func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)                                                                                                             |
-| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order and the default of each field that has one; every tag carries the functions declared on its type as fields (section 6) |
-| sync                             | an object whose state only the functions of its type change (section 11, Synchronization)                                                                                                                                                                                                                                                                 |
-| time                             | the tag of its type plus the fields that type fixes (`stdlib.md`)                                                                                                                                                                                                                                                                                         |
-| bytes                            | an immutable sequence of bytes                                                                                                                                                                                                                                                                                                                            |
-| html                             | an immutable list of nodes: elements, each a name, attributes, and a list of nodes; text; and raw markup                                                                                                                                                                                                                                                  |
-| regex                            | the tag of `Regex.Pattern` plus the normalized source and the sorted flags; one is built for each literal when its module is loaded                                                                                                                                                                                                                       |
-| random                           | four `uint64` words that each draw changes (section 11, Random)                                                                                                                                                                                                                                                                                           |
-| resource                         | an open file, stream, or connection, or a listening socket, which its type's `close` ends                                                                                                                                                                                                                                                                 |
+| Kind                             | Values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the ten numeric kinds            | a number carries its width, because overflow and conversion depend on it                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `bool`, `string`, `null`, `void` | as in section 4                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| array                            | a growable sequence of values                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| map                              | a hash table from values to values, keyed by `==`, that keeps its entries in insertion order; a key's hash depends on a bounded prefix of its structure, so hashing terminates on cyclic values and agrees with `==`                                                                                                                                                                                                                                                                     |
+| set                              | a hash set of values, keyed by `==` and hashed as map keys are, that keeps its members in insertion order                                                                                                                                                                                                                                                                                                                                                                                |
+| record                           | a tag plus a fixed set of named fields, in the order the type declares them                                                                                                                                                                                                                                                                                                                                                                                                              |
+| tagged primitive                 | a value of one of the twelve primitive kinds plus a tag, made by calling the type's constructor (section 4)                                                                                                                                                                                                                                                                                                                                                                              |
+| func                             | a declared function, an anonymous function, or a lambda, with the scopes it captured; or the constructor of a named primitive type, which carries that type's tag and base kind, and the functions declared on the type as fields (section 6)                                                                                                                                                                                                                                            |
+| tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order and the default of each field that has one; every tag carries the functions declared on its type as fields (section 6), and keeps its declaration's type parameters and body, resolved once a type expression reaches it (section 4, Types as values) |
+| sync                             | an object whose state only the functions of its type change (section 11, Synchronization)                                                                                                                                                                                                                                                                                                                                                                                                |
+| time                             | the tag of its type plus the fields that type fixes (`stdlib.md`)                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| bytes                            | an immutable sequence of bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| html                             | an immutable list of nodes: elements, each a name, attributes, and a list of nodes; text; and raw markup                                                                                                                                                                                                                                                                                                                                                                                 |
+| regex                            | the tag of `Regex.Pattern` plus the normalized source and the sorted flags; one is built for each literal when its module is loaded                                                                                                                                                                                                                                                                                                                                                      |
+| random                           | four `uint64` words that each draw changes (section 11, Random)                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| resource                         | an open file, stream, or connection, or a listening socket, which its type's `close` ends                                                                                                                                                                                                                                                                                                                                                                                                |
+| type                             | a closed type of section 4 (Types as values), built from kept declaration bodies; immutable, and compared and hashed by the type it denotes                                                                                                                                                                                                                                                                                                                                              |
+| declaration                      | a `type` declaration, compared by identity, which the record, named primitive, and opaque shapes of section 11, Reflect carry                                                                                                                                                                                                                                                                                                                                                            |
+| reflected value                  | a value together with a type value it belongs to, never a union or an alias (section 11, Reflect)                                                                                                                                                                                                                                                                                                                                                                                        |
 
 Arrays, maps, sets, records, functions, sync objects, generators, and resources are references: a
 variable holds a reference, and copying the variable copies the reference. Numbers, booleans,
-strings, `Bytes`, `Html`, `null`, `void`, tags, time values, and patterns are immutable, so for them
-the distinction never shows.
+strings, `Bytes`, `Html`, `null`, `void`, tags, time values, patterns, types, and declarations are
+immutable, so for them the distinction never shows; a reflected value is immutable too, and refers
+to its value.
 
 ### Names and scopes
 
@@ -3608,6 +3947,12 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   other path evaluates and must be a record tag, a time type's tag, `Regex.Pattern`, or a
   constructor, not an alias tag, and the test is whether `a` is a record, tagged primitive, time
   value, or pattern carrying that tag. The result is a `bool`.
+- **Type expression `type(T)`.** Resolves the names in `T` as `is` resolves its target: the names
+  the `is` rule lists and `never` by name, and any other path by evaluating it, which must give a
+  tag or a constructor, an alias tag included. A generic type must be given as many type arguments
+  as its declaration has, and the members of a union must not share a discriminator (section 4,
+  Unions). The value is the type denoted, built from the kept bodies of the declarations it reaches
+  (section 4, Types as values), the same value at every evaluation.
 - **Logical `&& ||`.** The left operand must be a `bool`. `&&` yields the right operand when the
   left is `true` and `false` otherwise, without evaluating the right; `||` mirrors that. The right
   operand must be a `bool` when it is evaluated.
@@ -3741,11 +4086,12 @@ only panic in the ways the last column lists, which depend on values known at ru
 | record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value and has no default                                                                                                     |                                                                                                                                                                                                                                 |
 | array literal                                     | a spread operand is not an array                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
 | `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                                          |                                                                                                                                                                                                                                 |
+| `type(T)`                                         | a name in `T` is neither a built-in type name nor a path that evaluates to a tag or a constructor; a generic type is given the wrong number of type arguments; two members of a union share a discriminator                                                                                    |                                                                                                                                                                                                                                 |
 | `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                                                                    | a sequence calls `yield` on another goroutine, after it returned `false`, or after the loop ended; a sequence returns after catching a panic of the body; the loop goes on or ends after a call of `yield` on another goroutine |
 | destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                                                                    | the array has fewer elements than the fixed positions                                                                                                                                                                           |
 | variable                                          | no scope binds the name                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
 | `_`                                               | read                                                                                                                                                                                                                                                                                           |                                                                                                                                                                                                                                 |
-| library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                                                              | the documented case, such as `Result.unwrap` on an `Err` or `Mutex.unlock` when not locked                                                                                                                                      |
+| library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                                                              | the documented case, such as `Result.unwrap` on an `Err`, `Mutex.unlock` when not locked, or `Reflect.to` on a box whose type is not assignable to the type asked for                                                           |
 | `var`, `let`                                      |                                                                                                                                                                                                                                                                                                | read or assigned before its initializer has run: a top-level `var` or `let`, or a local through a call made from its own initializer                                                                                            |
 | assignment                                        | the target is a `let`, a parameter, a lambda's `x`, or a name a `for` binds                                                                                                                                                                                                                    |                                                                                                                                                                                                                                 |
 | `panic`                                           |                                                                                                                                                                                                                                                                                                | always                                                                                                                                                                                                                          |

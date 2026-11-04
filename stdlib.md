@@ -1112,8 +1112,9 @@ as `float64`; a program that needs integers converts with `Math.toInt`, which re
 wherever `int(x)` would panic: a fraction, a value outside the `int` range such as `1e30`, `NaN`, or
 an infinity. A decoder into records is a function per type: narrow the tree with `is`, build the
 record, and propagate errors with `try`, passing the path along so an error can say
-`$.servers[2].port`. Typed decoding through reflection is deferred; the design is in the repository
-history at commit 81525d2.
+`$.servers[2].port`. Typed decoding and encoding are library code over reflection (`ant-lang.md`,
+section 11, Reflect): a walk of the type's shape that builds the value with the builders, or reads
+it with the readers, with the format's own policy for unions, missing fields, and numbers.
 
 `parse` reads one JSON text as RFC 8259 defines it, with white space around the value and nothing
 else. An object that repeats a key is a map with the key in its first place and its last value, so
