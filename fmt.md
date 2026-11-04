@@ -286,6 +286,7 @@ applies wins.
 | a type name, including `Map`, and the `{` of its literal                     | none    | `Point{ x: 1.0 }`, `Map{}`             |
 | prefix `-` or `!` and its operand                                            | none    | `-x`, `!done`                          |
 | `func` and the `(` of an anonymous function or function type                 | none    | `func(a: int) { a }`, `func(int): int` |
+| `type` and the `(` of a type expression                                      | none    | `type(Array[int])`                     |
 | a binary operator, `is`, `=`, a compound assignment, or `\|` and either side | one     | `a + b`, `x is T`, `A \| B`            |
 | a keyword and the next token, and the next token and a keyword               | one     | `try f()`, `return x`, `for x in xs`   |
 | any other pair, such as a header and its `{`                                 | one     | `if ready {`, `func f() {`             |
