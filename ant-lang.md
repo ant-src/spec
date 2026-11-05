@@ -3671,7 +3671,7 @@ Reflect.entries(d: Reflect.Value): Array[Entry[Reflect.Value, Reflect.Value]]   
 Reflect.field(d: Reflect.Value, name: string): Reflect.Value                 // the field name; panics if d's type is not a record type that lists it
 Reflect.payload(d: Reflect.Value): Reflect.Value                             // the base value of a named primitive; panics if d's type is not one
 
-Reflect.makeScalar(t: Reflect.ErasedType, v: Reflect.Scalar): Reflect.Value | null   // v boxed at the scalar type t, a number converted as the conversions do; null where v is not of t's kind, the conversion would panic, or a finite v would round to an infinity; panics if t is not a scalar type
+Reflect.makeScalar(t: Reflect.ErasedType, v: Reflect.Scalar): Reflect.Value | null   // v boxed at the scalar type t, a number converted as the conversions do; null where t is not a scalar type, v is not of t's kind, the conversion would panic, or a finite v would round to an infinity
 Reflect.makeArray(t: Reflect.ErasedType, items: Array[Reflect.Value]): Reflect.Value   // a new array; panics if t is not an array type, or an item's type is not assignable to its element type
 Reflect.makeSet(t: Reflect.ErasedType, members: Array[Reflect.Value]): Reflect.Value   // a new set, duplicates collapsed; panics if t is not a set type, or a member's type is not assignable to its member type
 Reflect.makeMap(t: Reflect.ErasedType, entries: Array[Entry[Reflect.Value, Reflect.Value]]): Reflect.Value   // a new map, a later entry with an == key replacing an earlier one; panics if t is not a map type, or a key's or value's type is not assignable to its slot
@@ -3746,7 +3746,10 @@ Every function above keeps it:
   one, found from the value's kind or tag alone (section 4, Unions): an anonymous record member
   takes any record, since no named record type may stand beside it, and a value of a type `is`
   cannot test goes to the one such member. So `Reflect.type` is never a union, and an encoder never
-  has to choose a member.
+  has to choose a member. The slot a child sat in is the parent's to say: an encoder whose format
+  must mark which member a value is, because two members would be written alike, reads the slot from
+  the parent's shape, the field's `type` or the `element`, `member`, `key`, or `value`, which it has
+  in hand as it walks the children.
 - A builder makes a new container or record, which nothing else refers to, and checks every part
   with `Reflect.assignable` against the slot's type. That relation is the checker's own, so the new
   value is one the checker could have built with a literal.
@@ -3773,22 +3776,26 @@ record has more. `scalar` gives a leaf in its own kind, so an encoder can render
 
 **Builders.** `makeScalar` is the inverse of `scalar`: it boxes a leaf at the scalar type `t`, so a
 decoder that holds only a slot's erased type boxes every leaf through one call. It returns `null`
-where the value is not of `t`'s kind, so the same call is the decoder's test that a leaf fits. A
-number converts to any number type as the conversion functions do (section 12), except that a
-conversion that would panic returns `null` too: a fraction, a value out of range, `NaN`, or an
-infinity for an integer type. A float target rounds, and a finite value beyond its range, such as
-`1e300` for `float32`, is `null` rather than an infinity, as Go's decoders refuse it, so a value the
-decoder accepts is one an encoder can write. `NaN` and the infinities box as themselves.
-`makeArray`, `makeSet`, and `makeMap` need an array, set, or map type; a later map entry with an
-`==` key replaces an earlier one, and duplicate set members collapse, as in literals and `Set.of`.
+where `t` is not a scalar type (null, void, bool, a number type, or string) or the value is not of
+`t`'s kind, so the same call is the decoder's whole test that a leaf fits its slot. A leaf meeting a
+slot of another type is a fault of the input, not of the library, so `makeScalar` reports it rather
+than panicking, and a decoder needs no branch per scalar shape: it handles the unions, named
+primitives, containers, and records it knows and gives every other type to `makeScalar`. A number
+converts to any number type as the conversion functions do (section 12), except that a conversion
+that would panic returns `null` too: a fraction, a value out of range, `NaN`, or an infinity for an
+integer type. A float target rounds, and a finite value beyond its range, such as `1e300` for
+`float32`, is `null` rather than an infinity, as Go's decoders refuse it, so a value the decoder
+accepts is one an encoder can write. `NaN` and the infinities box as themselves. `makeArray`,
+`makeSet`, and `makeMap` need an array, set, or map type; a later map entry with an `==` key
+replaces an earlier one, and duplicate set members collapse, as in literals and `Set.of`.
 `makeRecord` needs a named record type: an anonymous record type has no tag to put in the value, and
 every record value has a name (section 4, Records). Every key of `fields` must be a field of the
 type; each field the map leaves out takes its default, evaluated as a literal evaluates it, and a
 field with no default must be given. The record gets the tag, so `is` and `==` work on it as on any
-literal. `makeTagged` needs a named primitive type and a payload whose type is its base. Each
-builder panics, with a message that names the type and the slot, when its contract is broken: the
-wrong shape of `t`, a part whose type is not assignable to its slot, or a missing or unknown field.
-A library can test each of these first with `Reflect.shape` and `Reflect.assignable`, so in a
+literal. `makeTagged` needs a named primitive type and a payload whose type is its base. The other
+five builders panic, with a message that names the type and the slot, when its contract is broken:
+the wrong shape of `t`, a part whose type is not assignable to its slot, or a missing or unknown
+field. A library can test each of these first with `Reflect.shape` and `Reflect.assignable`, so in a
 correct library they are bugs, which is what a panic is for (section 8).
 
 **Unchecked runs.** `ant run` does not check annotations, and it does not check `Reflect.valueOf`
