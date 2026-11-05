@@ -2980,7 +2980,8 @@ String.fromCodePoint(n: int): string | null                    // the string of 
 String.toCodePoints(s: string): Array[int]                     // one scalar value per code point
 String.fromCodePoints(points: Array[int]): string | null       // null when a value is not a scalar value
 String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
-String.toFloat(s: string): float64 | null                     // a decimal number, below; null otherwise
+String.toUint(s: string, base: int = 10): uint64 | null       // digits of base, no sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
+String.toFloat(s: string): float64 | null                     // a decimal number, or NaN or an infinity, below; null otherwise
 String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; panics if base is outside 2 ..= 36
 String.fromFloat(x: float64, digits: int): string              // fixed point with digits decimals, rounded half to even; panics if digits < 0 or is above 2^31 − 1
 String.from[T](value: T): string
@@ -2998,16 +2999,19 @@ character, and `String.isDigit(s)` tests that a whole field is digits. Each name
 general categories or property it follows. A decimal digit is one in any script, `٣` among them,
 while `toInt` reads only `0` to `9` and the letters of a base above ten, `a` to `z`, which it
 accepts in either case; so `String.isDigit("٣")` is `true` and `String.toInt("٣")` is `null`. A
-number that does not fit an `int` is `null` too. `toFloat` reads ASCII decimal digits with an
-optional sign, an optional fraction after `.`, and an optional exponent after `e` or `E` with its
-own optional sign, so `-1.5`, `.5`, `5.`, and `1e+3` are numbers; it rounds to the nearest
-`float64`, so a tiny value is `0.0`, and returns `null` on a value beyond the range of `float64` and
-on anything else: white space, `_`, a prefix such as `0x`, and `Infinity` and `NaN`, which
-`String.from` writes but which are not numbers to parse. `fromInt` writes an unsigned value as the
-number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat` rounds the binary value
-of `x`, not the decimal it was written as: the `float64` nearest `1.005` is a little below it, so
-`String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign, so
-`String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinity renders as
+number that does not fit an `int` is `null` too. `toUint` reads the same digits with no sign, as
+Go's `strconv.ParseUint` does, and gives the whole `uint64` range, up to `Math.maxUint64`; a
+narrower kind is reached by converting the result, as in `Math.toInt` or `Reflect.makeScalar`.
+`toFloat` reads ASCII decimal digits with an optional sign, an optional fraction after `.`, and an
+optional exponent after `e` or `E` with its own optional sign, so `-1.5`, `.5`, `5.`, and `1e+3` are
+numbers; it rounds to the nearest `float64`, so a tiny value is `0.0`. As Go's `strconv.ParseFloat`
+does, it also reads `NaN`, and `Inf` or `Infinity` with an optional sign, in any case, so every
+float that `String.from` writes reads back. It returns `null` on a value beyond the range of
+`float64` and on anything else: white space, `_`, and a prefix such as `0x`. `fromInt` writes an
+unsigned value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat`
+rounds the binary value of `x`, not the decimal it was written as: the `float64` nearest `1.005` is
+a little below it, so `String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign,
+so `String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinity renders as
 `String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
 string would give; there is no format string.
@@ -3294,6 +3298,7 @@ Math.Infinity: float64                                         // positive; -Mat
 Math.maxFloat64: float64                                       // the largest finite float64
 Math.minInt: int                                               // -2^63; not writable as a literal
 Math.maxInt: int
+Math.maxUint64: uint64                                         // 2^64 − 1; not writable as a literal
 
 Bits.and[T: Integer](a: T, b: T): T
 Bits.or[T: Integer](a: T, b: T): T
@@ -3666,7 +3671,7 @@ Reflect.entries(d: Reflect.Value): Array[Entry[Reflect.Value, Reflect.Value]]   
 Reflect.field(d: Reflect.Value, name: string): Reflect.Value                 // the field name; panics if d's type is not a record type that lists it
 Reflect.payload(d: Reflect.Value): Reflect.Value                             // the base value of a named primitive; panics if d's type is not one
 
-Reflect.makeScalar(t: Reflect.ErasedType, v: Reflect.Scalar): Reflect.Value | null   // v boxed at the scalar type t, a number converted as the conversions do; null where v is not of t's kind or the conversion would panic; panics if t is not a scalar type
+Reflect.makeScalar(t: Reflect.ErasedType, v: Reflect.Scalar): Reflect.Value | null   // v boxed at the scalar type t, a number converted as the conversions do; null where v is not of t's kind, the conversion would panic, or a finite v would round to an infinity; panics if t is not a scalar type
 Reflect.makeArray(t: Reflect.ErasedType, items: Array[Reflect.Value]): Reflect.Value   // a new array; panics if t is not an array type, or an item's type is not assignable to its element type
 Reflect.makeSet(t: Reflect.ErasedType, members: Array[Reflect.Value]): Reflect.Value   // a new set, duplicates collapsed; panics if t is not a set type, or a member's type is not assignable to its member type
 Reflect.makeMap(t: Reflect.ErasedType, entries: Array[Entry[Reflect.Value, Reflect.Value]]): Reflect.Value   // a new map, a later entry with an == key replacing an earlier one; panics if t is not a map type, or a key's or value's type is not assignable to its slot
@@ -3771,18 +3776,20 @@ decoder that holds only a slot's erased type boxes every leaf through one call. 
 where the value is not of `t`'s kind, so the same call is the decoder's test that a leaf fits. A
 number converts to any number type as the conversion functions do (section 12), except that a
 conversion that would panic returns `null` too: a fraction, a value out of range, `NaN`, or an
-infinity for an integer type. A float target rounds. `makeArray`, `makeSet`, and `makeMap` need an
-array, set, or map type; a later map entry with an `==` key replaces an earlier one, and duplicate
-set members collapse, as in literals and `Set.of`. `makeRecord` needs a named record type: an
-anonymous record type has no tag to put in the value, and every record value has a name (section 4,
-Records). Every key of `fields` must be a field of the type; each field the map leaves out takes its
-default, evaluated as a literal evaluates it, and a field with no default must be given. The record
-gets the tag, so `is` and `==` work on it as on any literal. `makeTagged` needs a named primitive
-type and a payload whose type is its base. Each builder panics, with a message that names the type
-and the slot, when its contract is broken: the wrong shape of `t`, a part whose type is not
-assignable to its slot, or a missing or unknown field. A library can test each of these first with
-`Reflect.shape` and `Reflect.assignable`, so in a correct library they are bugs, which is what a
-panic is for (section 8).
+infinity for an integer type. A float target rounds, and a finite value beyond its range, such as
+`1e300` for `float32`, is `null` rather than an infinity, as Go's decoders refuse it, so a value the
+decoder accepts is one an encoder can write. `NaN` and the infinities box as themselves.
+`makeArray`, `makeSet`, and `makeMap` need an array, set, or map type; a later map entry with an
+`==` key replaces an earlier one, and duplicate set members collapse, as in literals and `Set.of`.
+`makeRecord` needs a named record type: an anonymous record type has no tag to put in the value, and
+every record value has a name (section 4, Records). Every key of `fields` must be a field of the
+type; each field the map leaves out takes its default, evaluated as a literal evaluates it, and a
+field with no default must be given. The record gets the tag, so `is` and `==` work on it as on any
+literal. `makeTagged` needs a named primitive type and a payload whose type is its base. Each
+builder panics, with a message that names the type and the slot, when its contract is broken: the
+wrong shape of `t`, a part whose type is not assignable to its slot, or a missing or unknown field.
+A library can test each of these first with `Reflect.shape` and `Reflect.assignable`, so in a
+correct library they are bugs, which is what a panic is for (section 8).
 
 **Unchecked runs.** `ant run` does not check annotations, and it does not check `Reflect.valueOf`
 deeply either. It checks that the value has the kind and tag that the type's discriminator names,
