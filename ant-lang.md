@@ -1064,6 +1064,11 @@ A value of type `S` can be used where `T` is expected when one of these holds:
   lambda's value whatever the type said. A callback that must return `void` discards its last value
   with `_ = ...`, which is an assignment and therefore `void`.
 
+A recursive alias is related as `==` compares it (Types as values): a pair already under test counts
+as assignable. With `type F = func(): F | null` and `type G = func(): G | int | null`, an `F` is a
+`G`, since its result `F | null` is a `G | int | null` once an `F` is taken to be a `G`. So the
+relation holds or fails by structure alone, at any depth, with no limit on how deep types nest.
+
 There is no top type: no `any` or `unknown` that every value is assignable to, and no union that
 could serve as one, since arrays, maps, sets, and records have one discriminator each. A function
 that accepts every type is generic, `func show[T](v: T)`, and data whose type is not known
