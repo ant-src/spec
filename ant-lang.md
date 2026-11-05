@@ -736,7 +736,10 @@ checker's work for `is` and for exhaustive chains is one lookup per member.
 Substituting type arguments forms unions too, and the same rules apply where the arguments are
 written. `type Either[A, B] = A | B` is allowed, since two type parameters may share a union, but
 `Either[Box[int], Box[string]]` repeats a tag and `Either[Box[int], { value: string }]` is the
-`Mixed` type above, so both are compile errors at the use.
+`Mixed` type above, so both are compile errors at the use. The use answers for every type its
+arguments reach, through alias bodies and record fields at any depth: with
+`type Holder[A, B] = { either: Either[A, B] }`, `Holder[Box[int], Box[string]]` is the same error,
+whether written in an annotation or a type expression or solved as the result of a generic call.
 
 The sync types, `Random`, `File.Handle`, `Net.Listener`, `Cmd.Process`, and the four types of
 section 11, Reflect, `Reflect.Type[T]`, `Reflect.ErasedType`, `Reflect.Decl`, and `Reflect.Value`,
@@ -882,12 +885,15 @@ A type may refer to itself through a record, array, map, set, or function type, 
 `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of
 plain aliases, is a compile error.
 
-A generic alias that refers to itself, directly or through other aliases, passes its own type
-parameters unchanged and in order, so that every level is the same instantiation:
-`type Nest[T] = Array[Nest[T]] | Box[T]` is fine. A compile error at the declaration is
+A generic type that refers to itself, directly or through other generic types, passes its own
+type parameters unchanged and in order, so that every level is the same instantiation:
+`type Nest[T] = Array[Nest[T]] | Box[T]` and `type List[T] = { value: T, next: List[T] | null }`
+are fine. A compile error at the declaration is
 `type N[A, B] = Array[N[B, Box[A]]] | Map[string, A | B]`, since `N[int, string]` would hold
 `N[string, Box[int]]`, which holds `N[Box[int], Box[string]]`, whose `A | B` repeats a tag (see
-Unions).
+Unions). A record is held to the same rule, so `type Chain[T] = { next: Chain[Box[T]] | null }` is
+an error too: a use is checked against every instantiation it reaches, and with the rule there are
+finitely many.
 
 A `type` in a block keeps a shape next to its one use, since a record value always needs a named
 type. It is visible throughout its block, as a top-level type is throughout its module, so the types
@@ -4111,7 +4117,7 @@ only panic in the ways the last column lists, which depend on values known at ru
 | record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value and has no default                                                                                                     |                                                                                                                                                                                                                                 |
 | array literal                                     | a spread operand is not an array                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
 | `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                                          |                                                                                                                                                                                                                                 |
-| `type(T)`                                         | a name in `T` is neither a built-in type name nor a path that evaluates to a tag or a constructor; a generic type is given the wrong number of type arguments; two members of a union share a discriminator                                                                                    |                                                                                                                                                                                                                                 |
+| `type(T)`                                         | a name in `T` is neither a built-in type name nor a path that evaluates to a tag or a constructor; a generic type is given the wrong number of type arguments; a union, written or formed by substituting type arguments anywhere `T` reaches, breaks the rules of section 4, Unions           |                                                                                                                                                                                                                                 |
 | `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                                                                    | a sequence calls `yield` on another goroutine, after it returned `false`, or after the loop ended; a sequence returns after catching a panic of the body; the loop goes on or ends after a call of `yield` on another goroutine |
 | destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                                                                    | the array has fewer elements than the fixed positions                                                                                                                                                                           |
 | variable                                          | no scope binds the name                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
