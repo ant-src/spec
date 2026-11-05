@@ -885,10 +885,10 @@ A type may refer to itself through a record, array, map, set, or function type, 
 `type Tree = { value: int, children: Array[Tree] }` is fine; `type A = A | null`, or a cycle of
 plain aliases, is a compile error.
 
-A generic type that refers to itself, directly or through other generic types, passes its own
-type parameters unchanged and in order, so that every level is the same instantiation:
-`type Nest[T] = Array[Nest[T]] | Box[T]` and `type List[T] = { value: T, next: List[T] | null }`
-are fine. A compile error at the declaration is
+A generic type that refers to itself, directly or through other generic types, passes its own type
+parameters unchanged and in order, so that every level is the same instantiation:
+`type Nest[T] = Array[Nest[T]] | Box[T]` and `type List[T] = { value: T, next: List[T] | null }` are
+fine. A compile error at the declaration is
 `type N[A, B] = Array[N[B, Box[A]]] | Map[string, A | B]`, since `N[int, string]` would hold
 `N[string, Box[int]]`, which holds `N[Box[int], Box[string]]`, whose `A | B` repeats a tag (see
 Unions). A record is held to the same rule, so `type Chain[T] = { next: Chain[Box[T]] | null }` is
@@ -3801,14 +3801,19 @@ accepts is one an encoder can write. `NaN` and the infinities box as themselves.
 `makeSet`, and `makeMap` need an array, set, or map type; a later map entry with an `==` key
 replaces an earlier one, and duplicate set members collapse, as in literals and `Set.of`.
 `makeRecord` needs a named record type: an anonymous record type has no tag to put in the value, and
-every record value has a name (section 4, Records). Every key of `fields` must be a field of the
-type; each field the map leaves out takes its default, evaluated as a literal evaluates it, and a
-field with no default must be given. The record gets the tag, so `is` and `==` work on it as on any
-literal. `makeTagged` needs a named primitive type and a payload whose type is its base. The other
-five builders panic, with a message that names the type and the slot, when its contract is broken:
-the wrong shape of `t`, a part whose type is not assignable to its slot, or a missing or unknown
-field. A library can test each of these first with `Reflect.shape` and `Reflect.assignable`, so in a
-correct library they are bugs, which is what a panic is for (section 8).
+every record value has a name (section 4, Records). An anonymous record type is a constraint that
+many named types meet, as a parameter type is, so a value is never made at it, by a literal or by
+reflection. A decoder that reaches one builds the named record type its caller chose for that slot,
+typically from a table keyed by type value, and the parent's builder checks that choice with
+`Reflect.assignable`; with no choice it reports the slot, since the data does not say which type the
+value had. Every key of `fields` must be a field of the type; each field the map leaves out takes
+its default, evaluated as a literal evaluates it, and a field with no default must be given. The
+record gets the tag, so `is` and `==` work on it as on any literal. `makeTagged` needs a named
+primitive type and a payload whose type is its base. The other five builders panic, with a message
+that names the type and the slot, when its contract is broken: the wrong shape of `t`, a part whose
+type is not assignable to its slot, or a missing or unknown field. A library can test each of these
+first with `Reflect.shape` and `Reflect.assignable`, so in a correct library they are bugs, which is
+what a panic is for (section 8).
 
 **Defaults.** A default belongs to literals and not to the type (section 4, Field defaults): it is
 evaluated afresh wherever a record is built, and it may read a variable or call a function, so a
