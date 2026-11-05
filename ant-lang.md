@@ -3702,8 +3702,19 @@ that nothing else holds, so a caller may keep it or change it:
   whatever the type arguments, so `Box[int]` and `Box[string]` share one. A `Reflect.Decl` hashes,
   renders as the declared name, and does nothing else. It is the key for anything that applies to
   every instantiation of a generic type, such as a codec for all of `Box[T]` that reads the
-  arguments from `args`. A declared name cannot be that key, because two modules may each declare a
-  `Config`; `String.from` of a `Reflect.Decl` gives the name where a message wants it.
+  arguments from `args`. A declared name cannot be that key, because two modules, or two blocks, may
+  each declare a `Config`.
+- **Names.** `String.from` of a `Reflect.Decl` gives the name written after `type`, whatever name an
+  import or a scope binds it to, and for a prelude declaration the name with its owner, as in
+  `Panic.Frame`. A private declaration renders like an exported one, since privacy applies to names
+  in source and not to data (section 10). The name is the same on every run and machine, so a text
+  format may spell a declaration with it, as an element name or the tag of a union member. It names
+  no module: a module is known only by its file path (section 10), and a path in the data would tie
+  the data to where the source sits. So a name is unique only among the declarations a format
+  chooses from, and a format that reads a declaration back by name checks that those candidates,
+  such as the members of one union, have distinct names, and reports the type otherwise rather than
+  picking one. `A.Circle | B.Circle` cannot be spelled by name; the program renames one, or gives
+  the format a table from `Reflect.Decl` to a name of its own.
 - **Unions.** Members are flattened and deduplicated, aliases are expanded, and the members come in
   the order they were written. The order is for display only: type values compare members as a set
   (section 4, Types as values), so `int | null` and `null | int` are `==` and list their members
