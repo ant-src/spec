@@ -294,6 +294,16 @@ order, as a `type` in a block is throughout its block (section 4, Type declarati
 top-level initializer or statement may refer directly, outside a nested function body, only to the
 `var`s above it (section 10).
 
+Types and values share this one namespace: a `type`, a `var` or `let`, a parameter, a name a `for`
+binds, and an import are all names in a scope, so two of them in one scope are the redeclaration
+above, and an inner one hides an outer one wherever the name is written, in a type as in an
+expression. Inside `func f(Point: int) { ... }`, `Point` is the parameter, so `var p: Point`,
+`type(Array[Point])`, a local type's body, `Point{ ... }`, and `x is Point` there are compile
+errors, as is `Geo.Meters` where a parameter `Geo` hides an imported module. A function's signature
+is outside its body, so its own annotations still name the outer type. The checker reads a name in a
+type where the interpreter evaluates it, in a type expression or a kept body (section 4, Types as
+values), and one namespace makes the two agree.
+
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
 ```ant
@@ -967,10 +977,12 @@ println(a == type(int64))                  // true: int is int64
   constructor. `type(Config)` is the value.
 - **Evaluation.** The runtime resolves the names in `T` as `is` resolves its target (section 12):
   the primitive names, `null`, `void`, `never`, `Array`, `Map`, `Set`, `Bytes`, `Html`, and `func`
-  by name, and any other path by evaluating it, which must give a tag or a constructor. A name that
-  gives neither panics in an unchecked program. Names in a type resolve to the same tags at every
-  evaluation (section 12, Names and scopes), so each type expression yields one value for the whole
-  run, as a regular expression literal does, and an implementation computes it once.
+  by name, and any other path by evaluating it in the scope where `T` is written, which must give a
+  tag or a constructor. That is the scope the checker resolves `T` in, so a local that hides a type
+  is a compile error there rather than a different type (section 3). A name that gives neither
+  panics in an unchecked program. Names in a type resolve to the same tags at every evaluation
+  (section 12, Names and scopes), so each type expression yields one value for the whole run, as a
+  regular expression literal does, and an implementation computes it once.
 - **Equality.** A type value is immutable. Two are `==` when they denote the same type in the sense
   of this section: aliases expanded, unions flattened and compared as sets of members, named types
   compared by tag and type arguments, anonymous record types by field names and types, and function
