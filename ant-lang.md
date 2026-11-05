@@ -3695,6 +3695,7 @@ that nothing else holds, so a caller may keep it or change it:
   anonymous record type. `args` are the type arguments, and `fields` come in declaration order, with
   each field's type already substituted: in `Box[int]`, the field `value` has type `int`.
   `hasDefault` says whether a literal, and so `Reflect.makeRecord`, may leave the field out.
+  Reflection does not give the default itself (see Defaults below).
 - **Tagged primitives.** `base` is the base type. `Id[User]` and `Id[Account]` share a tag but are
   different type values, because their `args` differ.
 - **Declarations.** `decl` is the declaration a named record, named primitive, or opaque type comes
@@ -3808,6 +3809,14 @@ five builders panic, with a message that names the type and the slot, when its c
 the wrong shape of `t`, a part whose type is not assignable to its slot, or a missing or unknown
 field. A library can test each of these first with `Reflect.shape` and `Reflect.assignable`, so in a
 correct library they are bugs, which is what a panic is for (section 8).
+
+**Defaults.** A default belongs to literals and not to the type (section 4, Field defaults): it is
+evaluated afresh wherever a record is built, and it may read a variable or call a function, so a
+field has no one default value for reflection to report. Leaving a field out on encode is the
+encoder's policy, as `omitempty` is in Go, and decoding fills an omitted field from its default as
+it is then, not as it was when the data was written. An encoder that leaves out fields equal to
+their defaults builds one record of defaults per type with `makeRecord`, from any values of the
+required fields, since a default cannot see the other fields, and compares each field with it.
 
 **Unchecked runs.** `ant run` does not check annotations, and it does not check `Reflect.valueOf`
 deeply either. It checks that the value has the kind and tag that the type's discriminator names,
