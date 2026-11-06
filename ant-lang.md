@@ -300,9 +300,11 @@ above, and an inner one hides an outer one wherever the name is written, in a ty
 expression. Inside `func f(Point: int) { ... }`, `Point` is the parameter, so `var p: Point`,
 `type(Array[Point])`, a local type's body, `Point{ ... }`, and `x is Point` there are compile
 errors, as is `Geo.Meters` where a parameter `Geo` hides an imported module. A function's signature
-is outside its body, so its own annotations still name the outer type. The checker reads a name in a
-type where the interpreter evaluates it, in a type expression or a kept body (section 4, Types as
-values), and one namespace makes the two agree.
+is outside its body, so its own annotations still name the outer type. A local hides a type
+parameter of the enclosing function the same way: after `var T = 1` in the body of `func f[T]`,
+`var x: T` is a compile error. The checker reads a name in a type where the interpreter evaluates
+it, in a type expression or a kept body (section 4, Types as values), and one namespace makes the
+two agree.
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
