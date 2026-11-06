@@ -286,25 +286,24 @@ keyword is preferred: a `var` that is never reassigned is as valid as a `let`, a
 or rewrites it.
 
 A name cannot be redeclared in the same scope, which is a syntax error; an inner scope may shadow an
-outer one, except that no declaration in any scope may shadow a prelude name (section 10). A `var`
-is visible from its declaration to the end of the enclosing block; its own initializer may refer to
-it only inside a nested function body, which is how a local function calls itself (section 6).
-Top-level `func`, `type`, and `var` declarations are visible throughout the module regardless of
-order, as a `type` in a block is throughout its block (section 4, Type declarations), but a
-top-level initializer or statement may refer directly, outside a nested function body, only to the
-`var`s above it (section 10).
+outer one, except that no declaration in any scope may shadow a prelude name (section 10), and no
+parameter or local of a generic function, in any of its blocks, may take the name of one of its type
+parameters, which names one type throughout the function. A `var` is visible from its declaration to
+the end of the enclosing block; its own initializer may refer to it only inside a nested function
+body, which is how a local function calls itself (section 6). Top-level `func`, `type`, and `var`
+declarations are visible throughout the module regardless of order, as a `type` in a block is
+throughout its block (section 4, Type declarations), but a top-level initializer or statement may
+refer directly, outside a nested function body, only to the `var`s above it (section 10).
 
-Types and values share this one namespace: a `type`, a `var` or `let`, a parameter, a name a `for`
-binds, and an import are all names in a scope, so two of them in one scope are the redeclaration
-above, and an inner one hides an outer one wherever the name is written, in a type as in an
-expression. Inside `func f(Point: int) { ... }`, `Point` is the parameter, so `var p: Point`,
-`type(Array[Point])`, a local type's body, `Point{ ... }`, and `x is Point` there are compile
-errors, as is `Geo.Meters` where a parameter `Geo` hides an imported module. A function's signature
-is outside its body, so its own annotations still name the outer type. A local hides a type
-parameter of the enclosing function the same way: after `var T = 1` in the body of `func f[T]`,
-`var x: T` is a compile error. The checker reads a name in a type where the interpreter evaluates
-it, in a type expression or a kept body (section 4, Types as values), and one namespace makes the
-two agree.
+Types and values share this one namespace: a `type`, a type parameter, a `var` or `let`, a
+parameter, a name a `for` binds, and an import are all names in a scope, so two of them in one scope
+are the redeclaration above, and an inner one hides an outer one wherever the name is written, in a
+type as in an expression. Inside `func f(Point: int) { ... }`, `Point` is the parameter, so
+`var p: Point`, `type(Array[Point])`, a local type's body, `Point{ ... }`, and `x is Point` there
+are compile errors, as is `Geo.Meters` where a parameter `Geo` hides an imported module. A
+function's signature is outside its body, so its own annotations still name the outer type. The
+checker reads a name in a type where the interpreter evaluates it, in a type expression or a kept
+body (section 4, Types as values), and one namespace makes the two agree.
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
