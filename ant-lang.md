@@ -368,9 +368,11 @@ only on a record type.
 | `never`                            | the type of expressions that do not return, such as `panic(...)` or `return` |
 
 `int` is an alias for `int64` and `byte` for `uint8`. `int` is the default; the sized names are for
-when the size matters. The prelude also declares `Integer`, the union of the eight integer types,
-`Number`, which adds the two float types, and `Ordered`, which is `Number | string`. They exist to
-bound type parameters (see Generics).
+when the size matters. Each pair is one type under two names, and a type is always shown by the
+short one, whichever was written: `type(int64)` prints `int`, `type(Array[uint8])` prints
+`Array[byte]`, and compile errors name them the same way. The prelude also declares `Integer`, the
+union of the eight integer types, `Number`, which adds the two float types, and `Ordered`, which is
+`Number | string`. They exist to bound type parameters (see Generics).
 
 `void` is both a type and its only value, like `null`. A block that ends in a declaration or
 assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly
@@ -995,8 +997,8 @@ println(a == type(int64))                  // true: int is int64
   types by parameters and result. A recursive alias such as `Json.Value` is compared as a cyclic
   value is: a pair already under comparison counts as equal. Hashing agrees, so a type value can be
   a map key, which is how a library keeps a table of per-type codecs. `String.from` renders the type
-  in annotation syntax, with an alias by the name it was written with: `Array[Config]`,
-  `int | null`, `Json.Value`.
+  in annotation syntax, with a declared alias by the name it was written with and `int64` and
+  `uint8` as `int` and `byte` (Primitives): `Array[Config]`, `int | null`, `Json.Value`.
 - **Kept bodies.** A `type` declaration keeps its body, with its type parameters and the scope it
   was declared in, as the syntax the parser built (Type declarations). The body is resolved to a
   type only when a type expression first reaches the declaration, and the result is kept. So a
