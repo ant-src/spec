@@ -151,6 +151,8 @@ that line. A breakpoint that binds to nothing, or whose source is not a module o
 reported unverified, with a message saying why. `setBreakpoints` replaces every breakpoint of its
 source. A stop point a breakpoint binds to stops each goroutine that reaches it, unless the
 breakpoint has a condition, a hit condition, or a log message (section 6, Breakpoint expressions).
+Breakpoints bound to the same stop point act each on its own: each counts its hits and writes its
+log message, and the goroutine stops if any of them stops it.
 
 **All-stop.** When one goroutine stops, for a breakpoint, a step, a pause, a panic, or the entry,
 every goroutine stops: one running Ant code stops at its next stop point, and one waiting in a
