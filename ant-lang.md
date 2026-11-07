@@ -301,9 +301,13 @@ are the redeclaration above, and an inner one hides an outer one wherever the na
 type as in an expression. Inside `func f(Point: int) { ... }`, `Point` is the parameter, so
 `var p: Point`, `type(Array[Point])`, a local type's body, `Point{ ... }`, and `x is Point` there
 are compile errors, as is `Geo.Meters` where a parameter `Geo` hides an imported module. A
-function's signature is outside its body, so its own annotations still name the outer type. The
-checker reads a name in a type where the interpreter evaluates it, in a type expression or a kept
-body (section 4, Types as values), and one namespace makes the two agree.
+function's signature is outside its body, so its own annotations still name the outer type. A type
+parameter hides an outer name of its spelling in every position of its declaration, in a type, as
+the target of `is`, as a literal head, and as the start of a path, though nothing is bound to it at
+run time: inside `func f[T](x: T | null)`, with a top-level `type T` beside it, `x is T`,
+`T{ ... }`, and `T.of(1)` are compile errors, as they are with no outer `T`. The checker reads a
+name in a type where the interpreter evaluates it, in a type expression or a kept body (section 4,
+Types as values), and one namespace makes the two agree.
 
 Assignment is an expression of type `void`, so it cannot be chained or used as a condition:
 
@@ -3939,7 +3943,9 @@ made in a `var`'s initializer sees that `var` once it is bound. The initializer 
 call that reaches the variable before it is bound panics, as for a top-level `var`. Each iteration
 of a `for` opens a fresh scope for the loop variable. A `type` in a block is bound when the block
 starts, so it is visible throughout the block, and every time to the same tag or constructor: one
-per declaration for the whole run.
+per declaration for the whole run. A type parameter binds nothing, but it hides an outer name of its
+spelling throughout its declaration (section 3), so that name is unbound there and evaluating it, as
+the target of `is`, a literal head, or a callee, panics.
 
 The module scope holds every top-level name from the start, so a function body can name a `var`
 declared below it, and a function declared on a type is a field of its tag or constructor from the
