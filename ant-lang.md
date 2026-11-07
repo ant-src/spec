@@ -287,13 +287,14 @@ or rewrites it.
 
 A name cannot be redeclared in the same scope, which is a syntax error; an inner scope may shadow an
 outer one, except that no declaration in any scope may shadow a prelude name (section 10), and no
-parameter or local of a generic function, in any of its blocks, may take the name of one of its type
-parameters, which names one type throughout the function. A `var` is visible from its declaration to
-the end of the enclosing block; its own initializer may refer to it only inside a nested function
-body, which is how a local function calls itself (section 6). Top-level `func`, `type`, and `var`
-declarations are visible throughout the module regardless of order, as a `type` in a block is
-throughout its block (section 4, Type declarations), but a top-level initializer or statement may
-refer directly, outside a nested function body, only to the `var`s above it (section 10).
+parameter or local of a generic function, in any of its blocks, or of a field default of a generic
+record, may take the name of one of the declaration's type parameters, which names one type
+throughout the declaration. A `var` is visible from its declaration to the end of the enclosing
+block; its own initializer may refer to it only inside a nested function body, which is how a local
+function calls itself (section 6). Top-level `func`, `type`, and `var` declarations are visible
+throughout the module regardless of order, as a `type` in a block is throughout its block (section
+4, Type declarations), but a top-level initializer or statement may refer directly, outside a nested
+function body, only to the `var`s above it (section 10).
 
 Types and values share this one namespace: a `type`, a type parameter, a `var` or `let`, a
 parameter, a name a `for` binds, and an import are all names in a scope, so two of them in one scope
