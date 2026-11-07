@@ -1466,7 +1466,8 @@ function it finds.
 
 `x?.f()` yields `null` when `x` is `null` and calls `f` otherwise, as `?.` does for fields. A chain
 may break before `.` or `?.` under the continuation rule (section 2). With a pipe, `a | x.f(b)` is
-`x.f(a, b)`: the receiver comes first, then the pipe's left side.
+`x.f(a, b)`: the receiver is the first argument and the pipe's left side the second, while `a` still
+evaluates before `x`, as the left side of any pipe does (section 12).
 
 ### Pipes
 
@@ -2121,8 +2122,11 @@ parameter, or a top-level `let` (below):
   the body assigned, because the condition was evaluated last.
 - An assignment narrows the variable to the type of the assigned expression, and where branches
   meet, the variable has the union of the branch types, so `if c == null { c = load() }` leaves `c`
-  a `Config`. The narrowing holds even when it makes a later test dead: with `v: UserId | string`,
-  after `v = "plain"` the test `v is UserId` is a compile error, since `v` is then a `string`.
+  a `Config`. In that union, and in the type of an `if` or of a body whose branches it joins, a
+  member that satisfies an interface among the members is absorbed by it: a `Shape` narrowed to a
+  `Circle` in one branch is a `Shape` again where the branches meet (section 4, Interfaces). The
+  narrowing holds even when it makes a later test dead: with `v: UserId | string`, after
+  `v = "plain"` the test `v is UserId` is a compile error, since `v` is then a `string`.
 - Otherwise a narrowing lasts until the next assignment to the variable. Inside a loop, an
   assignment anywhere in the body cancels it from the loop head on.
 
