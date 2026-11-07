@@ -196,6 +196,11 @@ breakpoint. A function breakpoint takes a `condition` and a `hitCondition` as a 
 **Pause.** `pause` stops every goroutine, as a breakpoint would, and the `stopped` event names the
 goroutine `pause` named, or the main goroutine when that one has ended.
 
+Every request is answered, also one with nothing to do. `continue` and a step do nothing while the
+program runs, and `pause` does nothing while it is stopped, before it starts, or after it ends. When
+the program stops as `continue` or a step arrives, the `stopped` event follows the answer, and the
+program stays stopped.
+
 ## 5. Panics
 
 `setExceptionBreakpoints` takes two filters:
