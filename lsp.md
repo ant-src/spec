@@ -114,8 +114,9 @@ closed.
 - In markup (section 5, HTML expressions): element names after `<`, the attributes an element takes
   inside a start tag, and the end tag after `</`.
 - Where a name or a type is written, once its first letter is typed: the importable names that start
-  with what is typed (Imports, below), each with the edit that imports it. The list is then marked
-  incomplete, so that the editor asks again as the word grows.
+  with what is typed (Imports, below), each with the edit that imports it. The list is marked
+  incomplete wherever a name can be written, before the first letter too, so that the editor asks
+  again as the word grows.
 
 Items in markup and in import paths carry the range of the name they replace, including `-`, `.`
 and `/`.
