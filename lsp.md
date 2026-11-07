@@ -117,6 +117,9 @@ closed.
   with what is typed (Imports, below), each with the edit that imports it. The list is then marked
   incomplete, so that the editor asks again as the word grows.
 
+Items in markup and in import paths carry the range of the name they replace, including `-`, `.`
+and `/`.
+
 Each item carries what hover would show, as its detail and documentation: a function's signature, a
 variable's type, and the first sentence of the doc comment (`doc.md` section 2). Items are offered
 once, unsorted; the editor filters and orders them.
