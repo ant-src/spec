@@ -99,7 +99,9 @@ closed.
   functions and types; and the fields of a record, including the fields every member of a union
   declares (section 4, Unions) and, after `?.`, the fields of the members that are not `null`.
 - After `|`: the functions whose first parameter accepts the type of the left side (section 5,
-  Pipes), from the prelude, the imported modules, and the types in scope.
+  Pipes), from the prelude, the imported modules, and the types in scope. A function of a namespace
+  or a type is offered by its qualified name, `Array.filter`, and is found by its own name as well,
+  `filt` finding it; the list is marked incomplete, so that the editor asks again as the word grows.
 - Inside the arguments of a call: the parameters not yet given, as `name:`, beside the names in
   scope.
 - Inside a record literal: the fields not yet given, marking those with a default (section 4, Field
