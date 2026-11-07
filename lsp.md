@@ -119,6 +119,12 @@ Each item carries what hover would show, as its detail and documentation: a func
 variable's type, and the first sentence of the doc comment (`doc.md` section 2). Items are offered
 once, unsorted; the editor filters and orders them.
 
+A function's item inserts the parentheses of a call: after `|` always, since the right side of a
+pipe is a call (section 5, Pipes), and elsewhere when the editor takes snippets, unless the argument
+being written is of a function type, where the name is passed as a value. When the call has
+arguments left to write, a snippet leaves the cursor between the parentheses. Nothing is added when
+a `(` follows the name already.
+
 **Hover** shows, for a name: what it is (a variable, parameter, function, type, namespace, or
 module), its name, and its type as the checker writes it, narrowed at that use (section 7); for a
 function or a type, its signature as written (`doc.md` section 1); and then the doc comment,
