@@ -107,10 +107,12 @@ argument, is a frame directly above the one that called the prelude function.
 | `Module`  | the top-level variables of the frame's module                                    |
 
 A binding is shown once its declaration has run: a `var` or `let` below the position, or a module
-variable whose initializer has not run, is left out. A name an inner binding shadows is left out. A
-`defer` block runs in the environment of the block that registered it, so its bindings, and that
-block's, are its `Locals`. At a pipeline stage, `Locals` starts with `(piped)`, the value flowing
-into the stage. A scope with nothing to show is left out.
+variable whose initializer has not run, is left out. In `Locals` and `Closure`, a name an inner
+binding shadows is left out. `Module` lists every top-level variable, also one a local binding
+shadows, which is seen and set only there. A `defer` block runs in the environment of the block
+that registered it, so its bindings, and that block's, are its `Locals`. At a pipeline stage,
+`Locals` starts with `(piped)`, the value flowing into the stage. A scope with nothing to show is
+left out.
 
 **Variables.** A variable's value is written as `String.from` writes it (section 11), with a string
 in double quotes, and cut to 200 characters. Its type is the value's runtime type: the record or
