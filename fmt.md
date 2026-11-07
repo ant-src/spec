@@ -113,9 +113,10 @@ is added, not even between top-level declarations.
 ### 4.3 Statements and blocks
 
 A block is the body of a `func`, an `if`, `else`, `while`, `for`, `go`, `defer`, `select`, or
-`select` clause, a lambda (section 5, Blocks), or a `test` (section 10, Tests), whose name is
-separated from `test` and from its `{` by one space. The top level of a file is laid out like a
-broken block at indentation zero.
+`select` clause, a lambda (section 5, Blocks), a `test` (section 10, Tests), whose name is separated
+from `test` and from its `{` by one space, or an `interface` (section 4, Interfaces), whose
+signatures are its statements. The top level of a file is laid out like a broken block at
+indentation zero.
 
 A block is **flat** when the author wrote it on one line: no newline between its `{` and its `}`,
 outside the nested brackets of its statements. A newline inside a block comment does not count, nor

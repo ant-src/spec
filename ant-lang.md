@@ -89,7 +89,7 @@ Keywords:
 
 ```
 break continue defer else export false for func go if import
-in is let null return select true try type var void while
+in interface is let null return select true try type var void while
 ```
 
 `type` followed by a name begins a type declaration, and `type` followed by `(` begins a type
@@ -104,9 +104,12 @@ Reserved words, so that they stay available and JavaScript habits produce an err
 identifier:
 
 ```
-as async await catch class const enum finally function interface
-match switch this throw undefined
+as async await catch class const enum finally function
+match Self switch this throw undefined
 ```
+
+`Self` is reserved for one use: it names the satisfying type in the signatures of an `interface`
+declaration (section 4, Interfaces), and anywhere else it is a syntax error.
 
 Neither list can name a variable, function, type, or parameter. A field can have any name: after `.`
 or `?.`, and before `:` in a record type, a record or map literal, or a record destructuring, a
@@ -690,6 +693,7 @@ apart at run time.
 | `Reflect.Decl`                                                                  | declaration                  | none                       | identity                                     | the declared name, `Box`                    | at most one type of these rows                                               |
 | `Reflect.Value`                                                                 | reflected value              | none                       | the type, then the value                     | `Reflect.Value(42: int)`                    | at most one type of these rows                                               |
 | a type parameter                                                                | its argument's               | none                       | as for its argument                          | as for its argument                         | only `null`, `void`, type parameters, and named types without type arguments |
+| an interface                                                                    | its value's                  | none                       | as for its value                             | as for its value                            | at most one, and only beside `null` and `void`                               |
 
 A tag, the value a `type` declaration binds, is not a type in this table: no annotation names it. It
 compares by identity and renders as its type's name. Section 11 gives the full rendering of numbers,
@@ -759,6 +763,10 @@ section 11, Reflect, `Reflect.Type[T]`, `Reflect.ErasedType`, `Reflect.Decl`, an
 have no discriminator either, because `is` does not accept them. A union may contain at most one of
 them, and it is narrowed by testing the other members: after `m != null`, an `m` of type
 `Mutex | null` is a `Mutex`.
+
+An interface (Interfaces, below) has no discriminator and no closed set of members, so a union holds
+it only beside `null` and `void`: `Shape | null` is fine, `Shape | Error` is a compile error, and
+`Result[Shape, Error]` wraps the two instead.
 
 ### Tagged unions
 
@@ -882,10 +890,13 @@ function, a type parameter given as an argument fits when its own bound does, so
 `type W[X: string] = { b: B[X] }` checks and `type V[X] = { b: B[X] }` does not. A type expression
 that breaks a bound panics in an unchecked program (section 12).
 
-There are no interfaces, no `where` clauses, and no type parameters that take type arguments. A user
-type cannot customize `String.from` or ordering, so records sort through `Array.sortBy` or
-`Array.sortWith`. A generic type with different type arguments is a different type: `Array[Circle]`
-is not an `Array[Shape]` (see Assignability).
+A bound may be an interface (Interfaces, below), and every interface is a bound: inside the body a
+`T` bounded by `Shape` has the functions `Shape` lists, called through `.`, and a solution must
+satisfy the interface, as a single member when it is a union. There are no `where` clauses and no
+type parameters that take type arguments. A user type cannot customize `String.from` or ordering, so
+records sort through `Array.sortBy` or `Array.sortWith`, or through a `compare` of their own behind
+an interface bound. A generic type with different type arguments is a different type:
+`Array[Circle]` is not an `Array[Shape]` (see Assignability).
 
 ### Type declarations
 
@@ -979,8 +990,123 @@ A type name is also a namespace holding the functions declared on it (section 6,
 section 10, Namespaces). It is an expression only as the head of a record literal, as the target of
 `is`, as the left side of `.` naming one of its functions, or, for a named primitive type, as its
 constructor. Anywhere else it is a compile error, since a type has no value. A type as a value is
-written `type(T)` (see Types as values), which takes any type, not only a name. There are no
-classes, interfaces, or prototypes.
+written `type(T)` (see Types as values), which takes any type, not only a name. There are no classes
+or prototypes; an interface is a declaration of its own (Interfaces, below).
+
+### Interfaces
+
+`interface` declares a name at the top level of a module, and `export interface` exports it. The
+body lists signatures, one per line, each in the syntax of a function type with parameter names. The
+first parameter of each is the receiver and has the type `Self`, exactly: the satisfying type. A
+signature whose first parameter has another type is a syntax error, a parameter takes no default,
+and a signature declares no type parameters of its own, though the interface may. The body has at
+least one signature, so no interface is satisfied by everything and none is a top type. An alias may
+name an interface, `type Drawable = Shape`, and stands for it as any alias does.
+
+```ant
+interface Shape {
+  area(s: Self): float64
+  name(s: Self): string
+}
+
+interface Container[T] {
+  get(c: Self, i: int): T | null
+  size(c: Self): int
+}
+```
+
+A type `S` **satisfies** `I` when, for each function `f` of `I`, the call `.f(…)` on an `S` resolves
+to a namespace function, not a field (section 5, Calls through `.`), visible where the checker asks,
+whose type with `Self` replaced by `S` is assignable to `f`'s signature. That is: `S` satisfies `I`
+when every call the interface promises checks on an `S`. Nothing declares that it does, as in Go. A
+generic type satisfies an interface for each instantiation its functions cover:
+`func Box.show[T](b: Box[T]): string` makes every `Box[X]` a `Show`. Built-in types satisfy
+interfaces by the same rule, so `string`, `Array[T]`, and `Bytes` are all
+`interface Sized { length(s: Self): int }`, and a `File.Handle` is a `Sink` below without a wrapper.
+
+Visibility is the checker's, at the place it asks: where a value is widened to the interface, a
+bound is solved, or one interface is assigned to another. A type whose `writeLine` is not exported
+is therefore a `Sink` inside its module and not outside it. The interpreter checks no privacy, so
+the function is still called through the interface from any module the value reaches.
+
+Satisfaction is checked as assignability is (Assignability, below): a pair under test counts as
+satisfied, so `interface Node { next(n: Self): Node | null }` holds for
+`func Tree.next(t: Tree): Tree | null`. Type arguments stay invariant inside it, which is the first
+thing a tree runs into: `Array[Tree]` is not an `Array[Node]`, so a `children` that returned the
+field as it is would not satisfy `Node`, and the copy widens, as every container does.
+
+```ant
+interface Node {
+  children(n: Self): Array[Node]
+}
+
+type Tree = { kids: Array[Tree] = [] }
+
+func Tree.children(t: Tree): Array[Node] { [...t.kids] }   // a Node; returning t.kids, an Array[Tree], would not be
+```
+
+**As a type.** An interface whose signatures mention `Self` only as the receiver is a type. A value
+of a satisfying type is assignable to it, as is a union whose every member satisfies it, and so is a
+value of an interface that has all of its functions. Containers stay invariant: `Array[Circle]` is
+not an `Array[Shape]`, and `[...circles]` widens. An interface value is the value itself, with no
+box: `==`, `String.from`, and `Json.stringify` see the value. `is` narrows it to a satisfying type,
+and the `else` branch keeps the interface, since the set of satisfying types is open (section 5,
+`is`).
+
+```ant
+var shapes: Array[Shape] = [Circle{ radius: 1.0 }, Rect{ width: 2.0, height: 3.0 }]
+var total = shapes.map({ x.area() }).sum() ?? 0.0
+
+for s in shapes {
+  if s is Circle { println(s.radius) }
+}
+```
+
+**As a bound.** Every interface is a bound. One that mentions `Self` beyond the receiver is only a
+bound, since a value of it could pass a `Circle` and a `Rect` to one `compare`:
+
+```ant
+interface Compare {
+  compare(a: Self, b: Self): int
+}
+
+type Job = { priority: int, name: string }
+
+func Job.compare(a: Job, b: Job): int { b.priority - a.priority }
+
+func sorted[T: Compare](xs: Array[T]): Array[T] { xs.sortWith(func(a: T, b: T): int { a.compare(b) }) }
+
+var queue: Array[Compare] = []       // compile error: Compare is a bound only
+```
+
+A union solves an interface bound only when the interface is a type, matching the rule that a union
+bound takes a single member (Generics).
+
+**Type or bound.** For an interface that is a type, both forms are legal and behave the same at run
+time, where types are erased. They differ only in what the checker accepts. `xs: Array[Shape]` takes
+a mixed array but not an `Array[Circle]`, since containers are invariant, and its results are
+`Shape`s. `[T: Shape](xs: Array[T])` takes either, `T = Shape` for a mixed array, and its results
+keep `T`, so `largest` of an `Array[Circle]` is a `Circle`. The guide is the one Generics gives for
+union bounds, `choose(a: Number, b: Number)` beside `bigger[T: Ordered]`: take the interface, and
+use a bound when the result must keep the caller's type.
+
+**What an interface is not.** It is not a value or a namespace: `Shape.area` and `is Shape` are
+compile errors. `is` cannot test an interface, because at run time it could test names but not
+signatures. It has no discriminator, so a union holds it only beside `null` and `void` (Unions). It
+is declared only at the top level, since only top-level types have functions. It is not data either:
+a type expression may not reach an interface, so `type(Shape)` and `type(Scene)` with
+`type Scene = { shapes: Array[Shape] }` are compile errors, and `Reflect` has no shape for one
+(Types as values). The interpreter keeps nothing of an interface: the declaration is parsed and
+discarded, like an annotation, so in an unchecked program `Shape` is a name nothing binds, and every
+dynamic call goes through `.`.
+
+**Choosing between the tools.** A closed set of variants is a union, narrowed with `is` and checked
+for exhaustion. An open set is an interface, called with `.`. A function from the receiver's own
+namespace may be called with `.`, `xs.map(f)`, or through the namespace, `xs | Array.map(f)` and
+`Array.map(xs, f)`: all three are legal and none is preferred, and `ant fmt` keeps the one the
+author wrote. Any other function, a module's or another namespace's, is called plainly or through
+`|`: `xs | Iter.fromArray()`, `v | Json.stringify()`, `n | Port`. State captured at construction,
+such as a handler and its configuration, stays a record of closures.
 
 ### Types as values
 
@@ -995,7 +1121,9 @@ form appears, so a block can end in one, as in `func elem(): Reflect.Type[int] {
 Reflect). It is a keyword form, not a call: its contents are type syntax, `type` alone is not a
 value that could be passed or piped, and it takes a type, never a value. Unlike Python's `type(x)`
 or JavaScript's `typeof x`, it does not ask what a value is, and `type(config)` on a variable is a
-compile error that says so.
+compile error that says so. `T` may not reach an interface, directly or through the fields and
+bodies of the declarations it names, since an interface has no run-time identity and no members a
+format could decode into (Interfaces); typed decoding targets a union, whose members it can name.
 
 ```ant
 type Config = { name: string }
@@ -1098,6 +1226,8 @@ A value of type `S` can be used where `T` is expected when one of these holds:
   because contents are mutable: if `Array[Circle]` were an `Array[Shape]`, a widened alias could
   store a `Rect` among the circles for a later read to panic on, and the checker's guarantee would
   be gone.
+- `T` is an interface and `S` satisfies it (Interfaces): a type with the functions, a union whose
+  every member has them, or an interface that has all of `T`'s functions.
 - `S` and `T` are function types with the same number of parameters, each parameter of `T`
   assignable to the corresponding parameter of `S`, and the result of `S` assignable to the result
   of `T`. A function with default parameters is also assignable to a type that lists its required
@@ -1109,7 +1239,8 @@ A value of type `S` can be used where `T` is expected when one of these holds:
 A recursive alias is related as `==` compares it (Types as values): a pair already under test counts
 as assignable. With `type F = func(): F | null` and `type G = func(): G | int | null`, an `F` is a
 `G`, since its result `F | null` is a `G | int | null` once an `F` is taken to be a `G`. So the
-relation holds or fails by structure alone, at any depth, with no limit on how deep types nest.
+relation holds or fails by structure alone, at any depth, with no limit on how deep types nest. An
+interface that names itself in a signature is satisfied the same way.
 
 There is no top type: no `any` or `unknown` that every value is assignable to, and no union that
 could serve as one, since arrays, maps, sets, and records have one discriminator each. A function
@@ -1235,12 +1366,115 @@ var flags = Bits.or(READ, WRITE)
 var high = Bits.shiftRight(word, 8)
 ```
 
+### Calls through `.`
+
+`x.f(a, b)` keeps its meaning when `x` has a field `f`: read the field, call its value. When it has
+none, the call goes to the namespace of `x`'s type and passes `x` first. So
+`users.filter({ x.active }).map({ x.name }).sort()` chains, and `p.norm()` is `Point.norm(p)`.
+
+At run time a call whose callee is `x.f`:
+
+1. evaluates `x`;
+2. reads the field `f` of `x` when there is one, which covers records, module namespaces
+   (`Geometry.distance(p, q)`), tags (`Point.origin()`), and prelude namespaces
+   (`Array.map(xs, f)`), evaluates the arguments and calls the field's value with them, as for any
+   call;
+3. otherwise finds the value's namespace in the table below, reads `f` from it, evaluates the
+   arguments, and calls `f` with `x` first. A value with no namespace, or a namespace without `f`,
+   panics: `int has no field or function abs`, `Point has no field or function nrom`. A tag, a
+   constructor, or a namespace record holds its functions as fields, so a miss on one keeps the
+   message of a field read, `Point has no function nrom` (section 12).
+
+| Value                                                         | Namespace                                                                                                                                      |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| a record or named primitive value of a user type              | its type: the tag, which holds the functions declared on it (section 6, Functions on types)                                                    |
+| a string, `Bytes`, `Html`, an array, a map, a set             | `String`, `Bytes`, `Html`, `Array`, `Map`, `Set`                                                                                               |
+| `Ok`, `Err`                                                   | `Result`                                                                                                                                       |
+| a value of a prelude type `N`, or of a type `N.T` it declares | `N`: `Mutex`, `Channel`, `Error`, …; `File` for `File.Handle`, `Time` for `Time.Instant`, `Regex` for `Regex.Pattern`, `Cmd` for `Cmd.Process` |
+| a function                                                    | `Iter`, for sequences (section 11, Iter)                                                                                                       |
+| a number, `bool`, `null`, `void`                              | none                                                                                                                                           |
+
+That is the whole run-time rule. Only the call form changes: `x.f` outside a call is a field read,
+so a namespace function is reached only by calling it. `var g = p.norm` is a compile error and a
+panic, `{ p.norm() }` is the function value, and `(p.norm)()` is a field read followed by a call.
+The table's rows for the prelude are a list the prelude fixes, as it fixes its names, and a host's
+declaration file adds rows for the types it declares (section 10, Declaration files). `p.norm()` and
+`Point.norm(p)` call the same function when `p` is a `Point`, and a namespace's name stays the way
+to call any other function: `Point.origin()`, `Net.peer(h)`, `Json.stringify(v)`. The interpreter
+checks neither signatures nor privacy, as for any field read of a tag; an unchecked `h.write("x")`
+on a handle calls `File.write`, which takes a path, and panics there as any wrong call does.
+
+The checker resolves `x.f(…)` by the static type of `x`, fields first:
+
+| Type of `x`                                   | `f` is                                                                                                                                 |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| a type with a field `f`                       | the field, called as a function value                                                                                                  |
+| a type with a namespace in the table          | the function `f` of that namespace, if it is visible here and its first parameter accepts `x`; the call is then checked as `N.f(x, …)` |
+| a union whose members share a namespace       | the function `f` of that namespace, checked as `N.f(x, …)` with the union as the receiver                                              |
+| any other union whose every member has an `f` | `f` for every member, field or function; each must accept the arguments, and the result is the union of results                        |
+| an interface                                  | the interface's `f`, with `Self` as the interface                                                                                      |
+| a type parameter                              | as for its bound, with the parameter as the receiver                                                                                   |
+| anything else                                 | a compile error: numbers, `bool`, anonymous record types without the field                                                             |
+
+The checker and the interpreter agree because no value has both a field and a function of one name:
+section 6 forbids it for user types, the prelude's types have none (section 11), and a field never
+satisfies an interface function (section 4, Interfaces), so a value that reaches `x.f(…)` through an
+interface has the function and not the field. Width subtyping cannot add the field behind the
+checker's back either: an anonymous record type has no namespace, so the checker accepts only a
+field call through it.
+
+The call is checked as the direct call it stands for, `Array.sort(points)` for `points.sort()`, with
+the same inference and the same errors, bounds included. The first-parameter condition decides only
+whether `f` is offered on `x` at all, which makes the few namespaces that mix receivers safe: `File`
+holds functions on paths and on handles, and `h.writeLine(line)` resolves while `h.write(text)` is a
+compile error that says `File.write` takes a path. A function with no parameters, such as
+`Point.origin()`, is never reached through a value. The condition is loose on purpose: a generic
+first parameter accepts anything, so `s.from()` on a string is `String.from(s)` and `a.new()` on an
+`Atomic` is `Atomic.new(a)`, correct calls nobody writes.
+
+The same condition makes the function row safe. Every function value's namespace is `Iter`, and
+every function of `Iter` that takes a receiver takes a `Seq[T]`, so
+`Iter.range(0, 9).filter(f).take(5)` checks while `handler.map(f)` on a `func(Request): Response` is
+a compile error that says the function is not a sequence. On an array `.filter` is `Array.filter`,
+eager; on a sequence it is `Iter.filter`, lazy. The receiver's type decides.
+
+The union rows are the field rule of section 4, Tagged unions, applied to functions. A union whose
+members share a namespace is one call, checked as the direct call: a `Result` is a union of `Ok` and
+`Err`, both of which the table sends to `Result`, so `r.unwrapOr(0)` is `Result.unwrapOr(r, 0)`,
+which solves `E` from the union; resolved per member it could not, since an `Ok[int]` alone fixes no
+`E`. `Cmd | Cmd.Pipeline` calls into `Cmd` the same way. Any other union resolves `f` per member, a
+field on one member and a function on another included, since each value does its own lookup at run
+time: a union of types that each have `area` can call `s.area()` without an interface. Every member
+must have an `f`, and the result must be a valid union. `.` never does more than the direct call it
+stands for, so a bound that rejects the union rejects the call: `[T: Time.Point]` takes a single
+member, so `t.add(d)` on a `Time.Instant | Time.PlainDate` fails as `Time.add(t, d)` does, and the
+value is narrowed first.
+
+A function a user declares on an alias, `func Shape.area` with `type Shape = Circle | Rect`, is not
+reached through a value: a `Shape` value carries `Circle`'s tag, and the interpreter looks there. It
+is still called as `Shape.area(s)` (section 6, Functions on types). Only the prelude routes a
+union's members to one namespace, for `Result`. A named primitive value uses its own type's
+namespace, not its base's: `id.length()` on a `UserId` looks in `UserId`, as library functions take
+the base kinds; `string(id).length()` unwraps first.
+
+Named arguments apply when the checker knows the one function called: a field, or a namespace
+function found through a single type or a union whose members share a namespace, so
+`ch.receive(ctx: c)` and `r.unwrapOr(fallback: 0)` work (section 6, Calling). Through a union of
+several namespaces, an interface, or a type parameter the call is positional, since each
+implementation may name its parameters differently and the interpreter binds names against the
+function it finds.
+
+`x?.f()` yields `null` when `x` is `null` and calls `f` otherwise, as `?.` does for fields. A chain
+may break before `.` or `?.` under the continuation rule (section 2). With a pipe, `a | x.f(b)` is
+`x.f(a, b)`: the receiver comes first, then the pipe's left side.
+
 ### Pipes
 
-`a | f(b, c)` means `f(a, b, c)`. The right side must be a call. The pipe replaces method chaining.
-It binds looser than every other operator but assignment, so a pipeline used as an operand is
-parenthesized: `(s | String.trim()) == ""`. A binary operator after a pipe stage, as in
-`s | String.trim() == ""`, is a compile error that says so.
+`a | f(b, c)` means `f(a, b, c)`. The right side must be a call. `.` chains calls of a value's own
+namespace (Calls through `.`); the pipe chains calls of any other function. It binds looser than
+every other operator but assignment, so a pipeline used as an operand is parenthesized:
+`(s | String.trim()) == ""`. A binary operator after a pipe stage, as in `s | String.trim() == ""`,
+is a compile error that says so.
 
 ```ant
 var names = users
@@ -1300,11 +1534,15 @@ a named record or primitive type, a time type, or `Regex.Pattern`. An alias is n
 value carries. So `x is Id` is a compile error that says to test the members, and a panic in an
 unchecked program.
 
-The static type of `x` must be a union with `T` as a member, or an anonymous record type to which
-the named record type `T` is assignable. In the second case the test narrows `x` to the one
-instantiation of `T` assignable to that type, and it is a compile error when the anonymous type does
-not determine every type argument of `T`. Otherwise the test is always true or always false, which
-is a compile error.
+The static type of `x` must be a union with `T` as a member, an anonymous record type to which the
+named record type `T` is assignable, or an interface that `T` satisfies (section 4, Interfaces). In
+the second case the test narrows `x` to the one instantiation of `T` assignable to that type, and it
+is a compile error when the anonymous type does not determine every type argument of `T`; in the
+third the test narrows `x` to the one instantiation of `T` that satisfies the interface, which the
+interface's signatures together determine, and it is a compile error when they do not: `s is Box` is
+an error on a `Shape` and gives a `Box[int]` on a `Container[int]`. An interface is never the
+target: `is Shape` is a compile error. Otherwise the test is always true or always false, which is a
+compile error.
 
 `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected.
 As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
@@ -1733,10 +1971,11 @@ connect("example.com", tls: false)
 connect(port: 80, host: "example.com")
 ```
 
-Named arguments apply only to a direct call of a declared function, by its name or through a
-namespace. A call through a function value is positional, because the value may be a lambda whose
-only parameter is `x`, and the interpreter resolves names against the callee's own parameter list.
-There are no variadic parameters; pass an array.
+Named arguments apply only to a direct call of a declared function, by its name, through a
+namespace, or through a value when the checker knows the one function the call reaches (section 5,
+Calls through `.`). A call through a function value is positional, because the value may be a lambda
+whose only parameter is `x`, and the interpreter resolves names against the callee's own parameter
+list. There are no variadic parameters; pass an array.
 
 ### Anonymous functions
 
@@ -1781,17 +2020,21 @@ next()    // 2
 
 `func Point.distance(a: Point, b: Point)` declares `distance` in the namespace of `Point`: a type's
 name is a namespace (section 10, Namespaces), and this is how a module declares into one. The call
-is `Point.distance(p, q)`, or `p | Point.distance(q)` through the pipe. The type must be declared at
-the top level of the same module and may be a record, a named primitive type, or an alias, including
-an alias of a union, since a module owns only its own types. A type's namespace is therefore closed,
-and the prelude's types cannot be extended.
+is `Point.distance(p, q)`, `p | Point.distance(q)` through the pipe, or `p.distance(q)` through the
+value (section 5, Calls through `.`). The type must be declared at the top level of the same module
+and may be a record, a named primitive type, or an alias, including an alias of a union, since a
+module owns only its own types. A type's namespace is therefore closed, and the prelude's types
+cannot be extended. An interface declares its functions in its body and takes none (section 4,
+Interfaces).
 
 The function is an ordinary function. It need not take the type as a parameter, which is how
 `Point.origin()` and `UserId.parse(s)` are written; it is a value like any other; and named
-arguments apply to it as to any declared function. It is reached only through the type name, never
-bare. Two functions on one type may not share a name, a function may not share its name with a field
-of the type, and an exported function needs an exported type. There is no method call:
-`p.distance(q)` reads a field of `p`, which does not exist.
+arguments apply to it as to any declared function. It is reached through the type name or, when it
+takes the type first, through a value of the type, never bare. Two functions on one type may not
+share a name, a function may not share its name with a field of the type, since `p.f` could then
+mean either, and an exported function needs an exported type. A function declared on an alias of a
+union is reached only through the alias's name: `s.area()` below does not find `Shape.area`, since
+`s` carries `Circle`'s tag and the call looks there.
 
 ```ant
 type Point = { x: float64, y: float64 }
@@ -1802,7 +2045,7 @@ func Point.distance(a: Point, b: Point): float64 {
   Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
 }
 
-func Point.norm(p: Point): float64 { p | Point.distance(Point.origin()) }
+func Point.norm(p: Point): float64 { p.distance(Point.origin()) }
 
 type Circle = { radius: float64 }
 type Rect = { width: float64, height: float64 }
@@ -1821,9 +2064,10 @@ var box = Box{ value: 2 } | Box.map({ x * 10 })        // Box{ value: 20 }
 ```
 
 At run time the functions are fields of the type's tag or constructor (section 12), so
-`Geometry.Point.norm` is a field read like `Array.map`, and `Point.norm` is a function value. The
-standard library is written this way: `Result.ok`, `Mutex.new`, and `Atomic.load` are functions on
-the types `Result`, `Mutex`, and `Atomic` (section 11).
+`Geometry.Point.norm` is a field read like `Array.map`, `Point.norm` is a function value, and
+`p.norm()` reads the same field of `p`'s tag. The standard library is written this way: `Result.ok`,
+`Mutex.new`, and `Atomic.load` are functions on the types `Result`, `Mutex`, and `Atomic` (section
+11).
 
 ## 7. Nullability
 
@@ -1865,7 +2109,9 @@ The checker narrows after a test, as in the last example, but only for a local v
 parameter, or a top-level `let` (below):
 
 - A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`. The
-  `else` branch gets the complement: the union minus the tested member.
+  `else` branch gets the complement: the union minus the tested member. A test on an interface
+  narrows the `then` branch to `T` and leaves the `else` branch the interface, whose satisfying
+  types are an open set (section 4, Interfaces).
 - When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`,
   `continue`, or `panic`, the complement applies to the rest of the block, so
   `if user == null { return }` leaves `user` a `User` below it. `x ?? return ...` and
@@ -2443,9 +2689,9 @@ and not at all when a `Panic.catch` stops it.
 ## 10. Modules
 
 Each file is a module: a sequence of `import` declarations followed by items, which are `var`,
-`let`, `func`, and `type` declarations and statements, in any order. A declaration prefixed with
-`export` is visible to other modules; everything else is private. The module's `//!` lines, before
-its first `import`, document it (section 2).
+`let`, `func`, `type`, and `interface` declarations and statements, in any order. A declaration
+prefixed with `export` is visible to other modules; everything else is private. The module's `//!`
+lines, before its first `import`, document it (section 2).
 
 ```ant
 // geometry.ant
@@ -2480,7 +2726,9 @@ Types and values import alike. A `type` export is its tag, so a record built in 
 `is` test written against the imported name in another, under whatever local name it was given. The
 exported functions declared on a type come with it: `import "./geometry.ant" { Point }` makes
 `Point.distance` available and `Point: P` makes it `P.distance`. A function without `export` is a
-compile error outside its module, like any other private field, except in a test file.
+compile error outside its module, like any other private field, except in a test file. An
+`interface` export is a name for the checker alone: the interpreter binds nothing to it, and an
+exported function that takes one needs it exported as it needs an exported type.
 
 Imports are live and read-only. `export var` and `export let` are allowed; an imported name reads
 the exporting module's current value each time, and assigning to an imported name or to a field of a
@@ -2510,7 +2758,8 @@ A **namespace** is a record whose fields are declarations, read with `.`: `Geome
 nothing else:
 
 - A type. Its name holds the functions declared on it (section 6, Functions on types) and, in the
-  prelude, the types declared on it, as `Panic` holds `Panic.catch` and `Panic.Frame`.
+  prelude, the types declared on it, as `Panic` holds `Panic.catch` and `Panic.Frame`. An interface
+  is not one: its functions are reached only through a value (section 5, Calls through `.`).
 - A module imported under a name, which holds the module's exports.
 - A namespace of the prelude, such as `Array`, `Os`, or `Time`, which holds the functions, types,
   and constants that `prelude.d.ant`, or a host's declaration file, declares on its name
@@ -2721,8 +2970,12 @@ let Math.PI: float64
   its name alone, an empty comment line, and a paragraph, set off from the declarations by blank
   lines, as `prelude.d.ant` documents `Os`. `ant doc` and an editor show it where a declaration's
   doc would be (`doc.md`).
-- There is no `import`, no `export`, and no statement: every declaration is visible, and the file
-  sees only the prelude and its own declarations.
+- The namespace of a type the file declares, for a call through `.` on its values (section 5), is
+  its owner, `Time` for `Time.Instant`, or the type's own name when it has none, as `Mutex` is. No
+  field of a record type may take the name of a function its namespace offers on the type, or
+  `x.f()` would read the field where the author meant the function.
+- There is no `import`, no `export`, no `interface`, and no statement: every declaration is visible,
+  and the file sees only the prelude and its own declarations.
 
 A declaration file cannot be imported, and `ant run` refuses one. `ant check` checks its signatures:
 every type they mention must resolve, every default must fit its type, a name may be declared once,
@@ -2739,9 +2992,14 @@ is written through it, as in `Http.Response`; none has methods or state. Some ar
 functions are declared on the type (section 6), so the name is a type in an annotation and a
 namespace in an expression. `Array`, `Map`, and `Set` hold the functions of the three built-in
 container types, and `String` those of `string`. Every function takes its subject as the first
-argument so it composes with `|`. This section is the complete core library. The I/O namespaces
-`File`, `Http`, `Net`, `Path`, `Time`, `Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto`, and
-`Cmd`, which runs other programs, are policy rather than language and live in `stdlib.md`.
+argument, so it composes with `|` and is reached through `.` on the subject (section 5, Calls
+through `.`): `xs.map(f)`, `s.trim()`, and `r.unwrapOr(0)` are `Array.map(xs, f)`, `String.trim(s)`,
+and `Result.unwrapOr(r, 0)`. The namespace a value reaches is its type's, or the namespace that
+declares its type, and `Ok` and `Err` reach `Result`, the one exception to a prelude type's own
+name. No record type of the prelude has a field named like a function its namespace offers on it.
+This section is the complete core library. The I/O namespaces `File`, `Http`, `Net`, `Path`, `Time`,
+`Os`, `Json`, `Csv`, `Encoding`, `Url`, and `Crypto`, and `Cmd`, which runs other programs, are
+policy rather than language and live in `stdlib.md`.
 
 Signatures are written in Ant's own notation with bounds (section 4, Generics), and a parameter may
 carry a default, which a call omits or names as for a declared function (section 6). A callback
@@ -4021,15 +4279,18 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   `null` when there is none.
 - **`a?.b`, `a?.[i]`, `f?.(x)`.** If the left operand is `null`, the result is `null` and the rest
   of the postfix chain is skipped. Otherwise the plain rule applies.
-- **Call `f(args)`.** `f` evaluates first and must be a function. A constructor takes exactly one
-  positional argument, which must have its base kind, and yields that value carrying the tag. For
-  any other function, arguments evaluate in order. Positional arguments fill parameters left to
-  right; a named argument fills the parameter of that name, which must exist and must not be filled
-  already; every parameter still unfilled must have a default, and the defaults evaluate in the
-  callee's scope, in parameter order, after the arguments. A lambda has the single parameter `x` and
-  accepts zero or one positional argument, binding `x` to `void` when none is given. The body then
-  runs in a new scope, and the call's value is the body's value, or the operand of the `return` that
-  ended it.
+- **Call `f(args)`.** `f` evaluates first and must be a function. When `f` is written `x.f`, `x`
+  evaluates and the field `f` of `x` is read when `x` has one, as above; otherwise the namespace of
+  `x`'s value, which the table of section 5, Calls through `.`, gives, must have a field `f`, whose
+  value is called with `x` as the first argument. A value with no namespace, or a namespace without
+  `f`, panics. A constructor takes exactly one positional argument, which must have its base kind,
+  and yields that value carrying the tag. For any other function, arguments evaluate in order.
+  Positional arguments fill parameters left to right; a named argument fills the parameter of that
+  name, which must exist and must not be filled already; every parameter still unfilled must have a
+  default, and the defaults evaluate in the callee's scope, in parameter order, after the arguments.
+  A lambda has the single parameter `x` and accepts zero or one positional argument, binding `x` to
+  `void` when none is given. The body then runs in a new scope, and the call's value is the body's
+  value, or the operand of the `return` that ended it.
 - **Conversion `int8(x)` … `float64(x)`, `string(x)`, `bool(x)`.** The twelve primitive names are
   prelude functions. A tagged argument is unwrapped first. `string` and `bool` then require their
   own kind and yield the value. For the numeric names the argument must be a number, and the result
@@ -4189,39 +4450,39 @@ keeps it.
 The complete list. The checker rules out every panic in the middle column, so a checked program can
 only panic in the ways the last column lists, which depend on values known at run time.
 
-| Operation                                         | Panics when (ruled out by the checker)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Panics when (possible in a checked program)                                                                                                                                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `+ - * / %`, `< <= > >=`, unary `-`               | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |                                                                                                                                                                                                                                 |
-| `!`, `&&`, `\|\|`, `if`, `while`                  | an operand or condition is not a `bool`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                                                                                                                                                                                                                                 |
-| integer `+ - *`, compound assignment, `Array.sum` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | the result does not fit the kind                                                                                                                                                                                                |
-| integer `/`, `%`                                  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | the divisor is zero                                                                                                                                                                                                             |
-| `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | the count is negative or not below the operand's width                                                                                                                                                                          |
-| numeric conversion                                |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                              |
-| `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                                                                                                                                                                                                                                 |
-| `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, `Bytes`, or a channel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                                                                                                                                                                                                                                 |
-| `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                                                                                                                                                                                                                                 |
-| `a[i]`, `a[i] = v`                                | `a` is not an array or a map, nor `Bytes` for a read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                      |
-| call                                              | the callee is not a function; a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                                                                                                                                                                                                                                 |
-| record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value and has no default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |                                                                                                                                                                                                                                 |
-| array literal                                     | a spread operand is not an array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |                                                                                                                                                                                                                                 |
-| `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                                                                                                                                                                                                                                 |
-| `type(T)`                                         | a name in `T` is neither a built-in type name nor a path that evaluates to a tag or a constructor; a generic type is given the wrong number of type arguments; a union, written or formed by substituting type arguments anywhere `T` reaches, breaks the rules of section 4, Unions; an alias `T` reaches refers to itself without passing through a record, array, map, set, or function, or names itself in a union inside its union body, or is an alias of a record or named primitive type, or is a generic alias on a cycle of aliases through no record's field, or a generic record type `T` reaches refers to itself with other type arguments than its own parameters in order (section 4, Type declarations); a type argument anywhere `T` reaches does not fit its parameter's bound, or a bound there is a type parameter (section 4, Generics) |                                                                                                                                                                                                                                 |
-| `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | a sequence calls `yield` on another goroutine, after it returned `false`, or after the loop ended; a sequence returns after catching a panic of the body; the loop goes on or ends after a call of `yield` on another goroutine |
-| destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | the array has fewer elements than the fixed positions                                                                                                                                                                           |
-| variable                                          | no scope binds the name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                                                                                                                                                                                                                                 |
-| `_`                                               | read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |                                                                                                                                                                                                                                 |
-| library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | the documented case, such as `Result.unwrap` on an `Err`, `Mutex.unlock` when not locked, or `Reflect.to` on a box whose type is not assignable to the type asked for                                                           |
-| `var`, `let`                                      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | read or assigned before its initializer has run: a top-level `var` or `let`, or a local through a call made from its own initializer                                                                                            |
-| assignment                                        | the target is a `let`, a parameter, a lambda's `x`, or a name a `for` binds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |                                                                                                                                                                                                                                 |
-| `panic`                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | always                                                                                                                                                                                                                          |
-| `assert`                                          | the condition is not a `bool`, or the message is not a string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | the condition is `false`                                                                                                                                                                                                        |
-| any call                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                          |
-| a count                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold                          |
-| a result size                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                                                                                                   |
-| HTML expression                                   | a content value is not a string, a number, `void`, `Html`, or an array of them; an `Html` in `<title>` or `<textarea>`; an attribute value of another kind; a written `bool` on an attribute that is not boolean; a spread operand that is not a map of strings to strings, `bool`s, or `null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | a spread gives a name that is not an attribute name, runs code, or is `key`, or a `bool` to an attribute that is not boolean                                                                                                    |
-| `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |                                                                                                                                                                                                                                 |
-| `select`                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | a send clause is chosen on a closed channel                                                                                                                                                                                     |
-| `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | never                                                                                                                                                                                                                           |
+| Operation                                         | Panics when (ruled out by the checker)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Panics when (possible in a checked program)                                                                                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `+ - * / %`, `< <= > >=`, unary `-`               | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
+| `!`, `&&`, `\|\|`, `if`, `while`                  | an operand or condition is not a `bool`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
+| integer `+ - *`, compound assignment, `Array.sum` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the result does not fit the kind                                                                                                                                                                                                |
+| integer `/`, `%`                                  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the divisor is zero                                                                                                                                                                                                             |
+| `Bits.shiftLeft`, `Bits.shiftRight`               |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the count is negative or not below the operand's width                                                                                                                                                                          |
+| numeric conversion                                |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                              |
+| `string`, `bool`                                  | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                 |
+| `len`                                             | the argument, after unwrapping, is not an array, a map, a set, a string, `Bytes`, or a channel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                 |
+| `a.b`, `a.b = v`                                  | `a` is not a record, or has no field `b`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                                                                                                                                                                                                                                 |
+| `a[i]`, `a[i] = v`                                | `a` is not an array or a map, nor `Bytes` for a read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                      |
+| call                                              | the callee is not a function; a call `x.f(args)` whose `x` has no field `f` and whose value has no namespace, or a namespace without `f` (section 5, Calls through `.`); a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
+| record literal                                    | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value and has no default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                                                                                                                                                                                                                                 |
+| array literal                                     | a spread operand is not an array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
+| `is`                                              | the right side is a path that does not evaluate to a record tag, a time type's tag, `Regex.Pattern`, or a constructor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |                                                                                                                                                                                                                                 |
+| `type(T)`                                         | a name in `T` is neither a built-in type name nor a path that evaluates to a tag or a constructor, an interface's name included, which the interpreter never binds; a generic type is given the wrong number of type arguments; a union, written or formed by substituting type arguments anywhere `T` reaches, breaks the rules of section 4, Unions; an alias `T` reaches refers to itself without passing through a record, array, map, set, or function, or names itself in a union inside its union body, or is an alias of a record or named primitive type, or is a generic alias on a cycle of aliases through no record's field, or a generic record type `T` reaches refers to itself with other type arguments than its own parameters in order (section 4, Type declarations); a type argument anywhere `T` reaches does not fit its parameter's bound, or a bound there is a type parameter (section 4, Generics) |                                                                                                                                                                                                                                 |
+| `for`                                             | the operand is not an array, a map, a set, a string, `Bytes`, or a function                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a sequence calls `yield` on another goroutine, after it returned `false`, or after the loop ended; a sequence returns after catching a panic of the body; the loop goes on or ends after a call of `yield` on another goroutine |
+| destructuring                                     | a record destructuring meets a value that is not a record with every named field; an array destructuring meets a value that is not an array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | the array has fewer elements than the fixed positions                                                                                                                                                                           |
+| variable                                          | no scope binds the name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
+| `_`                                               | read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                                                                                                                                                                                                                                 |
+| library function                                  | an argument has a kind the function does not take                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | the documented case, such as `Result.unwrap` on an `Err`, `Mutex.unlock` when not locked, or `Reflect.to` on a box whose type is not assignable to the type asked for                                                           |
+| `var`, `let`                                      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | read or assigned before its initializer has run: a top-level `var` or `let`, or a local through a call made from its own initializer                                                                                            |
+| assignment                                        | the target is a `let`, a parameter, a lambda's `x`, or a name a `for` binds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |                                                                                                                                                                                                                                 |
+| `panic`                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | always                                                                                                                                                                                                                          |
+| `assert`                                          | the condition is not a `bool`, or the message is not a string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | the condition is `false`                                                                                                                                                                                                        |
+| any call                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                          |
+| a count                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold                          |
+| a result size                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                                                                                                   |
+| HTML expression                                   | a content value is not a string, a number, `void`, `Html`, or an array of them; an `Html` in `<title>` or `<textarea>`; an attribute value of another kind; a written `bool` on an attribute that is not boolean; a spread operand that is not a map of strings to strings, `bool`s, or `null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a spread gives a name that is not an attribute name, runs code, or is `key`, or a `bool` to an attribute that is not boolean                                                                                                    |
+| `try`                                             | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
+| `select`                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | a send clause is chosen on a closed channel                                                                                                                                                                                     |
+| `??`, `?.`, `==`, `!=`                            | never                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | never                                                                                                                                                                                                                           |
 
 ## 13. Example
 

@@ -10,14 +10,16 @@ would, on an argument that cannot be, as `int8(300)` does. The comment of each s
 when it panics. Blocking calls block only the calling goroutine (section 9).
 
 A type a namespace declares is written through the namespace, `Json.Value` or `Http.Response`, since
-a namespace that no type declares is reached only through `.` (section 10, Namespaces). A parameter
-with a default may be omitted or named at the call, as for a declared function (section 6, Calling).
-A function that blocks takes a context as its last parameter, `ctx: Context | null = null`, and when
-the context is done gives up with `Err` and the context's reason as the message, as section 9
-(Waiting) has it. A call that takes a path, an address, or a URL names it in an `Err`'s message. A
-call on a handle, which may have no path, and a context's reason name no target, so the caller adds
-it (section 8, Wrapping errors). The namespaces are smaller than the Go packages behind them; a
-function is added when a program needs it, and what is here is complete as written.
+a namespace that no type declares is reached only through `.` (section 10, Namespaces), and a value
+of such a type reaches the namespace's functions through `.` as well, `h.writeLine(line)` for
+`File.writeLine(h, line)` (section 5, Calls through `.`). A parameter with a default may be omitted
+or named at the call, as for a declared function (section 6, Calling). A function that blocks takes
+a context as its last parameter, `ctx: Context | null = null`, and when the context is done gives up
+with `Err` and the context's reason as the message, as section 9 (Waiting) has it. A call that takes
+a path, an address, or a URL names it in an `Err`'s message. A call on a handle, which may have no
+path, and a context's reason name no target, so the caller adds it (section 8, Wrapping errors). The
+namespaces are smaller than the Go packages behind them; a function is added when a program needs
+it, and what is here is complete as written.
 
 ## File
 

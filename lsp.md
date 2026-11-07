@@ -96,8 +96,10 @@ closed.
   declarations, the imported names, and the prelude names, and the keywords that start an expression
   or a statement there.
 - After `.` or `?.`: the members of a namespace, an imported module, or a type, which are its
-  functions and types; and the fields of a record, including the fields every member of a union
-  declares (section 4, Unions) and, after `?.`, the fields of the members that are not `null`.
+  functions and types; the fields of a record, including the fields every member of a union declares
+  (section 4, Unions) and, after `?.`, the fields of the members that are not `null`; and the
+  functions a call through the dot reaches on the value (section 5, Calls through `.`): those of its
+  type's namespace that take it first, or of its interface.
 - After `|`: the functions whose first parameter accepts the type of the left side (section 5,
   Pipes), from the prelude, the imported modules, and the types in scope. A function of a namespace
   or a type is offered by its qualified name, `Array.filter`, and is found by its own name as well,
@@ -118,8 +120,8 @@ closed.
   incomplete wherever a name can be written, before the first letter too, so that the editor asks
   again as the word grows.
 
-Items in markup and in import paths carry the range of the name they replace, including `-`, `.`
-and `/`.
+Items in markup and in import paths carry the range of the name they replace, including `-`, `.` and
+`/`.
 
 Each item carries what hover would show, as its detail and documentation: a function's signature, a
 variable's type, and the first sentence of the doc comment (`doc.md` section 2). Items are offered
@@ -142,17 +144,18 @@ whether it is a void element or takes text only. For a literal or an operator, h
 **Signature help** shows, inside the arguments of a call, the signature of the function called, with
 each parameter's name, type, and default, and marks the active parameter: the one the cursor's
 argument fills, by position or by name (section 6, Calling). Through a pipe the left side fills the
-first parameter, so the active parameter counts from the second. A call of a function value shows
-its function type, whose parameters have no names.
+first parameter, and through `.` the receiver does, so the active parameter counts from the second.
+A call of a function value shows its function type, whose parameters have no names.
 
 **Definition** goes from an identifier to the declaration that binds it: a `var`, a parameter, a
-`func`, a `type`, an import name, or the lambda whose `x` it is; from a member to its declaration in
-the namespace's module or in the prelude; from a field to the field in the type's declaration; from
-the path of an `import` to the file. A declaration of the prelude opens the prelude's source,
-`prelude.d.ant` (section 10, Declaration files), as a read-only document with the URI
-`ant:/prelude.d.ant`, whose text the client fetches with the request `ant/source`, which takes the
-URI and returns the text. The server serves that document as it serves a file: hover, definition,
-and the other requests work inside it.
+`func`, a `type`, an `interface`, an import name, or the lambda whose `x` it is; from a member to
+its declaration in the namespace's module or in the prelude; from the function of a call through `.`
+to that declaration, or to its signature in the interface; from a field to the field in the type's
+declaration; from the path of an `import` to the file. A declaration of the prelude opens the
+prelude's source, `prelude.d.ant` (section 10, Declaration files), as a read-only document with the
+URI `ant:/prelude.d.ant`, whose text the client fetches with the request `ant/source`, which takes
+the URI and returns the text. The server serves that document as it serves a file: hover,
+definition, and the other requests work inside it.
 
 **References**, **document highlight**, and **rename** find every use of a declaration in its
 program, in every module of it. Renaming an export also renames its uses in every module of the

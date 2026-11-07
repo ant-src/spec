@@ -27,16 +27,19 @@ of one is visible, so `ant doc` lists them all and a name finds any of them.
 For a single declaration, `ant doc` prints its signature as written in the source, followed by its
 doc comment with every non-empty line indented by four spaces. The signature of a `func` runs
 through its result type, or its parameters when it has none, of a `type` through its whole
-definition, and of a `var` or `let` through its annotation, leaving out the body or initializer. A
-declaration without a doc comment prints only its signature.
+definition, of an `interface` through its type parameters, and of a `var` or `let` through its
+annotation, leaving out the body or initializer. A declaration without a doc comment prints only its
+signature.
 
 A name without a dot that is a namespace (section 10, Namespaces), a type with functions declared on
 it included, prints its own declaration, if it has one, as above, and then the signature of every
-declaration owned by it, one after another in source order. A namespace that no type declares, such
-as `Array` or `Time`, has the doc of its section label (section 10, Declaration files), which stands
-in for the declaration: its name, then its doc indented. A module prints its doc, if it has one,
-with every non-empty line indented by four spaces, and then the signature of each exported
-declaration in source order.
+declaration owned by it, one after another in source order. An interface prints its functions the
+same way, each as `Name.f` finds it: `ant doc log.ant Sink.writeLine` prints the signature
+`writeLine(s: Self, line: string): Result[void, Error]` and its doc comment (section 4, Interfaces).
+A namespace that no type declares, such as `Array` or `Time`, has the doc of its section label
+(section 10, Declaration files), which stands in for the declaration: its name, then its doc
+indented. A module prints its doc, if it has one, with every non-empty line indented by four spaces,
+and then the signature of each exported declaration in source order.
 
 | Exit status | When                                                                     |
 | ----------- | ------------------------------------------------------------------------ |
