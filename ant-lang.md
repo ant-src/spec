@@ -2822,6 +2822,9 @@ errors. Command-line arguments come from `Os.args()`.
 reach `Os.args()` as they would through `ant run`. A library may have the line too, and runs as any
 library given to `ant run` does.
 
+`ant version` prints the version of the `ant` command, the release it was built from, as in
+`ant v0.1.0`.
+
 The exit status is `0` when the script body ends with its last item or returns anything but an
 `Err`; `1` when it returns an `Err`, after its deferred blocks have run and the `Err`'s `error`
 field and a newline have been written to standard error, an `Error` as its `message` alone and any
