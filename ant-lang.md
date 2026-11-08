@@ -3102,24 +3102,24 @@ Array.length[T](xs: Array[T]): int
 Array.isEmpty[T](xs: Array[T]): bool
 Array.get[T](xs: Array[T], i: int): T | null
 Array.first[T](xs: Array[T]): T | null                         // null when empty
-Array.last[T](xs: Array[T]): T | null
+Array.last[T](xs: Array[T]): T | null                          // the element at length − 1; null when empty
 Array.push[T](xs: Array[T], v: T): void                        // mutates
 Array.extend[T](xs: Array[T], ys: Array[T]): void              // mutates; ys's elements in order, as ys was at the call
-Array.pop[T](xs: Array[T]): T | null                           // mutates; null when empty
+Array.pop[T](xs: Array[T]): T | null                           // mutates; removes and returns the last element; null when empty
 Array.insert[T](xs: Array[T], i: int, v: T): void              // mutates; v becomes element i; panics if i is outside 0 ..= length
 Array.removeAt[T](xs: Array[T], i: int): T                     // mutates; the removed element; panics if i is out of range
 Array.slice[T](xs: Array[T], from: int, to: int): Array[T]     // panics if from > to, or if either is outside 0 ..= length
-Array.concat[T](xs: Array[T], ys: Array[T]): Array[T]
+Array.concat[T](xs: Array[T], ys: Array[T]): Array[T]          // xs's elements, then ys's
 Array.map[T, U](xs: Array[T], f: func(T): U): Array[U]
 Array.flatMap[T, U](xs: Array[T], f: func(T): Array[U]): Array[U]   // the arrays f returns, concatenated
-Array.filter[T](xs: Array[T], f: func(T): bool): Array[T]
-Array.reduce[T, A](xs: Array[T], init: A, f: func(A, T): A): A
+Array.filter[T](xs: Array[T], f: func(T): bool): Array[T]      // the elements f accepts, in order
+Array.reduce[T, A](xs: Array[T], init: A, f: func(A, T): A): A   // from the left, acc = f(acc, x) from init; init when empty
 Array.find[T](xs: Array[T], f: func(T): bool): T | null        // the first element f accepts
-Array.findIndex[T](xs: Array[T], f: func(T): bool): int | null
+Array.findIndex[T](xs: Array[T], f: func(T): bool): int | null   // the index of the first element f accepts
 Array.findLast[T](xs: Array[T], f: func(T): bool): T | null    // the last element f accepts
-Array.findLastIndex[T](xs: Array[T], f: func(T): bool): int | null
-Array.some[T](xs: Array[T], f: func(T): bool): bool
-Array.every[T](xs: Array[T], f: func(T): bool): bool
+Array.findLastIndex[T](xs: Array[T], f: func(T): bool): int | null   // the index of the last element f accepts
+Array.some[T](xs: Array[T], f: func(T): bool): bool            // whether f accepts some element; false when empty
+Array.every[T](xs: Array[T], f: func(T): bool): bool           // whether f accepts every element; true when empty
 Array.countWhere[T](xs: Array[T], f: func(T): bool): int       // how many elements f accepts
 Array.contains[T](xs: Array[T], v: T): bool                    // by ==
 Array.indexOf[T](xs: Array[T], v: T): int | null               // first index, by ==
@@ -3128,18 +3128,18 @@ Array.min[T: Ordered](xs: Array[T]): T | null                  // null when empt
 Array.max[T: Ordered](xs: Array[T]): T | null
 Array.minBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first element with the least key
 Array.maxBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first with the greatest
-Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending, stable; NaN after every number
-Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]   // ascending by key, stable; a NaN key after every number
-Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b; stable
-Array.reverse[T](xs: Array[T]): Array[T]
+Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending by <, stable; NaN after every number; -0.0 and 0.0 equal
+Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]   // ascending by key and <, stable; a NaN key after every number
+Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b, > 0 after, 0 keeps their order; stable
+Array.reverse[T](xs: Array[T]): Array[T]                       // the elements in reverse order
 Array.unique[T](xs: Array[T]): Array[T]                        // the first of each == value, in order
 Array.uniqueBy[T, K](xs: Array[T], key: func(T): K): Array[T]  // the first of each == key, in order
-Array.chunk[T](xs: Array[T], n: int): Array[Array[T]]          // n elements each, the last fewer; panics if n < 1
+Array.chunk[T](xs: Array[T], n: int): Array[Array[T]]          // in order, n elements each, the last fewer when the length is not a multiple of n; panics if n < 1
 Array.groupBy[T, K](xs: Array[T], key: func(T): K): Map[K, Array[T]]   // keys in first-seen order, elements in order
-Array.entries[T](xs: Array[T]): Array[Indexed[T]]
+Array.entries[T](xs: Array[T]): Array[Indexed[T]]              // each element with its index, from 0, in order
 Array.range(from: int, to: int): Array[int]                    // empty when to <= from; panics if to − from is above 2^31 − 1
 Array.filled[T](n: int, v: T): Array[T]                        // the same v in every slot; panics if n < 0 or n is above 2^31 − 1
-Array.flatten[T](xs: Array[Array[T]]): Array[T]
+Array.flatten[T](xs: Array[Array[T]]): Array[T]                // the inner arrays' elements, concatenated in order
 Array.sum[T: Number](xs: Array[T]): T | null                   // null when empty; panics on overflow
 Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 ```
@@ -3151,6 +3151,12 @@ reason. `minBy` and `maxBy` scan from the left and replace the element they hold
 strictly less, or greater, than its key by `<`, so of equal keys the first wins and a `NaN` key
 never replaces one. `Array.chunk([1, 2, 3, 4, 5], 2)` is `[[1, 2], [3, 4], [5]]`, and
 `Array.chunk([], 2)` is `[]`.
+
+A function with a callback calls it once per element, from the first element to the last, except
+that `find`, `findIndex`, `some`, and `every` stop at the first element that decides the result, and
+`findLast` and `findLastIndex` go from the last element back and stop at the first that `f` accepts.
+`sortWith` calls `cmp` as often as sorting needs, in no promised order; when `cmp` is not a
+consistent order, the result holds the elements of `xs` in some order.
 
 ### Map
 
