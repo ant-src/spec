@@ -1266,10 +1266,12 @@ For a `Result`, `try` is the widening step (section 8).
 Inference is local and bidirectional. Every expression either synthesizes a type or is checked
 against an expected type. Expected types come from annotations, parameter types, declared return
 types, the field types of a record literal, the element types of an expected array or map, and the
-branches of an `if` whose whole has an expected type. Nothing is inferred across statements: an
-unannotated `var` takes exactly the type of its initializer. `var s = Active{}` has type `Active`,
-and a later `s = Suspended{ reason: "x" }` is a compile error unless the declaration says
-`var s: Status`.
+branches of an `if` whose whole has an expected type. The right side of `??` takes the expected type
+of the whole; without one, a right side that fixes nothing, as below, takes the left side's type
+without `null`, so `groups[k] ?? []` is an `Array[int]` when `groups` is a `Map[int, Array[int]]`.
+Nothing is inferred across statements: an unannotated `var` takes exactly the type of its
+initializer. `var s = Active{}` has type `Active`, and a later `s = Suspended{ reason: "x" }` is a
+compile error unless the declaration says `var s: Status`.
 
 A generic call solves its type parameters in a fixed order: from the expected type first, then from
 the non-lambda arguments left to right, then from the lambdas. The expected type goes first because
@@ -1279,14 +1281,16 @@ solution from the expected type that breaks the parameter's bound is skipped, an
 solve that parameter instead: under `var r: int | string = bigger(1, 2)`, with `bigger` from
 Generics, the expected type would set `T` to `int | string`, which is not a single member of
 `Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to `int | string`.
-An empty literal, `[]` or `Map{}` or an array of only those, fixes nothing: it waits for the other
-non-lambda arguments and is then checked against what they solved, so `Array.concat([], [1])` sets
-`T` to `int`. If they leave its type open, the literal is an error, as `var zs = []` is: annotate
-it. Lambdas go last so that the other arguments have fixed the type their `x` depends on, which is
-also what lets an editor complete `x.` inside a lambda. A type parameter that nothing fixes is a
-compile error: annotate the result, or use `func` with annotated parameters. Inside a generic
-function its own type parameters are types the caller chooses, so a call in its body binds nothing
-to them: a lambda whose body has another type is an error there, as `var t: T = 1` is.
+An empty literal, `[]` or `Map{}` or an array of only those, fixes nothing, and neither does a call
+whose arguments are only those and lambdas, such as `Set.of([])`. Such an argument waits for the
+other non-lambda arguments and is then checked against what they solved, so `Array.concat([], [1])`
+sets `T` to `int` and `Set.isSubset(Set.of([]), Set.of([1]))` checks. If they leave its type open,
+the literal is an error, as `var zs = []` is: annotate it. Lambdas go last so that the other
+arguments have fixed the type their `x` depends on, which is also what lets an editor complete `x.`
+inside a lambda. A type parameter that nothing fixes is a compile error: annotate the result, or use
+`func` with annotated parameters. Inside a generic function its own type parameters are types the
+caller chooses, so a call in its body binds nothing to them: a lambda whose body has another type is
+an error there, as `var t: T = 1` is.
 
 An argument checked against a union parameter solves it member by member. Each member of the
 argument's type pairs with the parameter's member that has the same discriminator, a kind, a tag or
