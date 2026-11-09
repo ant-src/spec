@@ -52,8 +52,9 @@ the two.
 The server reports every error `ant check` reports, with its message, and every error `ant run`
 reports before any module runs: the syntax errors of sections 2 and 5, the scope and module errors
 of section 10, and the compile errors of sections 4 through 8. Every diagnostic is an error. Its
-range starts where `ant check` prints the position and covers the token, name, or expression the
-message is about.
+range covers the token, name, or expression the message is about, which holds the position
+`ant check` prints: for a binary expression that position is its operator, and for a call its `(`,
+so the range starts before it.
 
 A syntax error does not stop the analysis. The server reads past it to the next statement, and
 resolves and checks what parsed, so completion, hover, and the outline keep working while a line is
