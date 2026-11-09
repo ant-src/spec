@@ -2356,7 +2356,7 @@ func pop[T](stack: Array[T]): T {
 panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
   stack = []
   at pop (stack.ant:2:9)
-    at module main.ant (main.ant:14:9)
+  at module main.ant (main.ant:14:9)
 ```
 
 - **Evaluation.** `cond` is evaluated once. If it is `true`, `assert` returns `void` and `message`
@@ -4488,8 +4488,10 @@ deferred blocks, until the goroutine's root block has exited or a call of `Panic
 returned. A panic inside a deferred block replaces the one in progress. `Panic.catch` stops the
 unwinding at its own call, which returns an `Err` of the panic, and nothing is reported (section 8,
 Catching a panic). Otherwise, when unwinding finishes, the runtime writes the message and a stack
-trace to standard error. In the main goroutine the program then exits with a non-zero status; in any
-other goroutine, that goroutine ends and nothing else happens.
+trace to standard error: `panic: ` and the message, then the parts of a failed `assert` (section 8),
+then one line per frame, innermost first, as `at function (path:line:column)`, each indented by two
+spaces. In the main goroutine the program then exits with a non-zero status; in any other goroutine,
+that goroutine ends and nothing else happens.
 
 ### Goroutines
 
