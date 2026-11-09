@@ -1268,10 +1268,12 @@ against an expected type. Expected types come from annotations, parameter types,
 types, the field types of a record literal, the element types of an expected array or map, and the
 branches of an `if` whose whole has an expected type. The right side of `??` takes the expected type
 of the whole; without one, a right side that fixes nothing, as below, takes the left side's type
-without `null`, so `groups[k] ?? []` is an `Array[int]` when `groups` is a `Map[int, Array[int]]`.
-Nothing is inferred across statements: an unannotated `var` takes exactly the type of its
-initializer. `var s = Active{}` has type `Active`, and a later `s = Suspended{ reason: "x" }` is a
-compile error unless the declaration says `var s: Status`.
+without `null`, so `groups[k] ?? []` is an `Array[int]` when `groups` is a `Map[int, Array[int]]`,
+and a right side that is a call takes that type as a hint (below), so `cached ?? Result.ok(0)` is a
+`Result[int, Error]` when `cached` is a `Result[int, Error] | null`. Nothing is inferred across
+statements: an unannotated `var` takes exactly the type of its initializer. `var s = Active{}` has
+type `Active`, and a later `s = Suspended{ reason: "x" }` is a compile error unless the declaration
+says `var s: Status`.
 
 A generic call solves its type parameters in a fixed order: from the expected type first, then from
 the non-lambda arguments left to right, then from the lambdas. The expected type goes first because
@@ -1281,21 +1283,25 @@ solution from the expected type that breaks the parameter's bound is skipped, an
 solve that parameter instead: under `var r: int | string = bigger(1, 2)`, with `bigger` from
 Generics, the expected type would set `T` to `int | string`, which is not a single member of
 `Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to `int | string`.
-An empty literal, `[]` or `Map{}` or an array of only those, fixes nothing, and neither does a call
-whose arguments are only those and lambdas, such as `Set.of([])`. Such an argument waits for the
-other non-lambda arguments and is then checked against what they solved, so `Array.concat([], [1])`
-sets `T` to `int` and `Set.isSubset(Set.of([]), Set.of([1]))` checks. An array literal with no
-expected type has the union of its elements' types as its element type, as an `if` has the union of
-its branches; an element that fixes nothing waits for the others in the same way, so
-`[Set.of([]), Set.of([1])]` is an `Array[Set[int]]`. If they leave its type open, it is typed on its
-own: a literal is then an error, as `var zs = []` is (annotate it), and a call is typed as any call
-is, so `Set.of([])` reports its `[]` while `ints([])`, for a
-`func ints(xs: Array[int]): Array[int]`, is an `Array[int]`. Lambdas go last so that the other
-arguments have fixed the type their `x` depends on, which is also what lets an editor complete `x.`
-inside a lambda. A type parameter that nothing fixes is a compile error: annotate the result, or use
-`func` with annotated parameters. Inside a generic function its own type parameters are types the
-caller chooses, so a call in its body binds nothing to them: a lambda whose body has another type is
-an error there, as `var t: T = 1` is.
+A call argument whose parameter type is only partly solved, as `Result[T, Error]` is while `T` is
+open, has that type as a hint: a type that solves, after the call's own arguments, only the type
+parameters they leave open, where a part still open solves nothing and a hint that does not fit is
+no error. So `Result.wrapErr(Result.ok(1), "x")` checks: the hint sets `Result.ok`'s `E` to `Error`,
+its argument sets `T` to `int`, and that solves `wrapErr`'s `T`. An empty literal, `[]` or `Map{}`
+or an array of only those, fixes nothing, and neither does a call whose arguments are only those and
+lambdas, such as `Set.of([])`. Such an argument waits for the other non-lambda arguments and is then
+checked against what they solved, so `Array.concat([], [1])` sets `T` to `int` and
+`Set.isSubset(Set.of([]), Set.of([1]))` checks. An array literal with no expected type has the union
+of its elements' types as its element type, as an `if` has the union of its branches; an element
+that fixes nothing waits for the others in the same way, so `[Set.of([]), Set.of([1])]` is an
+`Array[Set[int]]`. If they leave its type open, it is typed on its own: a literal is then an error,
+as `var zs = []` is (annotate it), and a call is typed as any call is, so `Set.of([])` reports its
+`[]` while `ints([])`, for a `func ints(xs: Array[int]): Array[int]`, is an `Array[int]`. Lambdas go
+last so that the other arguments have fixed the type their `x` depends on, which is also what lets
+an editor complete `x.` inside a lambda. A type parameter that nothing fixes is a compile error:
+annotate the result, or use `func` with annotated parameters. Inside a generic function its own type
+parameters are types the caller chooses, so a call in its body binds nothing to them: a lambda whose
+body has another type is an error there, as `var t: T = 1` is.
 
 An argument checked against a union parameter solves it member by member. Each member of the
 argument's type pairs with the parameter's member that has the same discriminator, a kind, a tag or
