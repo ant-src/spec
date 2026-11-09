@@ -93,10 +93,9 @@ block that started them. A `thread` event reports each goroutine that starts and
 
 **Stack frames.** A goroutine's frames are those of its panic trace (section 8, Catching a panic),
 innermost first: one for each call of a function or a lambda in progress, and one for each module
-body that is running, with the same names. A frame's position is the statement or stage (section 4)
-it is stopped at, or, below the innermost, the call it is in. The prelude is not written in Ant, so
-a call of a prelude function has no frame: a lambda the prelude calls, as `Array.map` calls its
-argument, is a frame directly above the one that called the prelude function.
+body that is running, named as there, with no frame for a call of a prelude function. A frame's
+position is the statement or stage (section 4) it is stopped at, or, below the innermost, the call
+it is in.
 
 **Scopes.** Each frame has up to three scopes:
 
@@ -109,10 +108,9 @@ argument, is a frame directly above the one that called the prelude function.
 A binding is shown once its declaration has run: a `var` or `let` below the position, or a module
 variable whose initializer has not run, is left out. In `Locals` and `Closure`, a name an inner
 binding shadows is left out. `Module` lists every top-level variable, also one a local binding
-shadows, which is seen and set only there. A `defer` block runs in the environment of the block
-that registered it, so its bindings, and that block's, are its `Locals`. At a pipeline stage,
-`Locals` starts with `(piped)`, the value flowing into the stage. A scope with nothing to show is
-left out.
+shadows, which is seen and set only there. A `defer` block runs in the environment of the block that
+registered it, so its bindings, and that block's, are its `Locals`. At a pipeline stage, `Locals`
+starts with `(piped)`, the value flowing into the stage. A scope with nothing to show is left out.
 
 **Variables.** A variable's value is written as `String.from` writes it (section 11), with a string
 in double quotes, and cut to 200 characters. Its type is the value's runtime type: the record or

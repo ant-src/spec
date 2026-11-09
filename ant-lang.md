@@ -370,16 +370,16 @@ only on a record type.
 
 ### Primitives
 
-| Type                               | Values                                                                       |
-| ---------------------------------- | ---------------------------------------------------------------------------- |
-| `bool`                             | `true`, `false`                                                              |
-| `int8` `int16` `int32` `int64`     | signed integers                                                              |
-| `uint8` `uint16` `uint32` `uint64` | unsigned integers                                                            |
-| `float32` `float64`                | IEEE 754 floats                                                              |
-| `string`                           | immutable sequence of Unicode code points, stored as UTF-8                   |
-| `null`                             | the single value `null`                                                      |
-| `void`                             | the single value `void`, which carries no information                        |
-| `never`                            | the type of expressions that do not return, such as `panic(...)` or `return` |
+| Type                               | Values                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `bool`                             | `true`, `false`                                                                      |
+| `int8` `int16` `int32` `int64`     | signed integers of 8, 16, 32, and 64 bits, two's complement: −2^(n−1) to 2^(n−1) − 1 |
+| `uint8` `uint16` `uint32` `uint64` | unsigned integers of 8, 16, 32, and 64 bits: 0 to 2^n − 1                            |
+| `float32` `float64`                | IEEE 754 floats                                                                      |
+| `string`                           | immutable sequence of Unicode code points, stored as UTF-8                           |
+| `null`                             | the single value `null`                                                              |
+| `void`                             | the single value `void`, which carries no information                                |
+| `never`                            | the type of expressions that do not return, such as `panic(...)` or `return`         |
 
 `int` is an alias for `int64` and `byte` for `uint8`. `int` is the default; the sized names are for
 when the size matters. Each pair is one type under two names, and a type is always shown by the
@@ -2135,7 +2135,8 @@ parameter, or a top-level `let` (below):
   narrows the `then` branch to `T` and leaves the `else` branch the interface, whose satisfying
   types are an open set (section 4, Interfaces).
 - When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`,
-  `continue`, or `panic`, the complement applies to the rest of the block, so
+  `continue`, or an expression of type `never`, such as `panic(...)`, `Panic.raise(p)`, or a call of
+  a function declared to return `never`, the complement applies to the rest of the block, so
   `if user == null { return }` leaves `user` a `User` below it. `x ?? return ...` and
   `x ?? panic(...)` narrow the same way, and so does `assert(cond)`, as `if !cond { panic(...) }`
   (section 8, `assert`).
@@ -2355,7 +2356,7 @@ func pop[T](stack: Array[T]): T {
 panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
   stack = []
   at pop (stack.ant:2:9)
-  at main (main.ant:14:9)
+    at module main.ant (main.ant:14:9)
 ```
 
 - **Evaluation.** `cond` is evaluated once. If it is `true`, `assert` returns `void` and `message`
@@ -2443,10 +2444,20 @@ type Panic.Frame = { function: string, path: string, line: int, column: int }
 The trace is the goroutine's stack when the panic began, innermost first, the frames the runtime
 writes to standard error for a panic it reports. A frame names a function, the path of its module,
 and the line and column, counted from 1, where that function was: the panic itself in the first
-frame, a call in the others. It runs past `f` to the goroutine's root. A panic in a deferred block
-replaces the one in progress (section 12), so `catch` sees the last. A caught panic is not reported.
-`Panic.raise(p)` panics with `p` as it is, its trace included, so a panic that a caller does not
-handle goes on as though it had not been caught, and is reported where it ends a goroutine.
+frame, a call in the others. The column is that of the token that does the operation: the `(` of a
+call, a conversion included, the `[` of an index, the operator of an arithmetic panic, so that in
+`f(a)(b)` or `a[i][j]` it names the one that failed. A declared function's frame is named as
+declared, `pop` or `Point.norm`; a lambda's or an anonymous `func`'s is named `func`, a module
+body's `module` and the module's path, and a test body's `test "name"` (section 12). The prelude is
+not written in Ant, so a call of a prelude function has no frame: a lambda the prelude calls, as
+`Array.map` calls its argument, is a frame directly above the one that called the prelude function.
+A path is the module's path as the program was given it: the entry file as on the command line, an
+imported module joined to its importer's directory. It runs past `f` to the goroutine's root. A
+panic in a deferred block replaces the one in progress (section 12), so `catch` sees the last. A
+caught panic is not reported. `Panic.raise(p)` panics with `p`'s message and trace, the trace
+unchanged, so a panic that a caller does not handle goes on as though it had not been caught; a
+later `catch` returns a new record equal to `p`, so `Record.same` with `p` is false. Left unhandled,
+it is reported where it ends a goroutine.
 
 ```ant
 type Job = { id: int, input: string }
@@ -3750,9 +3761,9 @@ xs                                                        // [6, 8, 10, 4, 3, 1,
 Result.ok[T, E](value: T): Result[T, E]
 Result.err[T, E](error: E): Result[T, E]
 Result.isOk[T, E](r: Result[T, E]): bool
-Result.map[T, U, E](r: Result[T, E], f: func(T): U): Result[U, E]
-Result.mapErr[T, E, F](r: Result[T, E], f: func(E): F): Result[T, F]
-Result.unwrap[T, E](r: Result[T, E]): T                        // panics if r is an Err
+Result.map[T, U, E](r: Result[T, E], f: func(T): U): Result[U, E]       // Ok of f(r.value); an Err of r.error, f not called
+Result.mapErr[T, E, F](r: Result[T, E], f: func(E): F): Result[T, F]    // Err of f(r.error); an Ok of r.value, f not called
+Result.unwrap[T, E](r: Result[T, E]): T                        // panics if r is an Err, with a message that shows r.error
 Result.unwrapOr[T, E](r: Result[T, E], fallback: T): T
 Result.all[T, E](rs: Array[Result[T, E]]): Result[Array[T], E]   // the first Err, or Ok of every value
 Result.wrapErr[T](r: Result[T, Error], context: string): Result[T, Error]   // r when Ok; else an Err of Error.wrap(r.error, context)
@@ -4350,12 +4361,12 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   own kind and yield the value. For the numeric names the argument must be a number, and the result
   follows this table:
 
-  | From    | To      | Rule                                                                                         |
-  | ------- | ------- | -------------------------------------------------------------------------------------------- |
-  | integer | integer | exact; panics when out of the target's range, including a negative value to an unsigned kind |
-  | integer | float   | rounds to the nearest representable value, ties to even; never panics                        |
-  | float   | integer | must be integral and in range; panics on a fraction, out of range, `NaN`, or an infinity     |
-  | float   | float   | rounds to the nearest representable value; `NaN` and infinities are preserved                |
+  | From    | To      | Rule                                                                                                                                                                                    |
+  | ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | integer | integer | exact; panics when out of the target's range, including a negative value to an unsigned kind                                                                                            |
+  | integer | float   | rounds to the nearest representable value, ties to even; never panics                                                                                                                   |
+  | float   | integer | must be integral and in range; panics on a fraction, out of range, `NaN`, or an infinity                                                                                                |
+  | float   | float   | rounds to the nearest representable value, ties to even; beyond the target's range, an infinity of the sign; below its smallest, a zero of the sign; `NaN` and infinities are preserved |
 
 - **Arithmetic `+ - * / %`.** Both operands must be numbers of the same kind, except that `+` also
   takes two strings and concatenates them. Two tagged values with the same tag are unwrapped,
