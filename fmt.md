@@ -313,9 +313,11 @@ the longest code in the run. A trailing comment with no neighbour is one space a
 author's spacing before a trailing comment is not kept, so the layout depends only on the code and
 reformatting never leaves a column ragged. A blank line, a line without a trailing comment, or a
 change of indentation ends a run, which is how a long line is kept from pushing the others right.
-Columns are counted in Unicode code points, not bytes, so non-ASCII text in a string does not shift
-the alignment. A trailing block comment that spans lines is one space after its code and takes no
-part in a run.
+Columns are counted as a monospace font shows them: a grapheme cluster takes two columns when it
+starts with an East Asian Wide or Fullwidth character, is a flag, or holds the emoji presentation
+selector U+FE0F, and one otherwise, so `é` is one column whether it is one code point or two, and
+`日` and `👍` are two. A trailing block comment that spans lines is one space after its code and
+takes no part in a run.
 
 ```ant
 // before
