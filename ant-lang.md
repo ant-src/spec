@@ -3243,26 +3243,26 @@ of the two variables.
 type Cut = { before: string, after: string }                   // the two sides of String.cut
 
 String.length(s: string): int
-String.isEmpty(s: string): bool
+String.isEmpty(s: string): bool                                // true for "" only
 String.slice(s: string, from: int, to: int): string            // panics as Array.slice does
-String.concat(parts: Array[string]): string
-String.split(s: string, sep: string): Array[string]            // panics if sep is empty
-String.join(parts: Array[string], sep: string): string
+String.concat(parts: Array[string]): string                    // the parts in order, nothing between; "" for []
+String.split(s: string, sep: string): Array[string]            // the pieces around each sep, empty ones kept; [""] for ""; panics if sep is empty
+String.join(parts: Array[string], sep: string): string         // sep between each two parts; "" for []
 String.repeat(s: string, n: int): string                       // panics if n < 0, or n or the result's length in bytes is above 2^31 − 1
 String.trim(s: string): string                                 // Unicode white space at both ends
 String.trimStart(s: string): string                            // at the start only
 String.trimEnd(s: string): string                              // at the end only
 String.trimPrefix(s: string, prefix: string): string           // prefix removed once, when present
-String.trimSuffix(s: string, suffix: string): string
+String.trimSuffix(s: string, suffix: string): string           // suffix removed once, when present
 String.padStart(s: string, width: int, pad: string = " "): string   // pad repeated on the left up to width code points; panics if pad is empty, or width or the result's length in bytes is above 2^31 − 1
 String.padEnd(s: string, width: int, pad: string = " "): string     // on the right; panics as padStart does
-String.contains(s: string, t: string): bool
-String.startsWith(s: string, t: string): bool
-String.endsWith(s: string, t: string): bool
+String.contains(s: string, t: string): bool                    // true when t occurs in s
+String.startsWith(s: string, t: string): bool                  // true when s begins with t
+String.endsWith(s: string, t: string): bool                    // true when s ends with t
 String.indexOf(s: string, t: string): int | null               // first code point index
 String.lastIndexOf(s: string, t: string): int | null           // last code point index
 String.count(s: string, t: string): int                        // non-overlapping occurrences; panics if t is empty
-String.replace(s: string, old: string, new: string): string    // every occurrence; panics if old is empty or the result's length in bytes is above 2^31 − 1
+String.replace(s: string, old: string, new: string): string    // every occurrence, from the left; panics if old is empty or the result's length in bytes is above 2^31 − 1
 String.replaceFirst(s: string, old: string, new: string): string   // the first occurrence only; panics if old is empty
 String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; panics if sep is empty
 String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
@@ -3298,7 +3298,7 @@ String.fromCodePoints(points: Array[int]): string | null       // null when a va
 String.toInt(s: string, base: int = 10): int | null            // digits of base, optional sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
 String.toUint(s: string, base: int = 10): uint64 | null       // digits of base, no sign, no prefix; null otherwise; panics if base is outside 2 ..= 36
 String.toFloat(s: string): float64 | null                     // a decimal number, or NaN or an infinity, below; null otherwise
-String.fromInt[T: Integer](x: T, base: int = 10): string       // lower-case digits, - in front when negative; panics if base is outside 2 ..= 36
+String.fromInt[T: Integer](x: T, base: int = 10): string       // digits 0 to 9 then a to z, - in front when negative, no prefix; panics if base is outside 2 ..= 36
 String.fromFloat(x: float64, digits: int): string              // fixed point with digits decimals, rounded half to even; panics if digits < 0 or is above 2^31 − 1
 String.from[T](value: T): string
 String.unicodeVersion: string                                  // the version of the Unicode tables, such as "17.0.0"
@@ -3331,6 +3331,15 @@ so `String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinit
 `String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
 string would give; there is no format string.
+
+`contains`, `startsWith`, `endsWith`, `indexOf`, `lastIndexOf`, `count`, `replace`, `replaceFirst`,
+`cut`, `split`, `trimPrefix`, and `trimSuffix` match `t` code point by code point, as `==` compares,
+with no case folding or normalization. They take the occurrences of `t` from the left, each starting
+after the end of the one before, so they never overlap: `String.replace("aaa", "aa", "X")` is
+`"Xa"`. The empty string occurs at every index, so `contains`, `startsWith`, and `endsWith` are
+`true` for it, `indexOf` gives `0`, `lastIndexOf` gives the length of `s`, and `trimPrefix` and
+`trimSuffix` return `s`; the functions that count, replace, or cut at each occurrence panic on it
+instead.
 
 `category`, `inScript`, and `codePoint` ask about one character, so they panic on any other string.
 A script is named as in Unicode's `Scripts.txt`, in full: `"Latin"`, `"Han"`, `"Cyrillic"`,
