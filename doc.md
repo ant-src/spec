@@ -83,7 +83,8 @@ conventions the standard library follows, and editors may rely on:
   ```
 
 - **Links** are names in brackets, `[Array.filter]`, which an editor may turn into a link to that
-  declaration. A bracketed text that names no declaration is left as written.
+  declaration. A bracketed text that names no declaration is left as written, and so is a bracket
+  right after a name or another bracket, which holds type arguments, as in `Array[int]`.
 - **Parameters** are named as declared, as in "panics if n < 0", without markup.
 
 There is no other markup: no headings, emphasis, or tables.
