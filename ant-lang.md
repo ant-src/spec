@@ -1287,13 +1287,15 @@ other non-lambda arguments and is then checked against what they solved, so `Arr
 sets `T` to `int` and `Set.isSubset(Set.of([]), Set.of([1]))` checks. An array literal with no
 expected type has the union of its elements' types as its element type, as an `if` has the union of
 its branches; an element that fixes nothing waits for the others in the same way, so
-`[Set.of([]), Set.of([1])]` is an `Array[Set[int]]`. If they leave its type open, the literal is an
-error, as `var zs = []` is: annotate it. Lambdas go last so that the other arguments have fixed the
-type their `x` depends on, which is also what lets an editor complete `x.` inside a lambda. A type
-parameter that nothing fixes is a compile error: annotate the result, or use `func` with annotated
-parameters. Inside a generic function its own type parameters are types the caller chooses, so a
-call in its body binds nothing to them: a lambda whose body has another type is an error there, as
-`var t: T = 1` is.
+`[Set.of([]), Set.of([1])]` is an `Array[Set[int]]`. If they leave its type open, it is typed on its
+own: a literal is then an error, as `var zs = []` is (annotate it), and a call is typed as any call
+is, so `Set.of([])` reports its `[]` while `ints([])`, for a
+`func ints(xs: Array[int]): Array[int]`, is an `Array[int]`. Lambdas go last so that the other
+arguments have fixed the type their `x` depends on, which is also what lets an editor complete `x.`
+inside a lambda. A type parameter that nothing fixes is a compile error: annotate the result, or use
+`func` with annotated parameters. Inside a generic function its own type parameters are types the
+caller chooses, so a call in its body binds nothing to them: a lambda whose body has another type is
+an error there, as `var t: T = 1` is.
 
 An argument checked against a union parameter solves it member by member. Each member of the
 argument's type pairs with the parameter's member that has the same discriminator, a kind, a tag or
@@ -1435,7 +1437,8 @@ field call through it.
 
 The call is checked as the direct call it stands for, `Array.sort(points)` for `points.sort()`, with
 the same inference and the same errors, bounds included. A receiver that fixes nothing (section 4,
-Inference) waits as that first argument would: the namespace comes from its kind alone, so
+Inference) waits as that first argument would. Its namespace is known without its type: an array
+literal is an array, `Map{}` a map, and a call has the namespace of its declared result type, so
 `Set.of([]).isSubset(s)` checks as `Set.isSubset(Set.of([]), s)` does. The first-parameter condition
 decides only whether `f` is offered on `x` at all, which makes the few namespaces that mix receivers
 safe: `File` holds functions on paths and on handles, and `h.writeLine(line)` resolves while
