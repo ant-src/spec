@@ -3334,12 +3334,13 @@ string would give; there is no format string.
 
 `contains`, `startsWith`, `endsWith`, `indexOf`, `lastIndexOf`, `count`, `replace`, `replaceFirst`,
 `cut`, `split`, `trimPrefix`, and `trimSuffix` match `t` code point by code point, as `==` compares,
-with no case folding or normalization. They take the occurrences of `t` from the left, each starting
-after the end of the one before, so they never overlap: `String.replace("aaa", "aa", "X")` is
-`"Xa"`. The empty string occurs at every index, so `contains`, `startsWith`, and `endsWith` are
-`true` for it, `indexOf` gives `0`, `lastIndexOf` gives the length of `s`, and `trimPrefix` and
-`trimSuffix` return `s`; the functions that count, replace, or cut at each occurrence panic on it
-instead.
+with no case folding or normalization. `count`, `replace`, and `split` take the occurrences of `t`
+from the left, each starting after the end of the one before, so they never overlap:
+`String.replace("aaa", "aa", "X")` is `"Xa"`. `lastIndexOf` gives the start of the rightmost
+occurrence, which may overlap another: `String.lastIndexOf("aaa", "aa")` is `1`. The empty string
+occurs at every index, so `contains`, `startsWith`, and `endsWith` are `true` for it, `indexOf`
+gives `0`, `lastIndexOf` gives the length of `s`, and `trimPrefix` and `trimSuffix` return `s`; the
+functions that count, replace, or cut at each occurrence panic on it instead.
 
 `category`, `inScript`, and `codePoint` ask about one character, so they panic on any other string.
 A script is named as in Unicode's `Scripts.txt`, in full: `"Latin"`, `"Han"`, `"Cyrillic"`,
