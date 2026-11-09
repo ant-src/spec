@@ -2371,6 +2371,9 @@ panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
   `assert(isSorted(xs))` shows `xs = [3, 1, 2]`. Left out are literals, the callee of a call, the
   object of a field access or an index (the access is shown), the comparison's two operands (already
   in parentheses), the whole condition, the bodies of lambdas, and a part whose value is a function.
+  In `x.f(…)` the callee is `f`: when `x` is passed as the first argument (section 5, Calls through
+  `.`), it is shown as one, so `assert(xs.contains(5))` shows `xs = [1, 2]` as
+  `assert(Array.contains(xs, 5))` does; a namespace, or a record whose field `f` is called, is not.
   A text that repeats is shown once, with its first value. A part that `&&`, `||`, `??`, or `?.`
   skipped did not run and is not shown.
 - **Values.** Every value is rendered in full by `String.from`, as inside an array, so a string is
