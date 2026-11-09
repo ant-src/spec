@@ -3164,7 +3164,9 @@ consistent order, the result holds the elements of `xs` in some order.
 builds a map from another keeps the order of its source, and `Map.merge` appends the keys of `n`
 that `m` lacks. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes
 `null`, `Map.has` is the only way to tell a missing key from a stored `null`. Functions that take a
-predicate or a mapper receive each `Entry[K, V]`.
+predicate or a mapper receive each `Entry[K, V]`; `map` and `filter` call `f` once per entry, in
+insertion order. Each `Entry` that `entries` returns or a `for` loop visits is a new record, so
+assigning to its fields does not change the map.
 
 ```
 Map.size[K, V](m: Map[K, V]): int
@@ -3175,7 +3177,7 @@ Map.set[K, V](m: Map[K, V], k: K, v: V): void                  // mutates; same 
 Map.remove[K, V](m: Map[K, V], k: K): V | null                 // mutates; the removed value
 Map.keys[K, V](m: Map[K, V]): Array[K]                         // insertion order, as are values and entries
 Map.values[K, V](m: Map[K, V]): Array[V]
-Map.entries[K, V](m: Map[K, V]): Array[Entry[K, V]]
+Map.entries[K, V](m: Map[K, V]): Array[Entry[K, V]]            // new Entry records
 Map.fromEntries[K, V](entries: Array[Entry[K, V]]): Map[K, V]  // later entries win
 Map.map[K, V, W](m: Map[K, V], f: func(Entry[K, V]): W): Map[K, W]
 Map.filter[K, V](m: Map[K, V], f: func(Entry[K, V]): bool): Map[K, V]
@@ -3582,9 +3584,14 @@ Iter.range(from: int, to: int): Seq[int]                       // from inclusive
 Iter.fromArray[T](xs: Array[T]): Seq[T]
 Iter.map[T, U](s: Seq[T], f: func(T): U): Seq[U]
 Iter.filter[T](s: Seq[T], f: func(T): bool): Seq[T]
-Iter.take[T](s: Seq[T], n: int): Seq[T]                        // panics if n < 0
+Iter.take[T](s: Seq[T], n: int): Seq[T]                        // panics if n < 0, when called
 Iter.toArray[T](s: Seq[T]): Array[T]
 ```
+
+`map` and `filter` keep the order of `s` and call `f` once per element they take from `s`, as the
+result runs, and again on each run. `take` stops `s` as soon as it has yielded `n` elements, and
+does not run `s` when `n` is 0, so `Iter.range(0, 1000000) | Iter.map(f) | Iter.take(5)` calls `f`
+five times.
 
 ### Math and Bits
 
@@ -4395,19 +4402,19 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **`for x in e`.** `e` must be an array, a map, a set, a string, `Bytes`, or a function. Over an
   array it iterates by index from zero while the index is below the current length, so elements
   appended during the loop are visited and removed ones are not. Over a map it visits the entries as
-  `Entry` records in insertion order, reading the map as it goes, like an array. An entry inserted
-  during the loop is visited, an entry removed before the loop reaches it is not, and no entry is
-  visited twice. A key removed and inserted again is a new entry at the end. Over a set it visits
-  the members the same way. Over a string it yields each code point as a one-character string, and
-  over `Bytes` each byte as a `byte`. Over a function it calls the function with a fresh `yield`
-  function; each call of `yield` with one argument binds `x`, runs the body, and returns `true`, or
-  `false` when the body ended with `break`. A `return` or a panic in the body propagates through the
-  sequence function like any other call, and ends the loop. The loop also ends when the sequence
-  function returns or a panic leaves it. Calling `yield` again after it returned `false`, or after
-  the loop has ended, panics. A sequence function that returns after a panic left a run of the body,
-  which it can only have done by catching it with `Panic.catch`, makes the loop panic with a message
-  that names the body's, so a sequence cannot hide a bug in the body; one that raises the panic
-  again with `Panic.raise` passes it on as it is. `yield` runs the body only on the loop's
+  new `Entry` records in insertion order, reading the map as it goes, like an array. An entry
+  inserted during the loop is visited, an entry removed before the loop reaches it is not, and no
+  entry is visited twice. A key removed and inserted again is a new entry at the end. Over a set it
+  visits the members the same way. Over a string it yields each code point as a one-character
+  string, and over `Bytes` each byte as a `byte`. Over a function it calls the function with a fresh
+  `yield` function; each call of `yield` with one argument binds `x`, runs the body, and returns
+  `true`, or `false` when the body ended with `break`. A `return` or a panic in the body propagates
+  through the sequence function like any other call, and ends the loop. The loop also ends when the
+  sequence function returns or a panic leaves it. Calling `yield` again after it returned `false`,
+  or after the loop has ended, panics. A sequence function that returns after a panic left a run of
+  the body, which it can only have done by catching it with `Panic.catch`, makes the loop panic with
+  a message that names the body's, so a sequence cannot hide a bug in the body; one that raises the
+  panic again with `Panic.raise` passes it on as it is. `yield` runs the body only on the loop's
   goroutine: a call from another goroutine panics in that goroutine without running it, and after
   such a call the loop panics at the next call of `yield` on its goroutine, at a `return` out of the
   body, or once the sequence function returns, so the loop neither goes on nor ends as though it had
