@@ -3161,7 +3161,7 @@ Array.max[T: Ordered](xs: Array[T]): T | null
 Array.minBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first element with the least key
 Array.maxBy[T, K: Ordered](xs: Array[T], key: func(T): K): T | null   // the first with the greatest
 Array.sort[T: Ordered](xs: Array[T]): Array[T]                 // ascending by <, stable; NaN after every number; -0.0 and 0.0 equal
-Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]   // ascending by key and <, stable; a NaN key after every number
+Array.sortBy[T, K: Ordered](xs: Array[T], key: func(T): K): Array[T]   // ascending by key and <, stable; a NaN key after every number; -0.0 and 0.0 keys equal
 Array.sortWith[T](xs: Array[T], cmp: func(T, T): int): Array[T]   // cmp < 0 puts a before b, > 0 after, 0 keeps their order; stable
 Array.reverse[T](xs: Array[T]): Array[T]                       // the elements in reverse order
 Array.unique[T](xs: Array[T]): Array[T]                        // the first of each == value, in order
@@ -3673,7 +3673,7 @@ Bits.shiftLeft[T: Integer](a: T, n: int): T                    // panics if n < 
 Bits.shiftRight[T: Integer](a: T, n: int): T                   // arithmetic for signed, logical for unsigned; panics as shiftLeft does
 Bits.rotateLeft[T: Integer](a: T, n: int): T                   // by n mod the width, so n may exceed it; panics if n < 0
 Bits.rotateRight[T: Integer](a: T, n: int): T                  // panics if n < 0
-Bits.popCount[T: Integer](a: T): int
+Bits.popCount[T: Integer](a: T): int                           // the set bits of a at its type's width, two's complement: Bits.popCount(int8(-1)) is 8
 Bits.leadingZeros[T: Integer](a: T): int                       // at the type's width, of the two's complement bits; the width for 0
 Bits.trailingZeros[T: Integer](a: T): int                      // likewise
 Bits.wrapAdd[T: Integer](a: T, b: T): T                        // two's complement, never panics
@@ -3685,9 +3685,13 @@ The functions over `float64` follow IEEE 754 and never panic: `Math.log(0.0)` is
 `Math.log(-1.0)` and `Math.sqrt(-1.0)` are `NaN`, and `Math.clamp(x, lo, hi)` with a `NaN` `x` is
 `NaN`. `Math.min` and `Math.max` hold `-0.0` less than `0.0`, as `Array.min` and `Array.max` do,
 though `-0.0 < 0.0` is `false`: `Math.min(0.0, -0.0)` and `Math.min(-0.0, 0.0)` are both `-0.0`, and
-the two `max` calls are both `0.0`. The rotations pair with the shifts and panic on a negative count
-as they do, but a count at or beyond the width is taken modulo the width, since a rotation by the
-width is the identity.
+the two `max` calls are both `0.0`. `Math.abs` of a float clears its sign, so `Math.abs(-0.0)` is
+`0.0`; `Math.clamp` compares with `<`, so `Math.clamp(-0.0, 0.0, 1.0)` is `-0.0`. As in Go, the
+functions are not promised to be correctly rounded: a result may be off by one unit in the last
+place, so `Math.log10(1e15)` may be `14.999999999999998`; the special values (`NaN`, the infinities,
+the zeros) are exact, and so is `Math.log2` of a power of two. The rotations pair with the shifts
+and panic on a negative count as they do, but a count at or beyond the width is taken modulo the
+width, since a rotation by the width is the identity.
 
 ### Random
 
@@ -4377,6 +4381,9 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   Unary `-` needs a number; `!` needs a `bool`.
 - **Comparison `< <= > >=`.** Both operands must be numbers of the same kind, or two strings, which
   compare by code point, or two tagged values with the same tag, which compare as their base kind.
+  Floats compare by IEEE 754: a comparison with a `NaN` operand is `false`, and `-0.0` and `0.0` are
+  equal, so neither is less than the other. For `==` and `!=` the same holds: `NaN == NaN` is
+  `false`, `NaN != NaN` is `true`, and `-0.0 == 0.0` is `true`.
 - **Equality `== !=`.** Never panics. Two values are equal when they have the same kind and: numbers
   are equal by value, with IEEE 754 rules for floats; strings have the same code points; `Bytes`
   have the same bytes; `bool`, `null`, and `void` values are equal by value; records have the same

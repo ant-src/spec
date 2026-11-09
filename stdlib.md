@@ -1133,12 +1133,13 @@ surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text 
 
 `Json.stringify` renders numbers as `String.from` does, so `1e21` is `1e+21`. `NaN` and the
 infinities have no JSON form, and `Json.stringify` panics on them, as Go's `encoding/json` refuses
-them, with `NaN has no JSON form` or `Infinity has no JSON form`; writing `null`, as JavaScript
-does, gives text that reads back as something else. A value that contains itself has no JSON form,
-so `Json.stringify` panics with `cyclic value` where `String.from` would print `...`. Nor has
-`Bytes`, which JSON carries only in an encoding its reader must know, so `Json.stringify` panics on
-it and a program writes `Encoding.toBase64(b)` in its place. Nor has `Html`, which a program renders
-with `String.from` first. Nor has a function, `void`, a type, or a reference such as a channel, a
+them, with `Json.stringify: NaN has no JSON form` or `Json.stringify: Infinity has no JSON form`
+(each of its panic messages begins `Json.stringify: `); writing `null`, as JavaScript does, gives
+text that reads back as something else. A value that contains itself has no JSON form, so
+`Json.stringify` panics with `cyclic value` where `String.from` would print `...`. Nor has `Bytes`,
+which JSON carries only in an encoding its reader must know, so `Json.stringify` panics on it and a
+program writes `Encoding.toBase64(b)` in its place. Nor has `Html`, which a program renders with
+`String.from` first. Nor has a function, `void`, a type, or a reference such as a channel, a
 `Random`, a `Mutex`, or a `File.Handle`, whose state JSON cannot carry, and `Json.stringify` panics
 on each wherever it is in the value, with a message that names it, such as
 `Channel has no JSON form`.
