@@ -1284,13 +1284,16 @@ Generics, the expected type would set `T` to `int | string`, which is not a sing
 An empty literal, `[]` or `Map{}` or an array of only those, fixes nothing, and neither does a call
 whose arguments are only those and lambdas, such as `Set.of([])`. Such an argument waits for the
 other non-lambda arguments and is then checked against what they solved, so `Array.concat([], [1])`
-sets `T` to `int` and `Set.isSubset(Set.of([]), Set.of([1]))` checks. If they leave its type open,
-the literal is an error, as `var zs = []` is: annotate it. Lambdas go last so that the other
-arguments have fixed the type their `x` depends on, which is also what lets an editor complete `x.`
-inside a lambda. A type parameter that nothing fixes is a compile error: annotate the result, or use
-`func` with annotated parameters. Inside a generic function its own type parameters are types the
-caller chooses, so a call in its body binds nothing to them: a lambda whose body has another type is
-an error there, as `var t: T = 1` is.
+sets `T` to `int` and `Set.isSubset(Set.of([]), Set.of([1]))` checks. An array literal with no
+expected type has the union of its elements' types as its element type, as an `if` has the union of
+its branches; an element that fixes nothing waits for the others in the same way, so
+`[Set.of([]), Set.of([1])]` is an `Array[Set[int]]`. If they leave its type open, the literal is an
+error, as `var zs = []` is: annotate it. Lambdas go last so that the other arguments have fixed the
+type their `x` depends on, which is also what lets an editor complete `x.` inside a lambda. A type
+parameter that nothing fixes is a compile error: annotate the result, or use `func` with annotated
+parameters. Inside a generic function its own type parameters are types the caller chooses, so a
+call in its body binds nothing to them: a lambda whose body has another type is an error there, as
+`var t: T = 1` is.
 
 An argument checked against a union parameter solves it member by member. Each member of the
 argument's type pairs with the parameter's member that has the same discriminator, a kind, a tag or
@@ -1431,13 +1434,15 @@ checker's back either: an anonymous record type has no namespace, so the checker
 field call through it.
 
 The call is checked as the direct call it stands for, `Array.sort(points)` for `points.sort()`, with
-the same inference and the same errors, bounds included. The first-parameter condition decides only
-whether `f` is offered on `x` at all, which makes the few namespaces that mix receivers safe: `File`
-holds functions on paths and on handles, and `h.writeLine(line)` resolves while `h.write(text)` is a
-compile error that says `File.write` takes a path. A function with no parameters, such as
-`Point.origin()`, is never reached through a value. The condition is loose on purpose: a generic
-first parameter accepts anything, so `s.from()` on a string is `String.from(s)` and `a.new()` on an
-`Atomic` is `Atomic.new(a)`, correct calls nobody writes.
+the same inference and the same errors, bounds included. A receiver that fixes nothing (section 4,
+Inference) waits as that first argument would: the namespace comes from its kind alone, so
+`Set.of([]).isSubset(s)` checks as `Set.isSubset(Set.of([]), s)` does. The first-parameter condition
+decides only whether `f` is offered on `x` at all, which makes the few namespaces that mix receivers
+safe: `File` holds functions on paths and on handles, and `h.writeLine(line)` resolves while
+`h.write(text)` is a compile error that says `File.write` takes a path. A function with no
+parameters, such as `Point.origin()`, is never reached through a value. The condition is loose on
+purpose: a generic first parameter accepts anything, so `s.from()` on a string is `String.from(s)`
+and `a.new()` on an `Atomic` is `Atomic.new(a)`, correct calls nobody writes.
 
 The same condition makes the function row safe. Every function value's namespace is `Iter`, and
 every function of `Iter` that takes a receiver takes a `Seq[T]`, so
@@ -3169,8 +3174,8 @@ builds a map from another keeps the order of its source, and `Map.merge` appends
 that `m` lacks. `m[k]` reads `V | null`; `m[k] = v` inserts or replaces. When `V` itself includes
 `null`, `Map.has` is the only way to tell a missing key from a stored `null`. Functions that take a
 predicate or a mapper receive each `Entry[K, V]`; `map` and `filter` call `f` once per entry, in
-insertion order. Each `Entry` that `entries` returns or a `for` loop visits is a new record, so
-assigning to its fields does not change the map.
+insertion order. Each `Entry` that `entries` returns, a `for` loop visits, or `map` and `filter`
+pass to `f` is a new record, so assigning to its fields does not change the map.
 
 ```
 Map.size[K, V](m: Map[K, V]): int
