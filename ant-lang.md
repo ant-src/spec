@@ -3688,10 +3688,11 @@ though `-0.0 < 0.0` is `false`: `Math.min(0.0, -0.0)` and `Math.min(-0.0, 0.0)` 
 the two `max` calls are both `0.0`. `Math.abs` of a float clears its sign, so `Math.abs(-0.0)` is
 `0.0`; `Math.clamp` compares with `<`, so `Math.clamp(-0.0, 0.0, 1.0)` is `-0.0`. As in Go, the
 functions are not promised to be correctly rounded: a result may be off by one unit in the last
-place, so `Math.log10(1e15)` may be `14.999999999999998`; the special values (`NaN`, the infinities,
-the zeros) are exact, and so is `Math.log2` of a power of two. The rotations pair with the shifts
-and panic on a negative count as they do, but a count at or beyond the width is taken modulo the
-width, since a rotation by the width is the identity.
+place, and which way can differ between platforms, so `Math.log10(1e15)` may be
+`14.999999999999998`; the special values (`NaN`, the infinities, the zeros) are exact, and so is
+`Math.log2` of a power of two. The rotations pair with the shifts and panic on a negative count as
+they do, but a count at or beyond the width is taken modulo the width, since a rotation by the width
+is the identity.
 
 ### Random
 
