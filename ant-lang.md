@@ -1103,10 +1103,11 @@ dynamic call goes through `.`.
 **Choosing between the tools.** A closed set of variants is a union, narrowed with `is` and checked
 for exhaustion. An open set is an interface, called with `.`. A function from the receiver's own
 namespace may be called with `.`, `xs.map(f)`, or through the namespace, `xs | Array.map(f)` and
-`Array.map(xs, f)`: all three are legal and none is preferred, and `ant fmt` keeps the one the
-author wrote. Any other function, a module's or another namespace's, is called plainly or through
-`|`: `xs | Iter.fromArray()`, `v | Json.stringify()`, `n | Port`. State captured at construction,
-such as a handler and its configuration, stays a record of closures.
+`Array.map(xs, f)`: all three are legal, the language treats them alike, and `ant fmt` keeps the one
+the author wrote; which reads best depends on context. Any other function, a module's or another
+namespace's, is called plainly or through `|`: `xs | Iter.fromArray()`, `v | Json.stringify()`,
+`n | Port()`. State captured at construction, such as a handler and its configuration, stays a
+record of closures.
 
 ### Types as values
 
