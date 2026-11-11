@@ -327,7 +327,9 @@ if count = 5 { ... }    // compile error: void is not bool
 ```
 
 An assignment target is a variable, a field such as `p.x`, an element such as `xs[i]`, or an array
-destructuring of targets such as `[a, b]` (section 5). There is no `++` or `--`.
+destructuring of targets such as `[a, b]` (section 5). There is no `++` or `--`. A compound
+assignment reads its target first, so on a map element, whose read is `V | null` (section 11,
+`Map`), it is a compile error: write `m[k] = (m[k] ?? 0) + 1`.
 
 ## 4. Types
 
