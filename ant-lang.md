@@ -1966,14 +1966,14 @@ but not its last item, or a statement of a script's top level, whose value is di
 ## 6. Functions
 
 `func` declares a named function at the top level of a module; inside a block, bind a function with
-`let` or `var`. Such a function may call itself, since the closure finds the name when it runs, but
-its type must be stated before its body is checked, by a return type on the `func` or a type on the
-binding: inferring it from a body that calls it would meet its own inference in progress. Parameters
-are annotated and are `let` bindings: a body reads them and may change their values through them,
-but assigning a parameter is a compile error, so a body that normalizes one binds a new name, as in
-`var c = ctx ?? Context.new()`. The return type is inferred unless the function is exported or
-recursive (section 4, Inference). The body is a block, so the last expression is the result and
-`return` is only needed to leave early.
+`let` or `var`. Such a function, and a function value bound at the top level, may call itself, since
+the closure finds the name when it runs, but its type must be stated before its body is checked, by
+a return type on the `func` or a type on the binding: inferring it from a body that calls it would
+meet its own inference in progress. Parameters are annotated and are `let` bindings: a body reads
+them and may change their values through them, but assigning a parameter is a compile error, so a
+body that normalizes one binds a new name, as in `var c = ctx ?? Context.new()`. The return type is
+inferred unless the function is exported or recursive (section 4, Inference). The body is a block,
+so the last expression is the result and `return` is only needed to leave early.
 
 ```ant
 func clamp(value: int, low: int, high: int): int {
