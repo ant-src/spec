@@ -1645,12 +1645,13 @@ select {
 A clause is a head and a block, one clause per line; a `;` between clauses is a syntax error. A head
 is one of five blocking calls of section 11 and `stdlib.md`, written as the call would be and not
 performed: `Channel.receive(c)`, `Channel.send(c, v)`, `Context.wait(ctx)`, `WaitGroup.wait(wg)`, or
-`Time.sleep(d)`. `var x =` or `let x =` before a head binds the call's result in the block: a
-receive binds `T | null`, `null` when the channel is closed, a send binds `bool`, and a binding on a
-head that returns `void` is a compile error. A head takes no context, since the context is its own
-clause, and a head given one is a compile error. An `else` block, written last, runs when no head
-can proceed at once, so a `select` with `else` never waits. The block begins at the head's `{`,
-which the header rule above finds: a `{` after a `)` ends a header.
+`Time.sleep(d)`. A head is always written in this namespace form: `c.receive()` is the same call
+elsewhere, but it is not a head. `var x =` or `let x =` before a head binds the call's result in the
+block: a receive binds `T | null`, `null` when the channel is closed, a send binds `bool`, and a
+binding on a head that returns `void` is a compile error. A head takes no context, since the context
+is its own clause, and a head given one is a compile error. An `else` block, written last, runs when
+no head can proceed at once, so a `select` with `else` never waits. The block begins at the head's
+`{`, which the header rule above finds: a `{` after a `)` ends a header.
 
 The heads' operands evaluate first, in order, once. Then the `select` waits until one head can
 proceed, performs it, binds its result, and runs its block, whose value is the value of the
