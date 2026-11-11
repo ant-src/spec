@@ -1386,14 +1386,15 @@ compile error until they are narrowed. Every binary level groups to the left, so
 `(10 - 4) - 3` and `a == b == c` is `(a == b) == c`. Integer overflow panics, including unsigned
 subtraction below zero and the kind's minimum divided by `-1`, whose remainder is `0`, as in Go.
 Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is
-`Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width
-panics.
+`Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`. A shift count outside the operand's width
+panics, but `Bits.shiftLeft` drops the bits it shifts out, into the sign bit too, without an
+overflow panic, as in Go.
 
 Bitwise operations are functions in the `Bits` namespace:
 
 ```ant
-var flags = Bits.or(READ, WRITE)
-var high = Bits.shiftRight(word, 8)
+let flags = Bits.or(READ, WRITE)
+let high = Bits.shiftRight(word, 8)
 ```
 
 ### Calls through `.`
@@ -3708,11 +3709,11 @@ Math.minInt: int                                               // -2^63; not wri
 Math.maxInt: int
 Math.maxUint64: uint64                                         // 2^64 − 1; not writable as a literal
 
-Bits.and[T: Integer](a: T, b: T): T
+Bits.and[T: Integer](a: T, b: T): T                            // of the two's complement bits, as are or, xor, and not: Bits.or(-8, 3) is -5
 Bits.or[T: Integer](a: T, b: T): T
 Bits.xor[T: Integer](a: T, b: T): T
 Bits.not[T: Integer](a: T): T
-Bits.shiftLeft[T: Integer](a: T, n: int): T                    // panics if n < 0 or n >= width
+Bits.shiftLeft[T: Integer](a: T, n: int): T                    // drops the bits shifted out, into the sign bit too, never overflows; panics if n < 0 or n >= width
 Bits.shiftRight[T: Integer](a: T, n: int): T                   // arithmetic for signed, logical for unsigned; panics as shiftLeft does
 Bits.rotateLeft[T: Integer](a: T, n: int): T                   // by n mod the width, so n may exceed it; panics if n < 0
 Bits.rotateRight[T: Integer](a: T, n: int): T                  // panics if n < 0
