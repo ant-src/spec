@@ -1370,7 +1370,7 @@ From tightest to loosest binding:
 | comparison     | `<` `<=` `>` `>=` `is`       | numbers and strings; `is` tests a union member                                                                                                                                                    |
 | equality       | `==` `!=`                    | one operand's type must be assignable to the other's, so `x == null` checks when `x` is nullable; structural (section 4)                                                                          |
 | logical        | `&&` then `\|\|`             | short-circuit, `bool` only                                                                                                                                                                        |
-| null           | `??`                         | cannot mix with `&&` or `\|\|` without parentheses                                                                                                                                                |
+| null           | `??`                         | cannot mix with `&&`, `\|\|`, a comparison, or an equality test without parentheses, so `a ?? b > c` is a syntax error                                                                            |
 | pipe           | `\|`                         | left associative; in a type, `\|` is a union (section 4)                                                                                                                                          |
 | assignment     | `=` `+=` `-=` `*=` `/=` `%=` | type `void`                                                                                                                                                                                       |
 
