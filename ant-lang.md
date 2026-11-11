@@ -1728,7 +1728,7 @@ can only be in a library's top-level initializer or a field default (section 4).
 all of this.
 
 ```ant
-var user = Map.get(users, id) ?? return Result.err(Error{ message: "no such user" })
+var user = Map.get(users, id) ?? return Result.fail("no such user")
 ```
 
 ### HTML expressions
@@ -2232,7 +2232,11 @@ type Result[T, E] = Ok[T] | Err[E]
 `Result.ok(value)` and `Result.err(error)` are plain functions that build the two records;
 `Ok{ value: 1 }` is the same value as `Result.ok(1)`. The error type is whatever the author chooses.
 The standard library uses `Error`, a record `{ message: string }` that context can be added to (see
-Wrapping errors); user code often declares a tagged union of its own.
+Wrapping errors); user code often declares a tagged union of its own. `Result.fail(message)` is
+`Result.err(Error{ message })` typed `Result[T, Error]`, the short way to fail with a message. It
+fits only where the error type is `Error` itself: under a wider one, such as `ParseError | Error`,
+it is a compile error, since type arguments are invariant (section 4), and `Result.err`, which takes
+its error type from the expected one, is the form to write.
 
 ```ant
 type EmptyInput = {}
@@ -2289,9 +2293,9 @@ func loadConfig(path: string): Result[Config, Error] {
 first stage and pipes the value onward. To propagate the error of a whole pipeline, parenthesize it:
 `try (xs | Array.map(parse) | Result.all())`.
 
-Besides the two constructors, `Result` provides `Result.map`, `Result.mapErr`, `Result.wrapErr`,
-`Result.unwrap` (panics on an error), `Result.unwrapOr`, `Result.isOk`, and `Result.all` (section
-11).
+Besides the two constructors and `Result.fail`, `Result` provides `Result.map`, `Result.mapErr`,
+`Result.wrapErr`, `Result.unwrap` (panics on an error), `Result.unwrapOr`, `Result.isOk`, and
+`Result.all` (section 11).
 
 ### Wrapping errors
 
@@ -2537,7 +2541,7 @@ condition holds or the run is cancelled. Locks and conditions take no context.
 
 ```ant
 var ctx = Context.new(Time.duration(seconds: 2))
-var reply = Channel.receive(replies, ctx) ?? return Result.err(Error{ message: "no reply" })
+var reply = Channel.receive(replies, ctx) ?? return Result.fail("no reply")
 ```
 
 A goroutine that waits on several channels writes a `select` (section 5) in a loop, one clause per
@@ -3779,6 +3783,7 @@ xs                                                        // [6, 8, 10, 4, 3, 1,
 ```
 Result.ok[T, E](value: T): Result[T, E]
 Result.err[T, E](error: E): Result[T, E]
+Result.fail[T](message: string): Result[T, Error]              // Result.err(Error{ message })
 Result.isOk[T, E](r: Result[T, E]): bool
 Result.map[T, U, E](r: Result[T, E], f: func(T): U): Result[U, E]       // Ok of f(r.value); an Err of r.error, f not called
 Result.mapErr[T, E, F](r: Result[T, E], f: func(E): F): Result[T, F]    // Err of f(r.error); an Ok of r.value, f not called
@@ -3900,7 +3905,7 @@ A lambda has one parameter, so `map` and `each` take a two-parameter `func`; the
 
 ```ant
 var fetch = func(url: string, work: Context) { Http.get(url, ctx: work) }
-var responses = Parallel.map(urls, fetch, limit: 20, ctx: ctx) ?? return Result.err(Error{ message: "cancelled" })
+var responses = Parallel.map(urls, fetch, limit: 20, ctx: ctx) ?? return Result.fail("cancelled")
 var pages = try (responses | Result.all())
 
 Parallel.each(jobs, func(job: Job, work: Context) { process(job, work) }, limit: 8, ctx: ctx)
@@ -3915,7 +3920,7 @@ Parallel.run([
 var reply = Parallel.any([
   { Http.get(primary, ctx: x) },
   { Http.get(mirror, ctx: x) },
-], ctx: ctx) ?? return Result.err(Error{ message: "cancelled" })
+], ctx: ctx) ?? return Result.fail("cancelled")
 ```
 
 The rules:
