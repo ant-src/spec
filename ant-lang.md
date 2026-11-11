@@ -41,13 +41,13 @@ module doc lines below may follow it. A `#!` anywhere else, after a space or on 
 syntax error.
 
 A doc comment is a run of line comments, each alone on its line, on consecutive lines, followed by a
-line break and then directly by a top-level `var`, `let`, `func`, or `type` declaration, or by the
-`export` that starts one, with nothing between but white space. It documents that declaration. A
-blank line, a block comment, a module doc line, or a comment that follows code on its line ends the
-run, so a comment separated from a declaration by a blank line documents nothing, and neither does a
-trailing comment on the line before it; in `var a = 1; var b = 2`, a doc comment above the line
-documents only `a`. The doc is the run's text with each line's `//`, the one space after it when
-present, and its trailing white space removed.
+line break and then directly by a top-level `var`, `let`, `func`, `type`, or `interface`
+declaration, or by the `export` that starts one, with nothing between but white space. It documents
+that declaration. A blank line, a block comment, a module doc line, or a comment that follows code
+on its line ends the run, so a comment separated from a declaration by a blank line documents
+nothing, and neither does a trailing comment on the line before it; in `var a = 1; var b = 2`, a doc
+comment above the line documents only `a`. The doc is the run's text with each line's `//`, the one
+space after it when present, and its trailing white space removed.
 
 A line comment that starts with `//!` is a module doc line, and the module doc lines of a file
 document the module (section 10). They come before its first `import` or declaration, each alone on
@@ -1300,7 +1300,9 @@ the other non-lambda arguments and is then checked against what they solved, so
 `Array.concat([], [1])` sets `T` to `int` and `Set.isSubset(Set.of([]), Set.of([1]))` checks. An
 array literal with no expected type has the union of its elements' types as its element type, as an
 `if` has the union of its branches; an element that fixes nothing waits for the others in the same
-way, so `[Set.of([]), Set.of([1])]` is an `Array[Set[int]]`. If they leave its type open, it is
+way, so `[Set.of([]), Set.of([1])]` is an `Array[Set[int]]`. A map literal with no expected type has
+the union of its keys' types as its key type and of its values' types as its value type, and a key
+or value that fixes nothing waits for the others in the same way. If they leave its type open, it is
 typed on its own: a literal is then an error, as `var zs = []` is (annotate it), and a call is typed
 as any call is, so `Set.of([])` reports its `[]` while `ints([])`, for a
 `func ints(xs: Array[int]): Array[int]`, is an `Array[int]`. Lambdas go last so that the other
@@ -1379,8 +1381,10 @@ An arithmetic or comparison operator needs both operands of the same type, and t
 single numeric kind, `string` where strings are allowed, or one named primitive type over such a
 base. An arithmetic result has the operands' type, tag included; a comparison or an equality test is
 a plain `bool`. A union such as `Number` is not a kind, so `a > b` on two `Number` values is a
-compile error until they are narrowed. Integer overflow panics, including unsigned subtraction below
-zero. Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is
+compile error until they are narrowed. Every binary level groups to the left, so `10 - 4 - 3` is
+`(10 - 4) - 3` and `a == b == c` is `(a == b) == c`. Integer overflow panics, including unsigned
+subtraction below zero and the kind's minimum divided by `-1`, whose remainder is `0`, as in Go.
+Division by zero panics for integers and follows IEEE 754 for floats. Wrapping arithmetic is
 `Bits.wrapAdd`, `Bits.wrapSub`, and `Bits.wrapMul`, and a shift count outside the operand's width
 panics.
 
@@ -2462,17 +2466,18 @@ and the line and column, counted from 1, where that function was: the panic itse
 frame, a call in the others. The column is that of the token that does the operation: the `(` of a
 call, a conversion included, the `[` of an index, the operator of an arithmetic panic, so that in
 `f(a)(b)` or `a[i][j]` it names the one that failed. A declared function's frame is named as
-declared, `pop` or `Point.norm`; a lambda's or an anonymous `func`'s is named `func`, a module
-body's `module` and the module's path, and a test body's `test "name"` (section 12). The prelude is
-not written in Ant, so a call of a prelude function has no frame: a lambda the prelude calls, as
-`Array.map` calls its argument, is a frame directly above the one that called the prelude function.
-A path is the module's path as the program was given it: the entry file as on the command line, an
-imported module joined to its importer's directory. It runs past `f` to the goroutine's root. A
-panic in a deferred block replaces the one in progress (section 12), so `catch` sees the last. A
-caught panic is not reported. `Panic.raise(p)` panics with `p`'s message and trace, the trace
-unchanged, so a panic that a caller does not handle goes on as though it had not been caught; a
-later `catch` returns a new record equal to `p`, so `Record.same` with `p` is false. Left unhandled,
-it is reported where it ends a goroutine.
+declared, `pop` or `Point.norm`; a lambda's or an anonymous `func`'s is named `func`, a `go` block's
+`go block`, a module body's `module` and the module's path, and a test body's `test "name"` (section
+12). A `defer` block has no frame of its own: a panic in one is reported in the frame of the body
+that registered it. The prelude is not written in Ant, so a call of a prelude function has no frame:
+a lambda the prelude calls, as `Array.map` calls its argument, is a frame directly above the one
+that called the prelude function. A path is the module's path as the program was given it: the entry
+file as on the command line, an imported module joined to its importer's directory. It runs past `f`
+to the goroutine's root. A panic in a deferred block replaces the one in progress (section 12), so
+`catch` sees the last. A caught panic is not reported. `Panic.raise(p)` panics with `p`'s message
+and trace, the trace unchanged, so a panic that a caller does not handle goes on as though it had
+not been caught; a later `catch` returns a new record equal to `p`, so `Record.same` with `p` is
+false. Left unhandled, it is reported where it ends a goroutine.
 
 ```ant
 type Job = { id: int, input: string }
@@ -2816,7 +2821,8 @@ nothing else:
 - A type. Its name holds the functions declared on it (section 6, Functions on types) and, in the
   prelude, the types declared on it, as `Panic` holds `Panic.catch` and `Panic.Frame`. An interface
   is not one: its functions are reached only through a value (section 5, Calls through `.`).
-- A module imported under a name, which holds the module's exports.
+- A module imported under a name, which holds the module's exports. It is not a value, so
+  `let g = Geometry` is a compile error.
 - A namespace of the prelude, such as `Array`, `Os`, or `Time`, which holds the functions, types,
   and constants that `prelude.d.ant`, or a host's declaration file, declares on its name
   (Declaration files, below).
@@ -3449,11 +3455,12 @@ version assigns is unassigned, `"Cn"`, until the implementation moves to that ve
 is the format a program's output has. It is the only function the language calls implicitly, and
 only inside `${...}` of a string and on a number in an HTML expression (section 5).
 
-- Integers render in decimal. Floats render as the shortest decimal that reads back to the same
-  value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A nonzero magnitude at or above
-  `1e21` or below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`.
-  `-0.0` keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values
-  render as `NaN`, `Infinity`, and `-Infinity`.
+- Integers render in decimal. Floats render as the shortest decimal that reads back, at the value's
+  own precision, to the same value, with `.0` added when integral, so `float32(0.1)` renders as
+  `0.1`: `1.5`, `100.0`, `0.001`. A nonzero magnitude at or above `1e21` or below `1e-6` takes the
+  exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. `-0.0` keeps its sign and renders
+  as `-0.0`, where JavaScript writes `0`. The non-finite values render as `NaN`, `Infinity`, and
+  `-Infinity`.
 - A string renders as itself at the top level and quoted with escapes inside a container. Inside the
   quotes, `"` and `\` are escaped, a `$` before `{` is written `\$`, `\n`, `\t`, and `\r` are
   written so, and every other code point that `String.isPrint` rejects, such as a control character,
@@ -4560,7 +4567,7 @@ only panic in the ways the last column lists, which depend on values known at ru
 | `+ - * / %`, `< <= > >=`, unary `-`                                        | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
 | `!`, `&&`, `\|\|`, `if`, `while`                                           | an operand or condition is not a `bool`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
 | integer `+ - *`, unary `-`, compound assignment, `Array.sum`, `Atomic.add` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the result, or a partial sum of `Array.sum`, does not fit the kind                                                                                                                                                              |
-| integer `/`, `%`                                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the divisor is zero                                                                                                                                                                                                             |
+| integer `/`, `%`                                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the divisor is zero, or for `/` the dividend is the kind's minimum and the divisor `-1`                                                                                                                                         |
 | `Bits.shiftLeft`, `Bits.shiftRight`                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the count is negative or not below the operand's width                                                                                                                                                                          |
 | numeric conversion                                                         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                              |
 | `string`, `bool`                                                           | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                 |
