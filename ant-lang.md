@@ -2791,12 +2791,12 @@ Types and values import alike. A `type` export is its tag, so a record built in 
 exported functions declared on a type come with it: `import "./geometry.ant" { Point }` makes
 `Point.distance` available and `Point: P` makes it `P.distance`. A function without `export` is a
 compile error outside its module, like any other private field, except in a test file. An
-`interface` export is a name for the checker alone: the interpreter binds nothing to it, so an
-exported function whose parameters, result, or bounds name an interface of its module needs that
-interface exported, and so does an exported interface whose functions or bounds name one and an
-exported `var` or `let` whose type does. Any other private type may appear in an exported signature:
-the importer holds such a value but cannot name its type, as with a field of an exported type, where
-a private interface may appear too.
+`interface` export is a name for the checker alone: the interpreter binds nothing to it. An importer
+must be able to name an interface it is asked to satisfy, so an interface of the module that an
+export names needs to be exported too: in an exported function's parameters, result, or bounds, an
+exported interface's functions or bounds, an exported type's fields, alias body, or bounds, and an
+exported `var` or `let`'s type. Any other private type may appear in an export: the importer holds
+such a value but cannot name its type.
 
 Imports are live and read-only. `export var` and `export let` are allowed; an imported name reads
 the exporting module's current value each time, and assigning to an imported name or to a field of a
