@@ -3442,12 +3442,14 @@ only inside `${...}` of a string and on a number in an HTML expression (section 
   quotes, `"` and `\` are escaped, a `$` before `{` is written `\$`, `\n`, `\t`, and `\r` are
   written so, and every other code point that `String.isPrint` rejects, such as a control character,
   a non-breaking space, a zero-width joiner, or a bidirectional override, is written `\u{...}` in
-  lower-case hexadecimal without leading zeros, as `\u{7f}`. So is a combining mark, one in M, right
-  after the opening quote, where it would combine with the quote: `String.from(["\u{301}"])` is
-  `["\u{301}"]`. The rendering reads back as a literal, and shows the code points an emoji is joined
-  from: `String.from(["👨‍👩‍👧"])` is `["👨\u{200d}👩\u{200d}👧"]`. A combining mark after a base is
-  written as itself, so `"e\u{301}"` and `"\u{e9}"` look the same, and `String.toCodePoints` tells
-  them apart. `bool`, `null`, and `void` render as their literals.
+  lower-case hexadecimal without leading zeros, as `\u{7f}`. So is a code point that would join the
+  character before it into one grapheme cluster (UAX #29), such as a combining mark or an emoji
+  modifier, when it comes right after the opening quote or an escape:
+  `String.from(["\u{301}", "\n\u{301}"])` is `["\u{301}", "\n\u{301}"]`. The rendering reads back as
+  a literal, and shows the code points an emoji is joined from: `String.from(["👨‍👩‍👧"])` is
+  `["👨\u{200d}👩\u{200d}👧"]`. A combining mark after a base is written as itself, so `"e\u{301}"`
+  and `"\u{e9}"` look the same, and `String.toCodePoints` tells them apart. `bool`, `null`, and
+  `void` render as their literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
   call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
   their tag and the fields in declaration order. Entries are separated by `, `. An empty array, map,
