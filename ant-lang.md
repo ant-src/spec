@@ -2166,10 +2166,10 @@ including an imported one, never narrows either, because any call may reassign i
 local first in the same way.
 
 A top-level `let`, of a library or a script, and an imported `let` narrow in any function, lambda,
-or block that tests them, like a local never assigned after its declaration. Nothing can reassign
-them, and reading one before its initializer has run panics rather than returning a stale value, so
-the narrowing is sound. A test outside a `func` declaration does not reach into it, for the reason
-given below for scripts.
+or block that tests them, like a local `let`. Nothing can reassign them, and reading one before its
+initializer has run panics rather than returning a stale value, so the narrowing is sound. A test
+outside a `func` declaration does not reach into it: the declaration is hoisted and has no position,
+so it may run before the test.
 
 ```ant
 // settings.ant
@@ -2187,11 +2187,8 @@ func port(): int {
 
 A script's top-level `var`s are different: a script cannot be imported, so only its own code assigns
 them, and they are locals of the script body (section 10). They narrow in its top-level code like
-any local, and the script's `func` declarations are nested bodies under the rule below. A `func`
-declaration does not get that rule's exception for a local never assigned after its declaration: it
-is hoisted and has no position, so it may run before the test that narrowed the variable. A lambda,
-a `go` block, or a `defer` block written in the script's top-level code is created where it stands
-and gets the exception as anywhere else.
+any local, and the script's `func` declarations, like its lambdas, are nested bodies under the rule
+below, so a `var` never narrows inside them.
 
 Narrowing is limited to locals because a local can go stale in only one way, by reassignment: a
 record's tag never changes and a reference never becomes `null` on its own. Another goroutine can
@@ -2201,16 +2198,22 @@ block, and the rule has two directions:
 
 - A local assigned inside a nested body never narrows in the enclosing function, since the
   assignment may run at any moment.
-- Inside a nested body, outer locals start at their declared type, since the body may run after a
-  later reassignment. The exception is a local never assigned after its declaration, which a `let`
-  states and the checker otherwise infers for a `var`: it keeps its narrowing there, because nothing
-  can change it, so the narrowing holds whenever and wherever the body runs.
+- Inside a nested body, an outer `var` never narrows: it has its declared type, and a test there
+  does not narrow it either, since a call or another goroutine may assign it between the test and
+  the use. An outer `let` or parameter keeps its narrowing there and narrows after a test there,
+  because nothing can change it, so the narrowing holds whenever and wherever the body runs. Bind a
+  `var` to a `let` to narrow it inside a nested body.
 
 ```ant
-var user = find(id)                          // User | null, never reassigned
+let user = find(id)                          // User | null
 if user != null {
   Mutex.withLock(lock, { println(user.name) })  // ok: user keeps its narrowing
 }
+
+var current = find(id)
+Mutex.withLock(lock, {
+  if current != null { println(current.name) }  // compile error: an outer var never narrows here
+})
 
 var hit: User | null = null
 go { hit = find(id) }                        // assigned in a go block
