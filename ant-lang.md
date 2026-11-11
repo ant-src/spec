@@ -286,7 +286,8 @@ assigned, so `let xs = [1]` allows `Array.push(xs, 2)`. The parameters of a func
 lambda's implicit `x`, and every name a `for` binds are `let` bindings too (sections 5 and 6), so
 every name is fixed unless a `var` declares it; `_` stays assignable, as the discard. Neither
 keyword is preferred: a `var` that is never reassigned is as valid as a `let`, and no tool reports
-or rewrites it.
+or rewrites it. For such a binding the two differ in narrowing alone: inside a nested body an outer
+`let` narrows and an outer `var` does not (section 7, Narrowing).
 
 A name cannot be redeclared in the same scope, which is a syntax error; an inner scope may shadow an
 outer one, except that no declaration in any scope may shadow a prelude name (section 10), and no
@@ -2792,8 +2793,10 @@ exported functions declared on a type come with it: `import "./geometry.ant" { P
 compile error outside its module, like any other private field, except in a test file. An
 `interface` export is a name for the checker alone: the interpreter binds nothing to it, so an
 exported function whose parameters, result, or bounds name an interface of its module needs that
-interface exported. Any other private type may appear in an exported signature: the importer holds
-such a value but cannot name its type, as with a field of an exported type.
+interface exported, and so does an exported interface whose functions or bounds name one and an
+exported `var` or `let` whose type does. Any other private type may appear in an exported signature:
+the importer holds such a value but cannot name its type, as with a field of an exported type, where
+a private interface may appear too.
 
 Imports are live and read-only. `export var` and `export let` are allowed; an imported name reads
 the exporting module's current value each time, and assigning to an imported name or to a field of a
