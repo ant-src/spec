@@ -3173,17 +3173,17 @@ Array.entries[T](xs: Array[T]): Array[Indexed[T]]              // each element w
 Array.range(from: int, to: int): Array[int]                    // empty when to <= from; panics if to − from is above 2^31 − 1
 Array.filled[T](n: int, v: T): Array[T]                        // the same v in every slot; panics if n < 0 or n is above 2^31 − 1
 Array.flatten[T](xs: Array[Array[T]]): Array[T]                // the inner arrays' elements, concatenated in order
-Array.sum[T: Number](xs: Array[T]): T | null                   // null when empty; panics on overflow
+Array.sum[T: Number](xs: Array[T]): T | null                   // null when empty; adds from the left with +, so panics when a partial sum overflows
 Array.same[T](xs: Array[T], ys: Array[T]): bool                // identity
 ```
 
 `Array.sum` returns `null` on an empty array rather than zero because the interpreter never knows
 `T` and so cannot produce the zero of the right kind (section 4, Checking and running). Write
-`Array.sum(xs) ?? 0.0`. `Array.min` and `Array.max` return `null` on an empty array for the same
-reason. `minBy` and `maxBy` scan from the left and replace the element they hold only when a key is
-strictly less, or greater, than its key by `<`, so of equal keys the first wins and a `NaN` key
-never replaces one. `Array.chunk([1, 2, 3, 4, 5], 2)` is `[[1, 2], [3, 4], [5]]`, and
-`Array.chunk([], 2)` is `[]`.
+`Array.sum(xs) ?? 0`, or `?? 0.0` for floats. `Array.min` and `Array.max` return `null` on an empty
+array for the same reason. `minBy` and `maxBy` scan from the left and replace the element they hold
+only when a key is strictly less, or greater, than its key by `<`, so of equal keys the first wins
+and a `NaN` key never replaces one. `Array.chunk([1, 2, 3, 4, 5], 2)` is `[[1, 2], [3, 4], [5]]`,
+and `Array.chunk([], 2)` is `[]`.
 
 A function with a callback calls it once per element, from the first element to the last, except
 that `find`, `findIndex`, `some`, and `every` stop at the first element that decides the result, and
@@ -3266,13 +3266,14 @@ Every string holds only scalar values. Text that reaches a program as a `string`
 file, standard input, a network peer, an argument, the environment, or a child process, is decoded
 as UTF-8 with each maximal subpart of an ill-formed sequence replaced by U+FFFD, as Unicode
 recommends and the WHATWG Encoding standard does: the bytes `FF FE` become two U+FFFD, and `E2 82`,
-a euro sign cut short, one. A program that must keep the bytes as they were reads them as `Bytes`,
-which a file, a handle, an HTTP body, and a child's output also give, and `String.fromBytes` tells
-it whether they are text. What the host gives only as text has no such form: `Os.args`, `Os.env`,
-`Os.environ`, and the names `File.list` and `File.walk` return. A file name that is not UTF-8, which
-some file systems allow, comes back with U+FFFD in it, and a path built from that name does not
-reach the file. Two names that differ only in such bytes become one, so `Os.environ` then holds one
-of the two variables.
+a euro sign cut short, one. A byte order mark at the start is kept, as U+FEFF, as in the WHATWG
+"UTF-8 decode without BOM"; `String.trimPrefix(s, "\u{FEFF}")` removes it. A program that must keep
+the bytes as they were reads them as `Bytes`, which a file, a handle, an HTTP body, and a child's
+output also give, and `String.fromBytes` tells it whether they are text. What the host gives only as
+text has no such form: `Os.args`, `Os.env`, `Os.environ`, and the names `File.list` and `File.walk`
+return. A file name that is not UTF-8, which some file systems allow, comes back with U+FFFD in it,
+and a path built from that name does not reach the file. Two names that differ only in such bytes
+become one, so `Os.environ` then holds one of the two variables.
 
 ```
 type Cut = { before: string, after: string }                   // the two sides of String.cut
@@ -3284,7 +3285,7 @@ String.concat(parts: Array[string]): string                    // the parts in o
 String.split(s: string, sep: string): Array[string]            // the pieces around each sep, empty ones kept; [""] for ""; panics if sep is empty
 String.join(parts: Array[string], sep: string): string         // sep between each two parts; "" for []
 String.repeat(s: string, n: int): string                       // panics if n < 0, or n or the result's length in bytes is above 2^31 − 1
-String.trim(s: string): string                                 // Unicode white space at both ends
+String.trim(s: string): string                                 // the code points String.isSpace accepts, at both ends
 String.trimStart(s: string): string                            // at the start only
 String.trimEnd(s: string): string                              // at the end only
 String.trimPrefix(s: string, prefix: string): string           // prefix removed once, when present
@@ -3300,7 +3301,7 @@ String.count(s: string, t: string): int                        // non-overlappin
 String.replace(s: string, old: string, new: string): string    // every occurrence, from the left; panics if old is empty or the result's length in bytes is above 2^31 − 1
 String.replaceFirst(s: string, old: string, new: string): string   // the first occurrence only; panics if old is empty
 String.cut(s: string, sep: string): String.Cut | null          // around the first sep; null when absent; panics if sep is empty
-String.fields(s: string): Array[string]                        // the runs between Unicode white space; [] when none
+String.fields(s: string): Array[string]                        // the runs between code points String.isSpace accepts; [] when none
 String.lines(s: string): Array[string]                         // split at \n, a \r before it dropped; no empty final line
 String.toUpper(s: string): string                              // the full mappings, so "straße" gives "STRASSE"
 String.toLower(s: string): string                              // likewise
@@ -3341,28 +3342,32 @@ String.unicodeVersion: string                                  // the version of
 
 The padding of `padStart` and `padEnd` is `pad` repeated and cut to the code points `s` lacks, so
 `String.padStart("7", 4, "ab")` is `"aba7"`, and a string already at or beyond `width` comes back
-unchanged. `String.lines` splits the text `File.read` gives at every `\n`, drops a `\r` just before
-one, and omits the piece after the last `\n` when it is empty: `"a\r\nb\n"` gives `["a", "b"]`,
-`"\n"` gives `[""]`, and `""` gives `[]`. `String.cut("k=v=w", "=")` is
-`String.Cut{ before: "k", after: "v=w" }`. The class tests take a string because Ant has no
-character type: `for c in s` yields one-code-point strings, so `String.isDigit(c)` tests a
-character, and `String.isDigit(s)` tests that a whole field is digits. Each names the Unicode
-general categories or property it follows. A decimal digit is one in any script, `٣` among them,
-while `toInt` reads only `0` to `9` and the letters of a base above ten, `a` to `z`, which it
-accepts in either case; so `String.isDigit("٣")` is `true` and `String.toInt("٣")` is `null`. A
-number that does not fit an `int` is `null` too. `toUint` reads the same digits with no sign, as
-Go's `strconv.ParseUint` does, and gives the whole `uint64` range, up to `Math.maxUint64`; a
-narrower kind is reached by converting the result, as in `Math.toInt` or `Reflect.makeScalar`.
+unchanged. The limit of 2^31 − 1 bytes guards the functions whose result can be many times the size
+of their arguments, `repeat`, `padStart`, `padEnd`, and `replace`, so a wrong count fails at once
+instead of exhausting memory; `concat`, `join`, `replaceFirst`, and `+` add up strings that already
+exist and are bounded by memory alone. `String.lines` splits the text `File.read` gives at every
+`\n`, drops a `\r` just before one, and omits the piece after the last `\n` when it is empty:
+`"a\r\nb\n"` gives `["a", "b"]`, `"\n"` gives `[""]`, and `""` gives `[]`.
+`String.cut("k=v=w", "=")` is `String.Cut{ before: "k", after: "v=w" }`. The class tests take a
+string because Ant has no character type: `for c in s` yields one-code-point strings, so
+`String.isDigit(c)` tests a character, and `String.isDigit(s)` tests that a whole field is digits.
+Each names the Unicode general categories or property it follows. A decimal digit is one in any
+script, `٣` among them, while `toInt` reads only `0` to `9` and the letters of a base above ten, `a`
+to `z`, which it accepts in either case; so `String.isDigit("٣")` is `true` and `String.toInt("٣")`
+is `null`. A number that does not fit an `int` is `null` too. `toUint` reads the same digits with no
+sign, as Go's `strconv.ParseUint` does, and gives the whole `uint64` range, up to `Math.maxUint64`;
+a narrower kind is reached by converting the result, as in `Math.toInt` or `Reflect.makeScalar`.
 `toFloat` reads ASCII decimal digits with an optional sign, an optional fraction after `.`, and an
 optional exponent after `e` or `E` with its own optional sign, so `-1.5`, `.5`, `5.`, and `1e+3` are
-numbers; it rounds to the nearest `float64`, so a tiny value is `0.0`. As Go's `strconv.ParseFloat`
-does, it also reads `NaN`, and `Inf` or `Infinity` with an optional sign, in any case, so every
-float that `String.from` writes reads back. It returns `null` on a value beyond the range of
-`float64` and on anything else: white space, `_`, and a prefix such as `0x`. `fromInt` writes an
-unsigned value as the number it is, so the largest `uint64` is `18446744073709551615`. `fromFloat`
-rounds the binary value of `x`, not the decimal it was written as: the `float64` nearest `1.005` is
-a little below it, so `String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign,
-so `String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinity renders as
+numbers; it rounds to the nearest `float64` and keeps the sign, so a tiny value is `0.0`, or `-0.0`
+with a `-`, and `"-0"` is `-0.0`. As Go's `strconv.ParseFloat` does, it also reads `NaN`, and `Inf`
+or `Infinity` with an optional sign, in any case, so every float that `String.from` writes reads
+back. It returns `null` on a value beyond the range of `float64` and on anything else: white space,
+`_`, and a prefix such as `0x`. `fromInt` writes an unsigned value as the number it is, so the
+largest `uint64` is `18446744073709551615`. `fromFloat` rounds the binary value of `x`, not the
+decimal it was written as: the `float64` nearest `1.005` is a little below it, so
+`String.fromFloat(1.005, 2)` is `"1.00"`. A result that is zero has no sign, so
+`String.fromFloat(-0.001, 2)` is `"0.00"`. `fromFloat` of `NaN` or an infinity renders as
 `String.from` does. `${String.fromFloat(total, 2)}` and
 `String.padStart(String.fromInt(n, 16), 8, "0")` are the fixed-point and zero-padded forms a format
 string would give; there is no format string.
@@ -3383,9 +3388,10 @@ A script is named as in Unicode's `Scripts.txt`, in full: `"Latin"`, `"Han"`, `"
 the unassigned among them. A name the tables do not know panics, so a typo such as `"latin"` or a
 short code such as `"Latn"` is caught where it is written; so does a script that a later Unicode
 version adds, until the implementation moves to that version. The test reads the Script property,
-not Script_Extensions, so a character that several scripts share, such as the Japanese long-vowel
-mark `ー`, is in `Common`, as digits and punctuation are. A test for letters of a foreign script
-therefore runs per character:
+not Script_Extensions, so a character that several scripts share has one script: the Japanese
+long-vowel mark `ー` is in `Common`, as most digits and punctuation are, a combining accent such as
+U+0301 is in `Inherited`, and the Arabic-Indic digits are in `Arabic`, though Thaana uses them too.
+A test for letters of a foreign script therefore runs per character:
 
 ```ant
 func mixesScripts(host: string): bool {
@@ -3406,38 +3412,42 @@ sigma does at the end of a word, so a string is mapped whole, not one character 
 Turkish and Lithuanian, which depend on the language, are not applied, so `String.toLower("İ")` is
 `"i\u{307}"`, an `i` and a combining dot. `foldCase` maps every case variant of a string to one
 form, so it is the key for grouping or deduplicating text without regard to case:
-`String.foldCase("Straße")` and `String.foldCase("STRASSE")` are both `"strasse"`. Neither it nor
-`==` normalizes: `"\u{E9}" == "e\u{301}"` is `false`, and text that can arrive in either spelling is
-compared or keyed after `String.normalize(s, "NFC")`. `normalize` takes the four forms of Unicode's
-UAX #15. `NFD` splits an accent from its letter, so dropping the code points that `isMark` accepts
-strips accents; `NFKD` also replaces compatibility characters, such as `ﬁ` with `fi`.
+`String.foldCase("Straße")` and `String.foldCase("STRASSE")` are both `"strasse"`. It uses the
+default folding, without the Turkic entries, so `String.foldCase("İ")` is `"i\u{307}"` and `ı` folds
+only to itself. Neither it nor `==` normalizes: `"\u{E9}" == "e\u{301}"` is `false`, and text that
+can arrive in either spelling is compared or keyed after `String.normalize(s, "NFC")`. `normalize`
+takes the four forms of Unicode's UAX #15. `NFD` splits an accent from its letter, so dropping the
+code points that `isMark` accepts strips accents; `NFKD` also replaces compatibility characters,
+such as `ﬁ` with `fi`.
 
 Code point indices can cut through what a reader sees as one character. `String.slice` can end
 inside an emoji, and reversing `String.chars` moves an accent onto another letter and turns the flag
 🇨🇭 into two loose letter symbols. `String.graphemes("👨‍👩‍👧e\u{301}")` is the two strings `"👨‍👩‍👧"` and
 `"e\u{301}"`, so text cut, reversed, or counted for display goes through `graphemes`. Grapheme
-splitting, normalization, case mapping, the class tests, and the rendering of `String.from` follow
-the Unicode version `String.unicodeVersion` names. A code point that a later version assigns is
-unassigned, `"Cn"`, until the implementation moves to that version, and `String.from` writes it as
-an escape inside quotes until then.
+splitting, normalization, case mapping and folding, the class tests, and the rendering of
+`String.from` follow the Unicode version `String.unicodeVersion` names. A code point that a later
+version assigns is unassigned, `"Cn"`, until the implementation moves to that version, and
+`String.from` writes it as an escape inside quotes until then.
 
 `String.from` renders any value. The four print functions and string interpolation use it, so this
 is the format a program's output has. It is the only function the language calls implicitly, and
 only inside `${...}` of a string and on a number in an HTML expression (section 5).
 
 - Integers render in decimal. Floats render as the shortest decimal that reads back to the same
-  value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A magnitude at or above `1e21` or
-  below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`. `-0.0`
-  keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values render as
-  `NaN`, `Infinity`, and `-Infinity`.
+  value, with `.0` added when integral: `1.5`, `100.0`, `0.001`. A nonzero magnitude at or above
+  `1e21` or below `1e-6` takes the exponent form of JavaScript, `1e+21` and `1.5e-7`, with no `.0`.
+  `-0.0` keeps its sign and renders as `-0.0`, where JavaScript writes `0`. The non-finite values
+  render as `NaN`, `Infinity`, and `-Infinity`.
 - A string renders as itself at the top level and quoted with escapes inside a container. Inside the
   quotes, `"` and `\` are escaped, a `$` before `{` is written `\$`, `\n`, `\t`, and `\r` are
   written so, and every other code point that `String.isPrint` rejects, such as a control character,
   a non-breaking space, a zero-width joiner, or a bidirectional override, is written `\u{...}` in
-  lower-case hexadecimal without leading zeros, as `\u{7f}`. The rendering shows every code point
-  that is there and reads back as a literal, which an emoji joined from several shows too:
-  `String.from(["👨‍👩‍👧"])` is `["👨\u{200d}👩\u{200d}👧"]`. `bool`, `null`, and `void` render as their
-  literals.
+  lower-case hexadecimal without leading zeros, as `\u{7f}`. So is a combining mark, one in M, right
+  after the opening quote, where it would combine with the quote: `String.from(["\u{301}"])` is
+  `["\u{301}"]`. The rendering reads back as a literal, and shows the code points an emoji is joined
+  from: `String.from(["👨‍👩‍👧"])` is `["👨\u{200d}👩\u{200d}👧"]`. A combining mark after a base is
+  written as itself, so `"e\u{301}"` and `"\u{e9}"` look the same, and `String.toCodePoints` tells
+  them apart. `bool`, `null`, and `void` render as their literals.
 - Arrays render as `[1, 2]`, maps as `Map{ "a": 1 }` with string keys always quoted, sets as the
   call that builds them, `Set.of([1, 2])`, and records as `Point{ x: 1.0, y: 2.0 }` with the name of
   their tag and the fields in declaration order. Entries are separated by `, `. An empty array, map,
@@ -4530,7 +4540,7 @@ only panic in the ways the last column lists, which depend on values known at ru
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `+ - * / %`, `< <= > >=`, unary `-`                                        | an operand is not a number, or the operands differ in kind or tag; `+` and the comparisons also take two strings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
 | `!`, `&&`, `\|\|`, `if`, `while`                                           | an operand or condition is not a `bool`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |                                                                                                                                                                                                                                 |
-| integer `+ - *`, unary `-`, compound assignment, `Array.sum`, `Atomic.add` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the result does not fit the kind                                                                                                                                                                                                |
+| integer `+ - *`, unary `-`, compound assignment, `Array.sum`, `Atomic.add` |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the result, or a partial sum of `Array.sum`, does not fit the kind                                                                                                                                                              |
 | integer `/`, `%`                                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the divisor is zero                                                                                                                                                                                                             |
 | `Bits.shiftLeft`, `Bits.shiftRight`                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the count is negative or not below the operand's width                                                                                                                                                                          |
 | numeric conversion                                                         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | an integer target is given a fraction, a value out of range, `NaN`, or an infinity                                                                                                                                              |
