@@ -115,9 +115,3 @@ A file that cannot be loaded is reported as `ant run` reports one, on standard e
 files still run. A panic while a file's modules are initialized is reported as `ant run` reports
 one; the file's tests do not run, and the file counts as one failed test. `Os.exit` in a test ends
 the command with its status, as it ends a program.
-
-## 5. Editors and the debugger
-
-`ant lsp` shows each top-level test, and each subtest whose name is a literal, as a document symbol
-and with a code lens to run or debug it (`lsp.md`). `ant dap` launches a test file with a `-run`
-pattern (`dap.md`).

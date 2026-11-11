@@ -2982,9 +2982,9 @@ owns it, and the `Test` functions act on it (section 11, Test).
 
 A file whose name ends in `.d.ant` is a **declaration file**: the signatures of names that are bound
 outside the language, written as the prelude listing of section 11 and `ant doc` write them. The
-prelude itself is one, `prelude.d.ant`, which an editor opens for a prelude name (`lsp.md` section
-4), and a host that adds a namespace to the prelude gives its signatures as one. A declaration file
-holds declarations only, with doc comments as in a module (section 2):
+prelude itself is one, `prelude.d.ant`, which an editor opens for a prelude name, and a host that
+adds a namespace to the prelude gives its signatures as one. A declaration file holds declarations
+only, with doc comments as in a module (section 2):
 
 ```
 // Panic.Frame is one frame of a panic's trace.
