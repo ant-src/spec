@@ -502,6 +502,10 @@ through the `parse` functions, which return `Result`.
   nanoseconds, all of one sign, kept as given: 90 minutes stays 90 minutes until `roundDuration`
   balances it.
 
+Dates are in the ISO 8601 calendar, the proleptic Gregorian calendar extended to year 0 and negative
+years: a year is a leap year when it is divisible by 4, except a century year not divisible by 400,
+so 2000 and 0 are and 1900 is not; February has 29 days in a leap year and 28 otherwise.
+
 Four unions name the types a function serves, and three enumerations name its options; `Time.Hour{}`
 and `Time.Later{}` are values of them. Every time type has its own tag, so a union of them is legal
 and `t is Time.PlainDate` narrows it (`ant-lang.md`, sections 4 and 5). A type parameter bounded by
@@ -510,7 +514,7 @@ but not to `Time.add` until an `is` test narrows it:
 
 ```ant
 func bump(t: Time.Dated): Time.Dated {
-  var day = Time.duration(days: 1)
+  let day = Time.duration(days: 1)
   if t is Time.ZonedDateTime { Time.add(t, day) }
   else if t is Time.PlainDate { Time.add(t, day) }
   else { Time.add(t, day) }
@@ -544,16 +548,18 @@ Time.zoneId(z: Time.Zone): string                   // "Europe/Stockholm", "+05:
 ```
 
 `Time.zone` accepts a name of the IANA database in any letter case, including an alias such as
-`Asia/Calcutta`, and an offset `±HH:MM`, `±HHMM` or `±HH`; anything else, the empty string included,
-is `Err`. `zoneId` returns the name as the database spells it, or the offset as `±HH:MM`. Two named
+`Asia/Calcutta`, and an offset `±HH:MM`, `±HHMM` or `±HH` below 24 hours, as Temporal allows;
+anything else, the empty string included, is `Err`. `zoneId` returns the name as the database spells
+it, or the offset as `±HH:MM`, with `+` for a zero offset, so `-00:00` gives `+00:00`. Two named
 zones are equal when they are aliases of one zone in Unicode's CLDR, so `Time.zone("Asia/Calcutta")`
 equals `Time.zone("Asia/Kolkata")` and `US/Eastern` equals `America/New_York`, while
 `Europe/Stockholm` stays apart from `Europe/Berlin` although the IANA database has merged their
 rules since 1970, as Temporal's implementations have it; two offset zones are equal when their
 offsets are; a named zone never equals an offset zone. `Time.localZone()` is the zone the host's
-configuration names, from the `TZ` environment variable first and the system's setting second; when
-neither names a zone of the database, it is the fixed offset the host reports at the moment of the
-call.
+configuration names, from the `TZ` environment variable first, with a leading `:` dropped as POSIX
+allows, and the system's setting second. Each counts only when it names a zone of the database, so
+an offset in `TZ`, which POSIX reads as west of UTC, is passed over; when neither does, it is the
+fixed offset the host reports at the moment of the call.
 
 **Now, and the epoch.**
 
@@ -574,7 +580,11 @@ library is a `Time.Duration`: hours and smaller units are exact and a day is 24 
 months, and weeks have no fixed length and make it panic here, since `Time` is computation, as they
 are in `Context.new`. A span beyond what the host can wait, about 292 years, is taken as that. A
 zero or negative sleep returns at once. `Time.monotonic` stays an `int` of milliseconds, since it is
-a reading that a program subtracts, not a span it passes.
+a reading that a program subtracts, not a span it passes. `Time.now` and `nowIn` read the wall
+clock, which the host may set forward or back, so two readings can go backwards. `Time.monotonic`
+reads a clock that changes to the wall clock do not affect: a later reading in the same run, on any
+goroutine, is never smaller than an earlier one, and a `sleep` of `d` adds at least the whole
+milliseconds of `d`. Its origin is fixed for the run.
 
 `ticker` is Go's ticker: a channel that receives the time every `d`, counted from the call, so a
 slow reader does not shift the beat. It holds one tick; a tick that finds it full is dropped, so a
@@ -596,7 +606,7 @@ while `epochMillis` always fits.
 ```
 Time.plainDate(year: int, month: int, day: int): Time.PlainDate                 // panics if there is no such date
 Time.plainTime(hour: int = 0, minute: int = 0, second: int = 0, millisecond: int = 0,
-               microsecond: int = 0, nanosecond: int = 0): Time.PlainTime      // panics if a field is out of range
+               microsecond: int = 0, nanosecond: int = 0): Time.PlainTime      // panics if a field is out of range: hour 0 to 23, minute and second 0 to 59, the subsecond fields 0 to 999
 Time.plainDateTime(date: Time.PlainDate, time: Time.PlainTime): Time.PlainDateTime
 Time.duration(years: int = 0, months: int = 0, weeks: int = 0, days: int = 0, hours: int = 0,
               minutes: int = 0, seconds: int = 0, milliseconds: int = 0, microseconds: int = 0,
@@ -615,7 +625,10 @@ balancing a long span into nanoseconds, and `negate`, `abs` or `subtract` given 
 
 **Text.** Every value renders as its RFC 9557 string, which is ISO 8601 with the zone in brackets,
 and parses back from it; `String.from`, string interpolation and `Json.stringify`, which writes a
-time value as a JSON string, all use that form.
+time value as a JSON string, all use that form. The value parsed back is equal to the one rendered,
+except that a `Duration` parses back with its fraction spread as below:
+`Time.duration(milliseconds: 1500)` renders as `PT1.5S` and parses back as 1 second and 500
+milliseconds, which `Time.compareDuration` finds equal and `==` does not.
 
 ```
 Time.parseInstant(s: string): Result[Time.Instant, Error]            // 2026-10-22T14:03:05Z
@@ -645,16 +658,22 @@ then `[u-ca=iso8601]`, each where its type needs it. Other spellings of ISO 8601
 with seconds `±HH:MM:SS`, a `T` before a time with no date, the critical flag `[!...]`, an
 annotation other than the zone and `[u-ca=iso8601]`, the calendar in capitals, and a leap second
 `:60`. `parseInstant` needs a date, a time and `Z` or an offset, and ignores a bracketed zone.
-`parseZoned` needs a bracketed zone; with a date alone it is the start of that day in the zone, as
+`parseZoned` needs a bracketed zone, which is read as `Time.zone` reads a name, in any letter case,
+and renders as the database spells it; with a date alone it is the start of that day in the zone, as
 `startOfDay` is; with no offset it resolves the wall-clock time by `disambiguation`, with `Z` it
 takes the exact moment and shows it in the zone, and with an offset that is not the zone's at that
-time, rounded to the minute as the string has it, it is `Err`. The plain parsers take their own part
-of a longer string and ignore the rest, so `parsePlainDate` accepts a bare date or a full zoned
-string, `parsePlainTime` a bare time or a date and time, and `parsePlainDateTime` a date and time;
-none accepts `Z` without a bracketed zone, since `Z` names a moment, not a wall-clock time.
-`parseDuration` takes ISO 8601's `PnYnMnWnDTnHnMnS` with an optional leading sign, in capitals,
-where only the last time component may carry a fraction, after a point and of up to nine digits;
-lowercase letters and a comma are `Err`, as above. A string in another calendar is `Err`.
+time, rounded to the minute as the string has it, it is `Err`. The plain parsers accept any of the
+forms above and keep their own part: the whole string must still be well formed, with a date that
+exists, a time in range and a valid offset, while the name in a bracketed zone is not looked up. So
+`parsePlainDate` accepts a bare date or a full zoned string, `parsePlainTime` a bare time or a date
+and time, and `parsePlainDateTime` a date and time; `"2026-10-22 trailing"` and `"2026-02-30T10:00"`
+are `Err` to all three, and none accepts `Z` without a bracketed zone, since `Z` names a moment, not
+a wall-clock time. `parseDuration` takes ISO 8601's `PnYnMnWnDTnHnMnS` with an optional leading
+sign, in capitals, where only the last time component may carry a fraction, after a point and of up
+to nine digits; lowercase letters and a comma are `Err`, as above. A fraction is spread into the
+smaller fields, as Temporal does: `PT1.5H` is `PT1H30M`, and a fraction of a second goes to
+milliseconds, microseconds and nanoseconds, three digits each, so `PT1.5S` is 1 second and 500
+milliseconds. A string in another calendar is `Err`.
 
 **Conversion.**
 
@@ -663,7 +682,7 @@ Time.inZone(t: Time.Instant, z: Time.Zone): Time.ZonedDateTime
 Time.withZone(t: Time.ZonedDateTime, z: Time.Zone): Time.ZonedDateTime      // the same instant in another zone
 Time.toZoned(t: Time.PlainDateTime, z: Time.Zone,
              disambiguation: Time.Disambiguation = Time.Compatible{}): Time.ZonedDateTime
-Time.possibleInstants(t: Time.PlainDateTime, z: Time.Zone): Array[Time.Instant]   // 0 in a gap, 2 in an overlap, else 1
+Time.possibleInstants(t: Time.PlainDateTime, z: Time.Zone): Array[Time.Instant]   // 0 in a gap, 2 in an overlap, else 1; earliest first
 Time.toInstant(t: Time.ZonedDateTime): Time.Instant
 Time.toPlainDate(t: Time.ZonedDateTime | Time.PlainDateTime): Time.PlainDate
 Time.toPlainTime(t: Time.ZonedDateTime | Time.PlainDateTime): Time.PlainTime
@@ -672,19 +691,22 @@ Time.startOfDay(t: Time.ZonedDateTime): Time.ZonedDateTime                  // t
 Time.zoneOf(t: Time.ZonedDateTime): Time.Zone
 Time.offset(t: Time.ZonedDateTime): string                                  // "+02:00"; with seconds when there are some
 Time.offsetSeconds(t: Time.ZonedDateTime): int
-Time.hoursInDay(t: Time.ZonedDateTime): float64                             // 23.0, 24.0 or 25.0; 23.5 on Lord Howe Island
+Time.hoursInDay(t: Time.ZonedDateTime): float64                             // 23.0, 24.0 or 25.0; 23.5 or 24.5 on Lord Howe Island
 Time.nextTransition(t: Time.ZonedDateTime): Time.ZonedDateTime | null       // the next change of offset after t
 Time.previousTransition(t: Time.ZonedDateTime): Time.ZonedDateTime | null   // the last one before t
 ```
 
 A wall-clock time in a zone has one instant, none when a daylight-saving change skipped it, or two
-when a change repeated it. `disambiguation` says which to take: `Compatible` takes the later instant
-in a gap and the earlier in an overlap, which is what the common libraries do; `Earlier` and `Later`
-take those. A program that wants to refuse an ambiguous time tests the length of `possibleInstants`.
-`startOfDay` is the first instant of the date in the zone, which is not midnight on a day whose
-midnight falls in a gap. `nextTransition` is the earliest moment after `t` at which the zone's
-offset changes, in the same zone, or `null` when there is none, as for an offset zone or a zone that
-has stopped changing; `previousTransition` is the latest before `t`.
+when a change repeated it. `disambiguation` says which to take. In a gap there is no instant, so the
+time is read with the offset from before the change for `Later` and `Compatible`, which moves it
+forward by the length of the gap, and with the offset from after it for `Earlier`, which moves it
+back: 02:30 in New York on the spring change is 03:30 by `Later` and 01:30 by `Earlier`. In an
+overlap `Compatible` and `Earlier` take the earlier instant and `Later` the later. `Compatible` is
+what the common libraries do. A program that wants to refuse an ambiguous time tests the length of
+`possibleInstants`. `startOfDay` is the first instant of the date in the zone, which is not midnight
+on a day whose midnight falls in a gap. `nextTransition` is the earliest moment after `t` at which
+the zone's offset changes, in the same zone, or `null` when there is none, as for an offset zone or
+a zone that has stopped changing; `previousTransition` is the latest before `t`.
 
 **Fields.**
 
@@ -693,11 +715,11 @@ Time.year(t: Time.Dated): int
 Time.month(t: Time.Dated): int                      // 1 to 12
 Time.day(t: Time.Dated): int
 Time.dayOfWeek(t: Time.Dated): int                  // 1 Monday to 7 Sunday, as ISO 8601
-Time.dayOfYear(t: Time.Dated): int
+Time.dayOfYear(t: Time.Dated): int                  // 1 to 365, or 366 in a leap year
 Time.weekOfYear(t: Time.Dated): int                 // the ISO week, 1 to 53
 Time.yearOfWeek(t: Time.Dated): int                 // the year of that week, which differs around New Year
-Time.daysInMonth(t: Time.Dated): int
-Time.daysInYear(t: Time.Dated): int
+Time.daysInMonth(t: Time.Dated): int                // 28 to 31
+Time.daysInYear(t: Time.Dated): int                 // 365 or 366
 Time.inLeapYear(t: Time.Dated): bool
 Time.hour(t: Time.Timed): int
 Time.minute(t: Time.Timed): int
@@ -767,14 +789,16 @@ days do not line up. Between two `ZonedDateTime`s in one zone, days are the zone
 
 `round` rounds to a multiple of `increment` of `smallestUnit` by `mode`, the number rounded being
 the nanoseconds since the start of the day for the wall-clock types and since the epoch for an
-`Instant`. For the wall-clock types `increment` must divide the count of `smallestUnit` in the next
-larger unit, 24 hours, 60 minutes, 60 seconds or 1000 of a subsecond unit, and be smaller than it;
-for `Day` it is 1. For an `Instant` it must divide the count of `smallestUnit` in a day, 24 hours,
-1440 minutes and so on, and may be all of it, as in Temporal's `Instant.round`, so
-`Time.round(i, Time.Hour{}, 24)` rounds to a midnight of UTC. On a `ZonedDateTime` rounding to `Day`
-chooses between the start of its day and the start of the next by the fraction of the real day that
-has passed; rounding to a smaller unit works on the wall clock and places the result in the zone as
-`with` does, keeping the offset when the zone has it.
+`Instant`. A result of 24 hours is the start of the next day: a `PlainTime` wraps to `00:00:00`, as
+in `add`, and the other wall-clock types move to the next date. For the wall-clock types `increment`
+must be positive, divide the count of `smallestUnit` in the next larger unit, 24 hours, 60 minutes,
+60 seconds or 1000 of a subsecond unit, and be smaller than it; for `Day` it is 1. For an `Instant`
+it must be positive and divide the count of `smallestUnit` in a day, 24 hours, 1440 minutes and so
+on, and may be all of it, as in Temporal's `Instant.round`, so `Time.round(i, Time.Hour{}, 24)`
+rounds to a midnight of UTC. On a `ZonedDateTime` rounding to `Day` chooses between the start of its
+day and the start of the next by the fraction of the real day that has passed; rounding to a smaller
+unit works on the wall clock and places the result in the zone as `with` does, keeping the offset
+when the zone has it.
 
 `compare` orders by instant for `Instant` and `ZonedDateTime`, so two zoned values at one moment in
 different zones compare as `0` though they are not `==`, and by fields for the plain types. `<` and
@@ -797,28 +821,30 @@ Time.roundDuration(d: Time.Duration, smallestUnit: Time.Unit | null = null,
                    largestUnit: Time.Unit | null = null, increment: int = 1,
                    mode: Time.RoundingMode = Time.HalfExpand{},
                    relativeTo: Time.Dated | null = null): Time.Duration
-                                                    // panics if no unit is given, or on years, months or weeks without relativeTo
+                                                    // panics if no unit is given, if largestUnit is smaller than smallestUnit, if increment is below 1, or on years, months or weeks without relativeTo
 ```
 
 Years, months and weeks have no fixed length, so a function that must know theirs takes a
-`relativeTo` point and counts from it, and panics without one; a day is 24 hours unless `relativeTo`
-is a `ZonedDateTime`, whose days have their daylight-saving hours. A `PlainDateTime` given as
+`relativeTo` point and counts from it, a week being 7 days of the calendar and a month and a year
+counted as `add` counts them, and panics without one; a day is 24 hours unless `relativeTo` is a
+`ZonedDateTime`, whose days have their daylight-saving hours. A `PlainDateTime` given as
 `relativeTo` counts as its date; its time is ignored, as in Temporal. `addDuration` sums two
 durations without years, months or weeks, days at 24 hours, and balances the result up to the larger
 of the two largest units given, so `PT90M` plus `PT30M` is `PT120M` and `P1D` plus `PT25H` is
-`P2DT1H`. `compareDuration` orders by length; two durations with the same fields are `0` without
-`relativeTo`, as in Temporal. `total` is the whole duration in `unit` as a number with a fraction,
-`PT1H30M` in hours being `1.5`. `roundDuration` balances `d` so that no field below `largestUnit`
-exceeds its next unit, and rounds the result to a multiple of `increment` of `smallestUnit` by
-`mode`, dropping the smaller fields: `largestUnit` alone balances, `PT90M` to `Hour` being
-`PT1H30M`; `smallestUnit` alone rounds; `largestUnit` defaults to the larger of `d`'s largest
-nonzero unit and `smallestUnit`. For a time unit `increment` follows the rule of `round` for the
-wall-clock types; for a day or a calendar unit any increment is allowed when `largestUnit` is
-`smallestUnit`, so a duration rounds to a multiple of seven days or of two months, and panics
-otherwise. The rounding modes are Temporal's nine: `Ceil` toward positive infinity, `Floor` toward
-negative, `Expand` away from zero, `Trunc` toward zero, the four `Half` forms to the nearest
-multiple with a tie resolved as the plain form says, and `HalfEven` to the nearest with a tie to the
-even multiple; `HalfExpand`, the default, is what `Math.round` does.
+`P2DT1H`. `compareDuration` orders by signed length, so a negative duration is before zero and
+before any positive one; two durations with the same fields are `0` without `relativeTo`, as in
+Temporal. `total` is the whole duration in `unit` as a number with a fraction, `PT1H30M` in hours
+being `1.5`. `roundDuration` balances `d` so that no field below `largestUnit` exceeds its next
+unit, and rounds the result to a multiple of `increment` of `smallestUnit` by `mode`, dropping the
+smaller fields: `largestUnit` alone balances, `PT90M` to `Hour` being `PT1H30M`; `smallestUnit`
+alone rounds; `largestUnit` defaults to the larger of `d`'s largest nonzero unit and `smallestUnit`.
+For a time unit `increment` follows the rule of `round` for the wall-clock types; for a day or a
+calendar unit any positive increment is allowed when `largestUnit` is `smallestUnit`, so a duration
+rounds to a multiple of seven days or of two months, and panics otherwise. The rounding modes are
+Temporal's nine: `Ceil` toward positive infinity, `Floor` toward negative, `Expand` away from zero,
+`Trunc` toward zero, the four `Half` forms to the nearest multiple with a tie resolved as the plain
+form says, and `HalfEven` to the nearest with a tie to the even multiple; `HalfExpand`, the default,
+is what `Math.round` does.
 
 Two durations are `==` when their ten fields are, as given, so `PT90M` and `PT1H30M` are not. For
 the other types `==` is the same moment for an `Instant`, the same moment and zone for a
