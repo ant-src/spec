@@ -1283,10 +1283,14 @@ A generic call solves its type parameters in a fixed order: from the expected ty
 the non-lambda arguments left to right, then from the lambdas. The expected type goes first because
 type arguments are invariant: `Result.err(NotFound{ id: from })` under an expected
 `Result[void, TransferError]` sets `E` to `TransferError` and then checks the argument against it. A
-solution from the expected type that breaks the parameter's bound is skipped, and the arguments
-solve that parameter instead: under `var r: int | string = bigger(1, 2)`, with `bigger` from
-Generics, the expected type would set `T` to `int | string`, which is not a single member of
-`Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to `int | string`.
+solution from the expected type that breaks the parameter's bound, or that leaves an argument not
+assignable to its parameter, is skipped, and the arguments solve that parameter instead; the result
+must then be assignable to the expected type. Under `var r: int | string = bigger(1, 2)`, with
+`bigger` from Generics, the expected type would set `T` to `int | string`, which is not a single
+member of `Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to
+`int | string`. Under `var n: int | string = r.unwrap()`, with `r` a `Result[int, Error]`, the
+expected type would ask for a `Result[int | string, Error]`, which `r` is not, so `r` sets `T` to
+`int`.
 An argument checked against an interface whose arguments name an open parameter, such as
 `Container[T]`, solves it from the functions a call through `.` reaches on the argument's type,
 matched to the interface's functions as an argument to a parameter: a `Stack` whose `get` returns
