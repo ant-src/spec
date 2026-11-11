@@ -2135,7 +2135,10 @@ if user != null {
 yields `null` when the left side is null. `??` takes any expression on the right, including `return`
 and `panic`, so `value ?? panic("unreachable")` unwraps and `value ?? return null` propagates. Both
 operators require a left side whose type includes `null`; on any other type they are dead code and a
-compile error.
+compile error. A `null` left side skips the rest of the postfix chain, so the links after `?.` see
+the type without `null`: in `user?.name.length()` the `.length()` applies to a `string` and the
+whole is an `int | null`, and `user?.name?.length()` is a compile error. A second `?.` is needed
+only where the link itself is nullable, as `address` is in `user?.address?.city`.
 
 ### Narrowing
 
