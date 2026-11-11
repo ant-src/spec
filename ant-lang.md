@@ -647,9 +647,10 @@ word before `:` is a name: the field of a record, the string key of a map.
 `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an
 array can be a key. A map keeps insertion order: `for`, `Map.keys`, `Map.values`, `Map.entries`, and
 rendering visit entries in the order their keys were first inserted. Replacing a value keeps the
-entry's position; a key removed and inserted again goes to the end. A key is hashed when it is
-inserted, and mutating it afterwards is a program error like a data race: memory stays safe, but the
-entry may become unreachable. Section 11 covers the operations.
+entry's position and its key, as in Go: a key `==` to one already in the map, such as `-0.0` after
+`0.0`, replaces the value only; a key removed and inserted again goes to the end. A key is hashed
+when it is inserted, and mutating it afterwards is a program error like a data race: memory stays
+safe, but the entry may become unreachable. Section 11 covers the operations.
 
 `Set[T]` holds each `==` value at most once, and is otherwise a map without values: members compare
 the way keys do, so a record or an array can be one, it keeps insertion order, and a member is
@@ -3275,6 +3276,7 @@ Set.isSubset[T](a: Set[T], b: Set[T]): bool                    // every member o
 Set.same[T](a: Set[T], b: Set[T]): bool                        // identity
 ```
 
+`Set.add` of a value `==` to a member keeps the member the set has, as a map keeps its key.
 `Set.add` and `Set.remove` say whether they changed the set, so a loop that keeps the first of each
 value needs no separate test:
 
