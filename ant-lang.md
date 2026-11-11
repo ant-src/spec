@@ -1727,7 +1727,8 @@ record destructuring assignment, because a `{` at the start of a statement is a 
 
 These have type `never`, so they can appear anywhere an expression is expected. `return` takes the
 whole expression to its right, so `x ?? return y + 1` returns `y + 1`; parenthesize it to end
-earlier. `panic` is an ordinary function of type `never` (section 8).
+earlier. `break` and `continue` take no operand, since a loop has no result. `panic` is an ordinary
+function of type `never` (section 8).
 
 A function body, a script body (section 10), a lambda, a `go` block, and a `defer` block are the
 five boundaries. `return` leaves the innermost one; inside a `go` or `defer` block it takes no
