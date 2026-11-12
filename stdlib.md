@@ -374,13 +374,26 @@ Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Reply,
 ```
 
 `request` sends one request with `method` as given, `GET`, `PUT`, `DELETE`, or any other token,
-`body` as its body, and `headers` as its headers, and reads the whole response. A response of any
-status is `Ok` with that `status`, a redirect included: no redirect is followed, so a 3xx comes back
-with its `Location` header, and a program that wants the next page asks for it. `Err` is a failure
-to get one: a malformed `url`, an empty `method`, two header names that differ only in case, which
-name one header, no connection, the timeout, or the context. The response's headers hold one string
-per name, a repeated header joined with `, `. `get` and `post` are `request` with the method filled
-in.
+`body` as its body, and `headers` as its headers, plus `Host` from the URL unless the headers give
+one, and `Content-Length` from the body, which they cannot override; the client adds no other
+header, no `User-Agent` among them. It reads the whole response. A response of any status is `Ok`
+with that `status`, a redirect included: no redirect is followed, so a 3xx comes back with its
+`Location` header, and a program that wants the next page asks for it. `Err` is a failure to get
+one: a malformed `url`, a `method` that is not a token, the empty one included, two header names
+that differ only in case, which name one header, no connection, the timeout, or the context. Its
+message is `<method> "<url>": <reason>`, with the method lowercased, the URL as given, and the
+innermost reason, as in `get "http://127.0.0.1:1/": connection refused`; a method that is not a
+token gives `request "<url>": the method "GE T" is not a token`, and a timeout that passes and a
+done context give their reason alone. The response's headers hold one string per name, a repeated
+header joined with `, `, in order of name, as `Array.sort` orders strings. Header names in a
+`Response` or a `Request` are in canonical form, as Go's `CanonicalHeaderKey` gives them: each word
+separated by `-` starts upper case and goes on lower case, so a header sent as `content-type` is
+read as `headers["Content-Type"]`. `get` and `post` are `request` with the method filled in.
+
+`url` is `http` or `https`; any other scheme is `Err`. An `https` request verifies the server's
+certificate against the host's roots, and a certificate that does not verify is `Err`; there is no
+way to skip the check. The proxy variables `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` apply, as in
+Go. `serve` speaks plain HTTP.
 
 A body is sent as given: a string as its UTF-8, `Bytes` as they are. A body that arrives, in a
 `Response` or in a `Request`, is there twice: as received in `bytes`, and in `body` as text, decoded
@@ -407,12 +420,14 @@ listener is closed under it. A handler's panic is reported as a goroutine's pani
 gets status 500 with an empty body; a response whose status is outside 200 to 599 is a panic in the
 handler's goroutine, which takes the same path, since a status below 200 is an interim response and
 cannot be sent as the final one. So is a reply with two header names that differ only in case, which
-name one header, as `request` is `Err` on them. The `Http.Reply` is sent as given, with
-`Content-Length` from the body. In the `Request`, `path` is decoded and `query` is raw, for
-`Url.parseQuery`; the headers hold one string per name, `Host` among them, a repeated header joined
-with `, `; `remote` is `ip:port`. Bodies are read whole, as the client reads them. Taking a listener
-rather than an address is what lets a program know its port, run the server on a goroutine, and talk
-to it:
+name one header, as `request` is `Err` on them. The `Http.Reply` is sent with the headers given plus
+`Date`, the time of the reply, and `Content-Length` from the body, which replaces a `Content-Length`
+the handler gives; a 204 or 304 reply has no body and no `Content-Length`, as HTTP requires. In the
+`Request`, `path` is decoded and `query` is raw, for `Url.parseQuery`; the headers hold one string
+per name, `Host` first and the rest in order of name, a repeated header joined with `, `, their
+names in canonical form as in a `Response`; `remote` is `ip:port`. Bodies are read whole, as the
+client reads them. Taking a listener rather than an address is what lets a program know its port,
+run the server on a goroutine, and talk to it:
 
 ```ant
 func handle(req: Http.Request): Http.Reply {
