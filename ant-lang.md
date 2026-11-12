@@ -3919,13 +3919,19 @@ how a main goroutine waits for the interrupt while a server runs.
 
 An unbuffered channel hands a value over directly: `send` returns when a receiver has taken it. A
 buffered one holds `capacity` values and blocks a sender beyond that. Closing lets receivers drain
-what is buffered and then get `null`; a later `send` panics, since a value with no receiver is the
-sender's bug. `Channel.new` fixes `T` from nothing, so a declaration annotates:
-`var jobs: Channel[Job] = Channel.new()`. `Channel.receive` conflates a `null` value with the end of
-the channel when `T` includes `null`, as `Map.get` and `Array.pop` do; a program with such a `T`
-wraps the value, and `Context.isDone(ctx)` tells a cancellation from a close. A wait on several
-channels at once, or on a channel and a context, a group or a timer, is a `select` (section 5),
-which takes nothing from any channel until its choice is made.
+what is buffered and then get `null`; a later `send` panics, and so does one waiting when the
+channel closes, since a value with no receiver is the sender's bug. A `send`, `receive` or `values`
+given a context that is done already gives up at once, without looking at whether it could proceed:
+a send buffers nothing and a receive takes nothing. A `select` is the way to prefer a ready channel.
+A send on a closed channel panics even when its context is done. `Channel.new` fixes `T` from
+nothing, so a declaration annotates: `var jobs: Channel[Job] = Channel.new()`. `Channel.receive`
+conflates a `null` value with the end of the channel when `T` includes `null`, as `Map.get` and
+`Array.pop` do; a program with such a `T` wraps the value, and `Context.isDone(ctx)` tells a
+cancellation from a close. `Channel.values` receives one value per `yield` and nothing ahead of it,
+so values left after a `break` stay in the channel. It tells a `null` value from a close, as
+`Parallel.each` does, so it is the way to drain a `Channel[T | null]`. A wait on several channels at
+once, or on a channel and a context, a group or a timer, is a `select` (section 5), which takes
+nothing from any channel until its choice is made.
 
 ### Parallel
 
