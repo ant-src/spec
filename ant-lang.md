@@ -720,6 +720,9 @@ func describe(id: Id): string {
 
 A nullable type is written `T | null` (section 7).
 
+`never` has no values, so a union drops it: `never | null` is `null`, and a union of only `never` is
+`never`. This holds after substitution too, so `Reflect.nullable(type(never))` is `type(null)`.
+
 The members of a union must be distinguishable at run time, because `is` has only kinds and tags to
 look at. A member's discriminator is its `is` column in the table of Kinds: the kind for a
 primitive, `null`, `void`, and `Bytes`; the word `Array`, `Map`, `Set`, or `func`, type arguments
