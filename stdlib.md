@@ -80,11 +80,13 @@ bytes; for a directory, and for a link described with `follow: false`, it is wha
 as is a link's own `mode`, so a program does not rely on them. `remove` refuses a directory with
 entries; `removeAll` is the recursive form, named so the dangerous one is the longer name.
 
-An empty path is `Err` in every call that takes one; `File.exists("")` is false. Only `mkdir`
-creates missing directories: every other function that creates a file, a directory or a link,
-`write`, `writeBytes`, `create`, `append`, `touch`, `lock`, `tryLock`, `copy`, `copyAll` and
-`symlink`, is `Err` when the directory that would hold it is missing, and those that write a file
-are `Err` when a directory is at the path.
+A path is used as written: `~` and `$NAME` are not expanded as a shell expands them, so a path under
+the home directory is `Path.join([try Os.home(), ...])`. A relative path is taken against the
+working directory, in every `File` function and in `Path.abs`. An empty path is `Err` in every call
+that takes one; `File.exists("")` is false. Only `mkdir` creates missing directories: every other
+function that creates a file, a directory or a link, `write`, `writeBytes`, `create`, `append`,
+`touch`, `lock`, `tryLock`, `copy`, `copyAll` and `symlink`, is `Err` when the directory that would
+hold it is missing, and those that write a file are `Err` when a directory is at the path.
 
 `File.read`, `readLine`, and `readAll` take what they read as text, decoded as all text from outside
 is (section 11 of `ant-lang.md`, String); `File.readBytes`, `readChunk`, and `readExactly` keep the
@@ -95,7 +97,8 @@ whose pieces have no fixed size. `readExactly` waits for all `n` bytes, the read
 announces a length, and is `Err` with the message `unexpected end of file` when the input ends after
 some of them, which are discarded, since they are no whole message; `n` of 0 gives empty `Bytes`
 without reading, at the end of the file too. A `max` below 1 or an `n` below 0 is `Err`.
-`writeChunk` writes the bytes as they are, as `writeText` writes text as UTF-8.
+`writeChunk` writes the bytes as they are, as `writeText` writes text as UTF-8. A read of a handle
+opened only for writing, and a write to one opened only for reading, is `Err`.
 
 A handle is also a connection from `Net`, and the reads and writes are the same. A context
 interrupts a read of a connection, a pipe or a terminal, which are the handles that wait; a read of
@@ -872,15 +875,15 @@ Os.args(): Array[string]              // the arguments after the program path: `
 Os.program(): string                  // the program path: `ant run main.ant a b` gives "main.ant"; "" in the REPL
 Os.platform(): string                 // the operating system: "darwin", "linux", "windows", ...
 Os.arch(): string                     // the processor architecture: "arm64", "amd64", ...
-Os.env(name: string): string | null
+Os.env(name: string): string | null   // null when name is not set; "" when it is set empty
 Os.environ(): Map[string, string]     // every variable
-Os.cwd(): Result[string, Error]       // the working directory
+Os.cwd(): Result[string, Error]       // the working directory, absolute
 Os.home(): Result[string, Error]      // the user's home directory
 Os.configDir(): Result[string, Error] // where the user's programs keep their configuration
 Os.cacheDir(): Result[string, Error]  // where they keep what can be made again
 Os.pid(): int                         // this process's id
 Os.uid(): int | null                  // the effective user id, 0 for root; null on Windows
-Os.hostname(): Result[string, Error]
+Os.hostname(): Result[string, Error]  // the name the host's kernel reports, as hostname prints it
 Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 Os.stdin(): File.Handle               // the program's standard input
 Os.stdout(): File.Handle              // its standard output, which print and println write to as well
@@ -893,8 +896,11 @@ Os.which(program: string): string | null   // the path a Cmd naming program star
 `Os.openPipe` returns two handles the program closes, as it closes a file: a read of `read` waits
 for data and a context ends it. `read` is at end of file once every copy of `write` is closed, the
 program's included, so after `Cmd.start` the program closes its copy of each writing end it gave
-away. A pipe joins what `Cmd.pipe` does not: a child's output read as it comes, a child's input
-written a piece at a time, or both outputs watched apart:
+away. A write to `write` waits while the pipe is full, so the program reads it on another goroutine,
+or gives it to a child, before writing much. A write once every copy of `read` is closed is `Err`
+with the message `broken pipe`, and the program goes on: only the standard streams end it. A pipe
+joins what `Cmd.pipe` does not: a child's output read as it comes, a child's input written a piece
+at a time, or both outputs watched apart:
 
 ```ant
 var out = try Os.openPipe()
@@ -902,6 +908,11 @@ var make = try Cmd.start(Cmd.new("make"), stdout: out.write)
 try File.close(out.write)
 var line = try File.readLine(out.read)   // each line as make writes it, null at the end
 ```
+
+`Os.args` and `Os.environ` return a new array and a new map at each call, which the caller may
+change: neither changes the program's arguments or environment, so a later `Os.env`, and a child
+without `env`, see them as they were. In the REPL `Os.args()` is `[]`. `Os.environ()` holds the
+variables in the host's order, which is no order to rely on.
 
 `Os.program()` is the path of the program's root module as the command was given it, as a shell's
 `$0` is, so a usage line names the script as it was run: `./tool.ant` when a `#!` line runs it from
@@ -920,17 +931,28 @@ var opener = if Os.platform() == "darwin" { "open" } else { "xdg-open" }
 
 `Os.home`, `Os.configDir` and `Os.cacheDir` are Go's `os.UserHomeDir`, `os.UserConfigDir` and
 `os.UserCacheDir`. The home directory is `$HOME` on Unix and `%USERPROFILE%` on Windows. The
-configuration directory is `$XDG_CONFIG_HOME`, or `~/.config` when that is unset, on Unix,
-`~/Library/Application Support` on macOS, and `%AppData%` on Windows; the cache directory is
-`$XDG_CACHE_HOME` or `~/.cache`, `~/Library/Caches`, and `%LocalAppData%`. Each is `Err` when the
-variable it rests on is unset, or an XDG variable holds a relative path. They are roots shared by
-every program, so a script keeps its files under a directory of its own name, made with
-`File.mkdir`, and a fixed path belongs there rather than in the shared temporary directory, where
-someone else can take the name first.
+configuration directory is `$XDG_CONFIG_HOME`, or `$HOME/.config` when that is unset or empty, on
+Unix, `$HOME/Library/Application Support` on macOS, and `%AppData%` on Windows; the cache directory
+is `$XDG_CACHE_HOME` or `$HOME/.cache`, `$HOME/Library/Caches`, and `%LocalAppData%`. Each is `Err`
+when the variable it rests on is unset or empty, or an XDG variable holds a relative path. The
+directory need not exist. They are roots shared by every program, so a script keeps its files under
+a directory of its own name, made with `File.mkdir`, which makes the root too, and a fixed path
+belongs there rather than in the shared temporary directory, where someone else can take the name
+first. Variable names are matched as the host matches them: exactly on Unix, and ignoring case on
+Windows. An empty name, or one holding `=`, names no variable, and `Os.env` gives null for it.
 
 `Os.pid` is this process's id, as `Cmd.pid` is a child's. `Os.uid` is the effective user id, the one
 that decides what the process may touch, so `Os.uid() == 0` asks what `[[ $EUID -eq 0 ]]` asks;
-Windows has no user ids, and there it is null.
+Windows has no user ids, and there it is null. `Os.hostname` is Go's `os.Hostname`: the host's own
+name, not looked up in DNS, so it may or may not hold a domain; it is `Err` only when the host
+cannot report one.
+
+`Os.cwd` is the working directory the `ant` command was started in, or the host's for an embedded
+run, not the directory of the script, and nothing in Ant changes it. It is `Err` when the host
+cannot name it, as when it has been removed.
+
+`Os.exit` hands its status to the host as Go's `os.Exit` does. A Unix parent sees it modulo 256, so
+`Os.exit(256)` reads as success and `Os.exit(-1)` as 255; a portable program exits with 0 to 125.
 
 ### Interrupts
 
@@ -968,10 +990,14 @@ program, whichever function made it, a buffered handle's flush too; a shell repo
 Where no signal comes, on Windows or under a host that gives the program its own writer, `print`,
 `println`, `eprint` and `eprintln` end the program with status 141, and the `File` functions return
 `Err`. `File.close` on a stream does nothing and is `Ok`. In the REPL standard input belongs to the
-REPL, and `Os.stdin()` is at end of file, as is a child's standard input under `Cmd.run`. A read of
-standard input reads the stream only while a read waits, so between reads the input is left to a
-child the stream is handed to. A read that its context ended goes on waiting for the stream, which
-nothing can interrupt, and what it then reads is the program's, for its next read, not a child's.
+REPL, and `Os.stdin()` is at end of file, as is a child's standard input under `Cmd.run`.
+`Os.stdin()` is open for reading only, and `Os.stdout()` and `Os.stderr()` for writing only,
+whatever the descriptor under them allows. A read of standard input reads the stream only while a
+read waits, and takes what is there, which may be more than the line it returns; what it took stays
+the program's, for its next read, and only input that arrives after it is left to a child the stream
+is handed to. A script that reads a header and hands the rest to a child reads the rest itself and
+gives it as `input`. A read that its context ended goes on waiting for the stream, which nothing can
+interrupt, and what it then reads is the program's, for its next read, not a child's.
 
 ## Cmd
 
@@ -1027,9 +1053,11 @@ A command's `program` is started with `args` as its arguments and no shell betwe
 they are. A `program` with no path separator is looked up in the program's own `PATH`,
 `Os.env("PATH")`, never in the `PATH` of `env`, and an entry of `PATH` that is not absolute, `.`
 included, finds nothing; `Os.which` returns what that lookup finds. A `program` with a separator is
-taken as it is, relative to `dir` when it is relative. The child inherits the parent's working
-directory and environment unless `dir` or `env` is given; `env` is the child's whole environment, so
-a program that adds one variable starts from `Os.environ()`.
+taken as it is, relative to `dir` when it is relative; given one, `Os.which` returns it unchanged
+when it names an executable file, taken against the working directory as a `Cmd` without `dir` takes
+it, and null otherwise. The child inherits the parent's working directory and environment unless
+`dir` or `env` is given; `env` is the child's whole environment, so a program that adds one variable
+starts from `Os.environ()`.
 
 The functions differ in what they do with the command's streams and how long they wait:
 

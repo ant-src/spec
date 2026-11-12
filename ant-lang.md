@@ -2909,8 +2909,8 @@ other error through `String.from`, or when the main goroutine panics; and `2` wh
 not be loaded because of a syntax error, an import cycle, a missing module, or an import of a
 script. `try` and `Result.unwrap` both end a script on an `Err`: `try` as an expected failure,
 reported as the error alone, and `unwrap` as a bug, reported as a panic with its stack trace.
-`Os.exit` ends the process with any status and skips deferred blocks. A library given to `ant run`
-is initialized, and the program exits with `0`.
+`Os.exit` ends the process with the status it is given and skips deferred blocks. A library given to
+`ant run` is initialized, and the program exits with `0`.
 
 The REPL that a bare `ant` starts runs each input as a script body of its own, whose declarations
 stay for the inputs after it: `return` ends the input, `try` returns an `Err` from it, `?? return`
