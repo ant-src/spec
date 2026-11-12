@@ -1174,7 +1174,10 @@ println(a == type(int64))                  // true: int is int64
   value is: a pair already under comparison counts as equal. Hashing agrees, so a type value can be
   a map key, which is how a library keeps a table of per-type codecs. `String.from` renders the type
   in annotation syntax, with a declared alias by the name it was written with and `int64` and
-  `uint8` as `int` and `byte` (Primitives): `Array[Config]`, `int | null`, `Json.Value`.
+  `uint8` as `int` and `byte` (Primitives): `Array[Config]`, `int | null`, `Json.Value`. A union
+  does not render a member that an alias member already covers, so with
+  `type MaybeInt = int | null`, both `type(MaybeInt | null)` and `Reflect.nullable(type(MaybeInt))`
+  render as `MaybeInt`, and `Reflect.nullable(type(Json.Value))` as `Json.Value`.
 - **Kept bodies.** A `type` declaration keeps its body, with its type parameters, their bounds, and
   the scope it was declared in, as the syntax the parser built (Type declarations). The body is
   resolved to a type only when a type expression first reaches the declaration, and the result is
