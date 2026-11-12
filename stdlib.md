@@ -1044,8 +1044,11 @@ var status = try Cmd.run(build)
 
 `Cmd.new` is the literal with its defaults, `Cmd{ program: "go", args: ["build"] }`. `Cmd.string`
 writes the program and its arguments as a POSIX shell would need them quoted, `git commit -m 'a b'`,
-and a pipeline's stages joined by `|`. It leaves out `env` and `dir`, unlike the record's own
-rendering, so the environment's secrets stay out of a log.
+and a pipeline's stages joined by `|` with a space on each side, `git log | wc -l`. A word is left
+bare when it is not empty and is only ASCII letters, digits and `_@%+=:,./-`, `=` excepted in the
+program's word; any other word is put in single quotes, with each `'` in it written `'\''`, so `''`
+is the empty word and a line break stays inside the quotes. It leaves out `env` and `dir`, unlike
+the record's own rendering, so the environment's secrets stay out of a log.
 
 ### Processes
 
@@ -1094,12 +1097,14 @@ share a process group of their own, so the terminal's Ctrl-C does not reach them
 alone. `Cmd.wait` blocks until every stage has exited, and may be called any number of times, from
 any goroutine, each getting the same outcome. A child that writes into a pipe nobody reads blocks
 once the pipe is full, so a program reads a child's pipe while it waits, before the wait or on
-another goroutine. Every child is reaped when it exits, waited for or not. `Cmd.kill` sends a signal
-by name: `SIGTERM`, `SIGKILL`, `SIGINT`, `SIGHUP`, `SIGQUIT`, `SIGUSR1` or `SIGUSR2`; an unknown
-name, or one the host lacks, is `Err`. `Cmd.stop` sends SIGTERM, waits up to `grace`, sends SIGKILL
-if a stage still runs, and returns the status. On a command that has exited both send nothing. A
-command still running when the script ends is left running, as in Go; a program that wants it gone
-stops it in a deferred block.
+another goroutine. Every child is reaped when it exits, waited for or not. `Cmd.pid` is the id the
+last stage started with, and stays so after it exits; once it has been reaped the system may give
+that id to another process, so a program does not signal it by id. `Cmd.kill` sends a signal by
+name: `SIGTERM`, `SIGKILL`, `SIGINT`, `SIGHUP`, `SIGQUIT`, `SIGUSR1` or `SIGUSR2`; an unknown name,
+or one the host lacks, is `Err`. `Cmd.stop` sends SIGTERM, waits up to `grace`, sends SIGKILL if a
+stage still runs, and returns the status. On a command that has exited both send nothing. A command
+still running when the script ends is left running, as in Go; a program that wants it gone stops it
+in a deferred block.
 
 A handle given to `Cmd.start` is lent: the child gets its own copy, and the handle stays open and
 the program's. A buffered handle given as an output is flushed first and its `f` handed over, so a
@@ -1164,7 +1169,8 @@ the last stage's, as a shell's `$!` is. When a stage cannot be started, those al
 killed and the call is `Err`. Under `Cmd.run` a Ctrl-C reaches every stage, and the last stage
 decides whether it is the program's interrupt (Os, Interrupts): in `git log | less`, Ctrl-C ends
 `git`, `less` handles it and goes on, and so does the script. A pipeline of no commands, which a
-literal `Cmd.Pipeline{ cmds: [] }` can make, panics wherever it is run, as `Cmd.pipe` does.
+literal `Cmd.Pipeline{ cmds: [] }` can make, panics wherever it is run or given to `Cmd.string`, as
+`Cmd.pipe` does.
 
 ## Json
 
