@@ -82,8 +82,10 @@ entries; `removeAll` is the recursive form, named so the dangerous one is the lo
 
 A path is used as written: `~` and `$NAME` are not expanded as a shell expands them, so a path under
 the home directory is `Path.join([try Os.home(), ...])`. A relative path is taken against the
-working directory, in every `File` function and in `Path.abs`. An empty path is `Err` in every call
-that takes one; `File.exists("")` is false. Only `mkdir` creates missing directories: every other
+working directory, in every `File` function and in `Path.abs`. An empty path is `Err` in every
+`File` call that takes one; `File.exists("")` is false. The `Path` functions take `""` as text and
+are not `Err` on it: `Path.clean("")`, `Path.base("")` and `Path.dir("")` are `.`, and
+`Path.abs("")` is the working directory. Only `mkdir` creates missing directories: every other
 function that creates a file, a directory or a link, `write`, `writeBytes`, `create`, `append`,
 `touch`, `lock`, `tryLock`, `copy`, `copyAll` and `symlink`, is `Err` when the directory that would
 hold it is missing, and those that write a file are `Err` when a directory is at the path.
@@ -470,21 +472,45 @@ Path.base(p: string): string                     // the last element; "." for ""
 Path.dir(p: string): string                      // all but the last element; "." when there is none
 Path.ext(p: string): string                      // ".ant", or "" when there is none
 Path.clean(p: string): string                    // the shortest equivalent path
-Path.isAbs(p: string): bool
-Path.abs(p: string): Result[string, Error]       // against the working directory
+Path.isAbs(p: string): bool                      // begins at a root: / on Unix; a drive and \, or \\host\share, on Windows
+Path.abs(p: string): Result[string, Error]       // absolute and clean, against the working directory
 Path.rel(base: string, target: string): Result[string, Error]   // target as a path from base
 Path.match(pattern: string, path: string, hidden: bool = false): Result[bool, Error]   // path matches the glob pattern; Err when the pattern is malformed
 ```
 
-`Path.join` of no parts, or of empty ones only, is `.`, as `Path.clean("")` is.
+`Path.join` skips empty parts, so `Path.join(["", "a"])` is `a`, not `/a`, and no parts, or empty
+ones only, give `.`, as `Path.clean("")` does.
+
+`Path.clean` works on the text, as Go's `filepath.Clean` does: it reduces runs of separators to one,
+drops `.` elements and a trailing separator, and removes each `..` together with the element before
+it. A `..` right after the root is dropped, since the root is its own parent, and a `..` at the
+start of a relative path is kept. So `Path.clean("/../a")` is `/a` and `Path.clean("a/../..")` is
+`..`.
+
+`Path.base` drops trailing separators first and is the separator for a path made only of
+separators, so `Path.base("a/b/")` is `b` and `Path.base("/")` is `/`. `Path.dir` is the path up to
+its last separator, cleaned, so `Path.dir("a/b/")` is `a/b`, `Path.dir("a/../b/c")` is `b`, and
+`Path.dir("/")` is `/`; the two rebuild `p` only when it does not end in a separator. `Path.ext` is
+the text from the last dot after the last separator, dot included, or `""` when there is no such
+dot, so `Path.ext("b.tar.gz")` is `.gz`, `Path.ext(".env")` is `.env`, and a path that ends in a
+separator has none.
+
+On Windows `\x` and `C:x` are not absolute, since each depends on the current drive or that drive's
+directory.
 
 `Path.rel` works on the text, cleaned, and is `Err` when no relative path leads from `base` to
 `target`: when one is absolute and the other is not, when they are on different Windows volumes, or
 when `base` climbs out with `..` further than `target` does, as from `../a` to `b`.
 
+`Path.abs` joins a relative path to the working directory and cleans the result, and cleans an
+absolute path, so `Path.abs("/a/./b/../c/")` is `Ok("/a/c")`. It is `Err` only when `Os.cwd` would
+be.
+
 `Path.match` matches the whole of `path` against a glob pattern, the syntax `File.glob` takes. Both
 are split into elements at the separator, and each element of the pattern matches one element of the
-path, except `**`:
+path, except `**`. The empty path is one empty element, so `*`, and `**` as the last element, match
+it. A separator at the end of a path or pattern adds no element: it must be in both, so `src/*` does
+not match `src/`.
 
 | Pattern  | Matches                                                                             |
 | -------- | ----------------------------------------------------------------------------------- |
@@ -502,9 +528,10 @@ start, and a `\` at the end of an element are malformed. On Windows both `/` and
 pattern written with `/` works on every system, and brackets escape instead: `[*]`, `[?]`, `[[]`.
 `**/*.ant` matches `a.ant` and `x/y/a.ant`; `src/**` matches everything below `src`, but not `src`.
 
-A wildcard does not match a `.` that begins an element: `*` matches `a.txt` and not `.env`, `?ab`
-does not match `.ab`, and `**` does not take an element that begins with `.`, so it does not descend
-into `.git`. An element of the pattern that begins with a literal `.`, as `.*`, matches them, and
+A wildcard, `*`, `?`, `**` or a set, does not match a `.` that begins an element, even a set that
+holds `.`, so `[.]env` does not match `.env`; `*` matches `a.txt` and not `.env`, `?ab` does not
+match `.ab`, and `**` does not take an element that begins with `.`, so it does not descend into
+`.git`. An element of the pattern that begins with a literal `.`, as `.*`, matches them, and
 `hidden: true` lifts the rule. The elements `.` and `..` are matched only by themselves. Wildcards
 compare code points exactly on every system, as Go's do, so `*.TXT` does not match `a.txt`.
 
