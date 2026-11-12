@@ -31,16 +31,16 @@ File.read(path: string): Result[string, Error]
 File.readBytes(path: string): Result[Bytes, Error]
 File.write(path: string, text: string, replace: bool = true): Result[void, Error]   // creates the file, or replaces what it held, keeping its mode
 File.writeBytes(path: string, bytes: Bytes, replace: bool = true): Result[void, Error]   // likewise
-File.exists(path: string): bool                            // anything at path, a directory included; false at a dangling link
+File.exists(path: string): bool                            // anything at path that stat can reach, a directory included; false at a dangling link and when stat is Err for any reason
 File.stat(path: string, follow: bool = true): Result[File.Info, Error]   // follow: false describes a link itself
 File.chmod(path: string, mode: int): Result[void, Error]   // sets the bits in 0o7777 exactly
 File.touch(path: string, time: Time.Instant | null = null): Result[void, Error]   // sets modified to time, or now; creates an empty file when missing
-File.remove(path: string): Result[void, Error]             // one file, or an empty directory
-File.removeAll(path: string): Result[void, Error]          // a whole tree; Ok when there is nothing to remove
-File.rename(from: string, to: string): Result[void, Error] // replaces a file at to
+File.remove(path: string): Result[void, Error]             // one file, or an empty directory; Err when nothing is there
+File.removeAll(path: string): Result[void, Error]          // a whole tree; Ok when nothing is there and the path could hold something; Err for . and ..
+File.rename(from: string, to: string): Result[void, Error] // replaces a file at to; Err when a directory is at to, since there is no "into" form, and across file systems; Ok and nothing changes when from and to are the same file
 File.copy(from: string, to: string, replace: bool = true): Result[void, Error]   // one file's contents and mode; replaces a file at to
 File.copyAll(from: string, to: string): Result[void, Error]   // a file or a whole tree; to must not exist, or be an empty directory
-File.mkdir(path: string): Result[void, Error]              // with its parents; Ok when it exists
+File.mkdir(path: string): Result[void, Error]              // with its parents, each made as the path names it, so x/../y makes x too; Ok when it exists
 File.tempFile(pattern: string, dir: string | null = null): Result[string, Error]   // a new empty file, mode 0o600, in dir or the host's temporary directory
 File.tempDir(pattern: string, dir: string | null = null): Result[string, Error]    // a new empty directory, mode 0o700, likewise
 File.symlink(target: string, link: string): Result[void, Error]   // makes link, pointing at target
@@ -71,10 +71,20 @@ File.close(f: File.Handle): Result[void, Error]            // a buffered handle 
 
 `File.list` returns names and `File.walk` paths: `walk` descends into every directory below `dir`,
 does not follow symbolic links, lists files and not directories, and returns them in lexical order.
-`modified` is the time of the last write, and `mode` holds the permissions (see Modes). `isSymlink`
-is true only for `stat(path, follow: false)` of a link, since `stat` otherwise describes what the
-link points at. `remove` refuses a directory with entries; `removeAll` is the recursive form, named
-so the dangerous one is the longer name.
+Lexical order is the order in which strings compare, code point by code point, so `"10.txt"` comes
+before `"9.txt"` and `"Zeta"` before `"apple"`. `modified` is the time of the last write, and `mode`
+holds the permissions (see Modes). `isSymlink` is true only for `stat(path, follow: false)` of a
+link, since `stat` otherwise describes what the link points at. `name` is the last element of
+`path`, `Path.base(path)`, also when a link is followed. `size` is the length of a regular file in
+bytes; for a directory, and for a link described with `follow: false`, it is what the host reports,
+as is a link's own `mode`, so a program does not rely on them. `remove` refuses a directory with
+entries; `removeAll` is the recursive form, named so the dangerous one is the longer name.
+
+An empty path is `Err` in every call that takes one; `File.exists("")` is false. Only `mkdir`
+creates missing directories: every other function that creates a file, a directory or a link,
+`write`, `writeBytes`, `create`, `append`, `touch`, `lock`, `tryLock`, `copy`, `copyAll` and
+`symlink`, is `Err` when the directory that would hold it is missing, and those that write a file
+are `Err` when a directory is at the path.
 
 `File.read`, `readLine`, and `readAll` take what they read as text, decoded as all text from outside
 is (section 11 of `ant-lang.md`, String); `File.readBytes`, `readChunk`, and `readExactly` keep the
@@ -255,18 +265,18 @@ every link along it resolved, and is `Err` when the path, or a link on the way, 
 
 What each function does at a link:
 
-| Function                                                                                   | At a link                                                                        |
-| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `read`, `write`, `open`, `create`, `append`, `chmod`, `touch`, `lock`, both ends of `copy` | follows it; with `replace: false`, a link at the path, dangling or not, is `Err` |
-| `exists`                                                                                   | follows it, so a dangling link is `false`                                        |
-| `stat`                                                                                     | follows it, unless `follow` is `false`                                           |
-| `remove`, `rename`                                                                         | acts on the link, not on its target                                              |
-| `removeAll`                                                                                | removes the link, never what it points at                                        |
-| `list`                                                                                     | lists its name                                                                   |
-| `walk`                                                                                     | does not descend through it, and lists it as a file                              |
-| `glob`                                                                                     | `**` does not descend through it; another element of the pattern goes through it |
-| `copyAll`                                                                                  | copies it as a link inside the tree; follows it at `from`                        |
-| `realPath`, `readLink`                                                                     | resolves it, or reads it                                                         |
+| Function                                                                                   | At a link                                                                                                       |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `read`, `write`, `open`, `create`, `append`, `chmod`, `touch`, `lock`, both ends of `copy` | follows it; with `replace: false`, a link at the path, dangling or not, is `Err`                                |
+| `exists`                                                                                   | follows it, so a dangling link is `false`                                                                       |
+| `stat`                                                                                     | follows it, unless `follow` is `false`                                                                          |
+| `remove`, `rename`                                                                         | acts on the link, not on its target                                                                             |
+| `removeAll`                                                                                | removes the link, never what it points at                                                                       |
+| `list`, `walk`                                                                             | follow it at `dir`; inside, `list` lists its name and `walk` does not descend through it and lists it as a file |
+| `mkdir`                                                                                    | follows it, so a link to a directory is `Ok` and a dangling link is `Err`                                       |
+| `glob`                                                                                     | `**` does not descend through it; another element of the pattern goes through it                                |
+| `copyAll`                                                                                  | copies it as a link inside the tree; follows it at `from`                                                       |
+| `realPath`, `readLink`                                                                     | resolves it, or reads it                                                                                        |
 
 ### Globs
 
