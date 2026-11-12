@@ -3597,7 +3597,9 @@ opaque, immutable, and compared by value, so it serves as a map key. The syntax 
 classes, repetition, alternation, and groups, including the named `(?<name>...)` and the flag groups
 `(?i)`, `(?m)`, and `(?s)`, without lookahead, lookbehind, or backreferences, so that a match takes
 time linear in the input. `\d`, `\w`, `\s`, and `\b` are ASCII; the Unicode classes are `\pL` and
-`\p{Greek}`.
+`\p{Greek}`. Of the matches that start at the leftmost position, the one taken is the one a
+backtracking matcher finds first, as in Perl and JavaScript: alternatives are tried left to right,
+greedy repetition prefers more and lazy repetition fewer, so `Regex.find(/a|ab/, "ab")` matches `a`.
 
 ```
 type Pattern                                                   // a compiled expression, from a literal or Regex.compile
@@ -3636,23 +3638,30 @@ a string.
 A `Match` is one match of the whole pattern: `text` is the matched text, `start` and `end` are its
 code point indices into `s`, so `String.slice(s, m.start, m.end)` is `m.text`, `groups[0]` is the
 whole match and `groups[n]` the `n`th group, `null` when the group took no part, and `named` has an
-entry for each named group, in the pattern's order, `null` likewise. `findAll` takes successive
-matches from the left without overlap, and skips an empty match that abuts the match before it.
-`split` returns the pieces of `s` between the matches, so a pattern that never matches gives `[s]`;
-with an empty `s` it gives `[""]`, whatever the pattern. An empty match at the start or at the end
-of `s` adds no empty piece, as JavaScript's `split` has it, so `Regex.split(/a*/, "baaab")` is
-`["b", "b"]`.
+entry for each named group, in the pattern's order, `null` likewise. Capturing groups are numbered
+by their opening parentheses from the left, nested and named groups included, so in `/((a)(b))(c)/`
+group 1 is `ab` and group 4 is `c`. `findAll` takes successive matches from the left without
+overlap, and skips an empty match that abuts the match before it. `replace`, `replaceWith`, and
+`split` work on the matches `findAll` returns, and `replaceFirst` on the first of them, so
+`Regex.replace(/a*/, "baaab", "-")` is `"-b-b-"`. `split` returns the pieces of `s` between the
+matches, so a pattern that never matches gives `[s]`; with an empty `s` it gives `[""]`, whatever
+the pattern. An empty match at the start or at the end of `s` adds no empty piece, as JavaScript's
+`split` has it, so `Regex.split(/a*/, "baaab")` is `["b", "b"]`.
 
 The `i` flag folds case one code point at a time, as RE2 does, so `/k/i` matches the Kelvin sign
 `K`, but `/straße/i` does not match `"STRASSE"`, which `String.equalFold` accepts. Text compared
 without regard to case is compared through `String.foldCase`.
 
 In `replacement`, `$n` and `${n}` expand to group `n`, `${name}` to a named group, `$$` to one `$`,
-and a group that took no part to `""`. A name after `$` is taken as long as it can be: `$1x` is
-`${1x}`, which is no group and so expands to `""`; write `${1}x`. In a string `"$1"` needs no
-escape, but `${` interpolates: write `"\${1}x"` or the raw string `` `${1}x` ``. `replaceWith` calls
-`f` with each `Match` in order and puts its result in the match's place, as written, with no
-expansion.
+and a group that took no part to `""`. A `$` that starts none of these, such as one at the end, one
+before a character that cannot start a name, or a `${` with no name or no `}`, stays as written, as
+in Go. A name after `$` is taken as long as it can be: `$1x` is `${1x}`, which is no group and so
+expands to `""`; write `${1}x`. In a string `"$1"` needs no escape, but `${` interpolates: write
+`"\${1}x"` or the raw string `` `${1}x` ``. `replaceWith` calls `f` with each `Match` in order and
+puts its result in the match's place, as written, with no expansion.
+
+`Regex.escape` puts a `\` before each of `\.+*?()|[]{}^$`, so the result matches `s` literally as a
+pattern or part of one outside a character class; inside `[...]`, `-` keeps its meaning.
 
 `Regex` is a namespace and not a type, like `Time` (section 10, Namespaces), so the annotation is
 `Regex.Pattern`. `p is Regex.Pattern` tests a value for the kind, as `t is Time.Instant` does
