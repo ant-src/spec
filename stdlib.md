@@ -50,7 +50,7 @@ File.list(dir: string): Result[Array[string], Error]       // the names in dir, 
 File.walk(dir: string): Result[Array[string], Error]       // every file below dir, as paths relative to it
 File.glob(pattern: string, dir: string = ".", hidden: bool = false): Result[Array[string], Error]   // the paths below dir that match pattern, in lexical order
 
-File.open(path: string): Result[File.Handle, Error]        // for reading
+File.open(path: string): Result[File.Handle, Error]        // for reading; a directory opens, and a read of it is Err
 File.create(path: string, replace: bool = true): Result[File.Handle, Error]   // for writing; truncates
 File.append(path: string): Result[File.Handle, Error]      // for writing at the end; creates
 File.lock(path: string, ctx: Context | null = null): Result[File.Handle, Error]   // for reading and writing, holding the file's lock; waits for it
@@ -99,22 +99,24 @@ A write is handed to the OS before it returns, all of its bytes or `Err`, as in 
 back, so nothing needs a flush. How many system calls it takes is not promised. `File.pipe` writes
 each chunk as it reads it: first what `src` had read ahead, then a chunk at a time until the end of
 `src`, so a source that waits, such as standard input or a connection, streams, and what it read
-before its context ended it has been written.
+before its context ended it has been written. `src` and `dst` may be the same connection, which
+echoes; for a file they may not, which is `Err`. `pipe` closes neither.
 
 `File.buffered` is the opt-in for a loop of many small writes, Go's `bufio.Writer` as a handle. A
 write to the handle it returns goes into a buffer of `size` bytes, which is written to `f` when a
 write does not fit, at `File.flush` and at `File.close`, and at nothing else: no wait, no read and
-no exit. A buffered handle neither flushed nor closed when the run ends loses what its buffer holds,
-as a Go program that returns from `main` without `Flush` does. A `size` below 1 gives the default.
-When `f` is itself buffered with a buffer of at least `size`, `File.buffered` returns `f`. A read of
-the buffered handle reads `f`, through its one read buffer, so a buffered connection can `readLine`
-a reply after `File.flush` sends the request. `File.flush` writes out every layer, the handle's
-buffer and then that of each buffered handle under it, so after it everything written has been
-handed to the OS; on a handle that is not buffered it does nothing and is `Ok`, so a function may
-flush a handle without knowing what it is. The first error from writing the buffer out is kept, and
-every later write and flush returns it, as does the first close. A write to `f` itself, or a `print`
-while `File.buffered(Os.stdout())` holds output, goes past the buffer and can come out before what
-the buffer holds.
+no exit. A write to a buffered handle over a handle that cannot be written, such as one from
+`File.open`, is `Err` at once and buffers nothing. A buffered handle neither flushed nor closed when
+the run ends loses what its buffer holds, as a Go program that returns from `main` without `Flush`
+does. A `size` below 1 gives the default. When `f` is itself buffered with a buffer of at least
+`size`, `File.buffered` returns `f`. A read of the buffered handle reads `f`, through its one read
+buffer, so a buffered connection can `readLine` a reply after `File.flush` sends the request.
+`File.flush` writes out every layer, the handle's buffer and then that of each buffered handle under
+it, so after it everything written has been handed to the OS; on a handle that is not buffered it
+does nothing and is `Ok`, so a function may flush a handle without knowing what it is. The first
+error from writing the buffer out is kept, and every later write and flush returns it, as does the
+first close. A write to `f` itself, or a `print` while `File.buffered(Os.stdout())` holds output,
+goes past the buffer and can come out before what the buffer holds.
 
 `File.close` of a buffered handle writes the buffer out and closes `f`, and reports the first error
 of the two, the kept error included; on a standard stream it writes out and leaves the stream open.
@@ -126,22 +128,22 @@ writes out. A close can fail, of a file as of a buffer, so a program that promis
 it, as `try File.close(output)`. A deferred close cannot report, since a deferred block's value is
 discarded. So a function that writes a file ends with an explicit close, and the deferred close of
 the same handle, there for the paths that leave early, then does nothing and is `Ok`, as every close
-after the first is. The handle is closed even when `File.close` is `Err`, so a write after it is
-`Err` and a second close does nothing.
+after the first is. The handle is closed even when `File.close` is `Err`, so a read or a write after
+it is `Err`, as is a flush of a buffered handle, and a second close does nothing.
 
 ```ant
 func writeReport(path: string, rows: Array[string]): Result[void, Error] {
-  var out = File.buffered(try File.create(path))
+  let out = File.buffered(try File.create(path))
   defer { File.close(out) }
   for row in rows { try File.writeLine(out, row) }
-  try File.close(out)
+  File.close(out)
 }
 ```
 
 `File.isTerminal` is true when `f` is a terminal, as `[[ -t 1 ]]` asks of standard output, so a
 program colours its output or shows progress only when a person is watching:
-`File.isTerminal(Os.stdout())`. It is false for a file, a pipe and a connection, and a handle from
-`File.buffered` answers for the handle under it.
+`File.isTerminal(Os.stdout())`. It is false for a file, a pipe and a connection, and for a closed
+handle, which is no longer anything; a handle from `File.buffered` answers for the handle under it.
 
 ### Modes
 
@@ -164,10 +166,10 @@ never sees it half-written:
 
 ```ant
 func saveToken(path: string, token: string): Result[void, Error] {
-  var tmp = try File.tempFile(".token-*", dir: Path.dir(path))
+  let tmp = try File.tempFile(".token-*", dir: Path.dir(path))
   defer { File.remove(tmp) }       // Err after the rename, and discarded
   try File.write(tmp, token)       // still 0o600, since the file exists
-  try File.rename(tmp, path)
+  File.rename(tmp, path)
 }
 ```
 
@@ -276,8 +278,8 @@ one with a root and no volume on Windows, `\x`, which is on the drive of the wor
 
 ```ant
 for path in try File.glob("*.txt") { println(path) }        // a.txt, b.txt; not .notes.txt
-var tests = try File.glob("**/*_test.ant", dir: root)
-var dirs = try File.glob("*/")                              // directories only: src/, tests/
+let tests = try File.glob("**/*_test.ant", dir: root)
+let dirs = try File.glob("*/")                              // directories only: src/, tests/
 ```
 
 The paths are cleaned, each comes once, and they are in lexical order element by element, the order
@@ -317,7 +319,7 @@ reason; `tryLock` does not wait, and is `Ok(null)` when another handle holds it.
 real failure, such as a directory that cannot be written.
 
 ```ant
-var lock = try File.tryLock(Path.join([try Os.cacheDir(), "backup.lock"]))
+let lock = try File.tryLock(Path.join([try Os.cacheDir(), "backup.lock"]))
 if lock == null {
   eprintln("backup: already running")
   Os.exit(1)
