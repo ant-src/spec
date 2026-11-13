@@ -395,9 +395,10 @@ union of the eight integer types, `Number`, which adds the two float types, and 
 assignment, a loop, and a function with nothing to return all produce `void`. Write it explicitly
 when a value is required, as in `Result.ok(void)`.
 
-`Bytes` is an immutable sequence of bytes, for binary data rather than text: an image, a digest, a
-frame of a network protocol. It is built in, so `len`, `for`, indexing, and `is` take it, but it is
-not a primitive, so no named primitive type is declared over it. Section 11 has its functions.
+`Bytes` is a mutable, growable sequence of bytes, shared by reference as an array is, for binary
+data rather than text: an image, a digest, a frame of a network protocol. It is built in, so `len`,
+`for`, indexing, and `is` take it, but it is not a primitive, so no named primitive type is declared
+over it. Section 11 has its functions.
 
 Numeric types never mix. Convert explicitly by calling the target type as a function. Each of the
 ten numeric names is a prelude function that takes any numeric value, and it is a value in its own
@@ -418,8 +419,8 @@ var bad = int8(300)               // panic: out of range
 ### Records
 
 A record type lists named fields. A record literal names the type and lists the fields, as in Go.
-Fields are mutable, and there is no `readonly` or frozen form. Strings, `Bytes`, time values, and
-patterns are immutable; records, arrays, maps, and sets are not, and goroutines share them under the
+Fields are mutable, and there is no `readonly` or frozen form. Strings, time values, and patterns
+are immutable; records, arrays, maps, sets, and `Bytes` are not, and goroutines share them under the
 sync objects of section 9.
 
 ```ant
@@ -484,7 +485,7 @@ sync objects, generators, handles, and listeners. The comparison recurses with `
 run-time field, including fields the static type does not mention, so it agrees with `String.from`
 and `Json.stringify`. A pair of values already under comparison counts as equal, so cyclic
 structures compare in finite time. Identity is a library call: `Record.same`, `Array.same`,
-`Map.same`, and `Set.same` report whether two names refer to one value.
+`Map.same`, `Set.same`, and `Bytes.same` report whether two names refer to one value.
 
 ```ant
 var p = Point{ x: 1.0, y: 2.0 }
@@ -1297,8 +1298,7 @@ must then be assignable to the expected type. Under `var r: int | string = bigge
 member of `Ordered`, so the arguments set `T` to `int`, and the `int` result is assignable to
 `int | string`. Under `var n: int | string = r.unwrap()`, with `r` a `Result[int, Error]`, the
 expected type would ask for a `Result[int | string, Error]`, which `r` is not, so `r` sets `T` to
-`int`.
-An argument checked against an interface whose arguments name an open parameter, such as
+`int`. An argument checked against an interface whose arguments name an open parameter, such as
 `Container[T]`, solves it from the functions a call through `.` reaches on the argument's type,
 matched to the interface's functions as an argument to a parameter: a `Stack` whose `get` returns
 `string | null` sets `T` to `string`. A call argument whose parameter type is only partly solved, as
@@ -2641,11 +2641,14 @@ particular result:
 - A racy read of a variable, field, or element observes some value that was stored there, never a
   mix of two or a value from nowhere. Since every store into a slot has the slot's declared type,
   the checker's types stay true in a racing program.
-- A racy array, map, or set operation observes the state before or after each concurrent mutation,
-  or panics with the ordinary index error, or finds the key absent, never a corrupted structure. An
-  operation over many elements, such as `Array.map`, may see some of several racing stores and not
-  others. Each operation on a `Random` generator (section 11), a whole `shuffle` included, comes
-  before or after every racing one, so its values are those of some order of the draws.
+- A racy array, `Bytes`, map, or set operation observes the state before or after each concurrent
+  mutation, or panics with the ordinary index error, or finds the key absent, never a corrupted
+  structure. An operation over many elements, such as `Array.map`, may see some of several racing
+  stores and not others, and one over many bytes, such as `Bytes.read` of a `uint32` or
+  `Bytes.copy`, may see or leave a mix of two states. A store of a byte that races with growth may
+  land in the storage being replaced and be lost. Each operation on a `Random` generator (section
+  11), a whole `shuffle` included, comes before or after every racing one, so its values are those
+  of some order of the draws.
 - The interpreter itself never crashes.
 
 An implementation may also detect a race and end the program with a report and exit status 1, since
@@ -2659,10 +2662,10 @@ initializer runs, which is already a program error for a `var`. The guarantee co
 alone: whether its value can race is the value's business.
 
 _Implementation note._ The guarantee costs one word per value, so that a variable, field, or element
-store is a single machine word and cannot tear, plus an atomic header load per array operation with
-`push` and `pop` under a lock, and one lock per map or set operation, shared between reads, since a
-read during a resize is not safe with mutations alone locked. An implementation in a language whose
-strings or dynamic values span two words boxes them.
+store is a single machine word and cannot tear, plus an atomic header load per array or `Bytes`
+operation with `push` and `pop` under a lock, and one lock per map or set operation, shared between
+reads, since a read during a resize is not safe with mutations alone locked. An implementation in a
+language whose strings or dynamic values span two words boxes them.
 
 ### Visibility
 
@@ -3366,8 +3369,8 @@ String.category(c: string): string                             // the two-letter
 String.inScript(c: string, script: string): bool               // whether c has the Script property script; panics unless c is one code point, or if script names no script
 String.chars(s: string): Array[string]                         // one code point each
 String.graphemes(s: string): Array[string]                     // one extended grapheme cluster of Unicode's UAX #29 each
-String.toBytes(s: string): Bytes                               // UTF-8
-String.fromBytes(bytes: Bytes): string | null                  // null on invalid UTF-8
+String.toBytes(s: string): Bytes                               // UTF-8, in new Bytes
+String.fromBytes(bytes: Bytes): string | null                  // null on invalid UTF-8; validates a copy, so a racing write cannot make the string invalid
 String.fromBytesLossy(bytes: Bytes): string                    // each maximal subpart of an ill-formed sequence as U+FFFD, as outside text is
 String.codePoint(c: string): int                               // the scalar value of c; panics unless c is one code point
 String.fromCodePoint(n: int): string | null                    // the string of the one code point n; null when n is not a scalar value
@@ -3512,35 +3515,101 @@ only inside `${...}` of a string and on a number in an HTML expression (section 
 
 ### Bytes
 
-`Bytes` is an immutable sequence of bytes, for binary data: what a file, a connection, or a child
-process gives that is not text, and what a digest or an encoding works on. It holds one byte per
-byte, where an `Array[byte]` holds a value per element, and `==` compares the contents, so `Bytes`
-serves as a map key. `len(b)` is the number of bytes; `b[i]` reads one as a `byte` and panics
-outside `0 ..= len(b) - 1`, as an array index does; `for x in b` yields each byte. There is no
-`b[i] = x`. A program that computes bytes one at a time builds an `Array[byte]` and converts it, and
-one that joins pieces collects them for `Bytes.concat`, as text is joined with `String.concat`.
+`Bytes` is a mutable, growable sequence of bytes, for binary data: what a file, a connection, or a
+child process gives that is not text, what a digest or an encoding works on, and what a program
+builds to send. It holds one byte per byte, where an `Array[byte]` holds a value per element. A
+`Bytes` value refers to one collection, as an array does: assignment, arguments, results, containers
+and channel sends share it, and growth and truncation show through every name for it. `len(b)` is
+the number of bytes; `b[i]` reads one as a `byte` and `b[i] = x` writes one, and both panic outside
+`0 ..= len(b) - 1`, as an array index does; `for x in b` follows the current length, as a loop over
+an array does. `==` compares the contents, and `Bytes.same` compares identity. A `Bytes` serves as a
+map key under the rule for arrays: changing it while it is a key is a program error (section 4,
+Arrays, maps, and sets).
 
 ```
+Bytes.new(size: int = 0): Bytes                                // size zero bytes; panics if size < 0 or above 2^31 − 1
+Bytes.clone(b: Bytes): Bytes                                   // a copy
+Bytes.same(a: Bytes, b: Bytes): bool                           // identity
 Bytes.length(b: Bytes): int
-Bytes.slice(b: Bytes, from: int, to: int): Bytes               // panics as Array.slice does
-Bytes.concat(parts: Array[Bytes]): Bytes
-Bytes.indexOf(b: Bytes, sub: Bytes): int | null                // the first index of sub; 0 for an empty sub
-Bytes.startsWith(b: Bytes, prefix: Bytes): bool
+Bytes.push(b: Bytes, x: byte): void                            // mutates
+Bytes.extend(b: Bytes, src: Bytes): void                       // mutates; src's bytes as they were at the call
+Bytes.pop(b: Bytes): byte | null                               // mutates; removes and returns the last byte; null when empty
+Bytes.truncate(b: Bytes, n: int): void                         // mutates; keeps the first n bytes; panics if n is outside 0 ..= length
+Bytes.fill(b: Bytes, x: byte, from: int = 0, to: int | null = null): void   // mutates; to: the length when null; panics as Array.slice does
+Bytes.copy(dst: Bytes, at: int, src: Bytes, from: int = 0, to: int | null = null): void   // mutates dst; to: src's length when null
+Bytes.slice(b: Bytes, from: int, to: int): Bytes               // a copy; panics as Array.slice does
+Bytes.concat(parts: Array[Bytes]): Bytes                       // in new Bytes, even of one part
+Bytes.indexOf(b: Bytes, sub: Bytes, from: int = 0): int | null   // the first index of sub at or after from; from for an empty sub; panics if from is outside 0 ..= length
+Bytes.startsWith(b: Bytes, prefix: Bytes, at: int = 0): bool   // whether prefix is there at at; panics if at is outside 0 ..= length
 Bytes.endsWith(b: Bytes, suffix: Bytes): bool
 Bytes.fromArray[T: Integer](xs: Array[T]): Bytes               // panics if an element is outside 0 ..= 255
 Bytes.toArray(b: Bytes): Array[byte]
 ```
 
-There is no literal. Bytes come from I/O, from `String.toBytes`, from `Encoding.fromHex` and
-`Encoding.fromBase64`, and from `Bytes.fromArray`, which takes integers of any kind so that a
-constant is written with plain literals: `Bytes.fromArray([0x89, 0x50, 0x4e, 0x47])` begins every
-PNG file. A string escape does not write a byte: `String.toBytes("\u{89}")` is U+0089 in UTF-8, the
-two bytes `c2 89`.
+There is no literal and no capacity. Bytes come from I/O, from `String.toBytes`, from
+`Encoding.fromHex` and `Encoding.fromBase64`, from `Bytes.new`, and from `Bytes.fromArray`, which
+takes integers of any kind so that a constant is written with plain literals:
+`Bytes.fromArray([0x89, 0x50, 0x4e, 0x47])` begins every PNG file. A string escape does not write a
+byte: `String.toBytes("\u{89}")` is U+0089 in UTF-8, the two bytes `c2 89`. A collection grows by
+amortized doubling, bounded by memory as an array is; a program that knows the size asks for it with
+`Bytes.new(n)` and assigns by index.
+
+`extend` appends `src` as it was at the call, so `b.extend(b)` doubles `b`. `truncate(0)` empties a
+collection for reuse, and the bytes it drops are never visible again, since growth writes each byte
+it makes visible. `copy` overwrites `to − from` bytes of `dst` from `at` and never grows it; before
+writing anything, it panics unless `from` and `to` are a range of `src` as for `Array.slice`,
+`0 <= at <= len(dst)`, and `to − from <= len(dst) − at`. It works as if the source range were read
+before any byte is written, so `b.copy(1, b, 0, 3)` shifts three bytes right by one.
+
+The offsets of `indexOf` and `startsWith`, with `Bytes.read` below and `copy`, let a parser walk its
+input without slicing: it finds the next delimiter from where it stands, checks a magic number in
+place, and reads integers where they lie. `slice` copies, so a parser that slices off the rest of
+its input again and again does quadratic work.
+
+**Numbers.** Fixed-size integers and floats are read and written by type value (section 4, Types as
+values), in an order every call states:
+
+```
+type Bytes.Order = Bytes.BigEndian | Bytes.LittleEndian   // empty records, as the modes of Time
+
+Bytes.read[T: Number](b: Bytes, t: Reflect.Type[T], at: int, order: Bytes.Order): T
+Bytes.write[T: Number](b: Bytes, t: Reflect.Type[T], at: int, x: T, order: Bytes.Order): void   // mutates
+Bytes.append[T: Number](b: Bytes, t: Reflect.Type[T], x: T, order: Bytes.Order): void           // mutates
+Bytes.sizeOf[T: Number](t: Reflect.Type[T]): int               // 1, 2, 4, or 8
+```
+
+`read` takes `Bytes.sizeOf(t)` bytes from `at` and panics unless `at` and `at + size` are within
+`0 ..= len(b)`; `write` overwrites them, panics the same way, and never grows `b`; `append` adds
+them at the end. Integers are two's complement, and a float is its IEEE 754 bits; whether a NaN
+keeps its payload is not specified. `T` is solved from the type value, and since `Number` is a union
+it must be one member of it (section 4, Generics), so `type(uint16 | uint32)` and `type(Number)` are
+compile errors, and in an unchecked program a type value that is not one number type panics. The
+type value comes before the value, so it fixes the width and `x` is checked against it:
+`b.append(type(uint32), len(p), order)` is a compile error, since `len` gives an `int`. A one-byte
+type takes the order and ignores it.
+
+```ant
+let order = Bytes.LittleEndian{}
+let width = b.read(type(uint32), 16, order)              // a uint32
+b.write(type(uint16), 4, uint16(port), order)
+b.append(type(float64), 1.5, Bytes.BigEndian{})
+```
+
+**Ownership.** Every library function that returns `Bytes`, a read, a digest, a decoding, or a field
+of a record it returns, returns a new collection that nothing else holds, so the caller may write
+into it. Every library function that takes `Bytes` only reads it, and is done with it when it
+returns; where the runtime would go on reading after the call, as an HTTP client sending a body or a
+server sending a reply, it copies the bytes first. A write from another goroutine during such a call
+is a data race (section 9). This is Go's `io.Writer` contract, and it leaves the sharing of
+assignment and channel sends as it is: a program that sends `Bytes` and goes on writing sends
+`b.clone()`.
+
+Strings stay immutable and valid Unicode, so they share no memory with `Bytes`: `String.toBytes`
+copies, and `String.fromBytes` and `fromBytesLossy` copy and decode the copy.
 
 `Bytes` renders as `Bytes(89 50 4e 47)`. `Json.stringify` panics on it, since JSON has no form for
 bytes and its reader would have to know which encoding to undo; a program writes
-`Encoding.toBase64(b)` or `Encoding.toHex(b)` into the JSON instead. Since neither side can change,
-`Bytes.slice`, `String.toBytes`, and `String.fromBytes` need not copy the bytes.
+`Encoding.toBase64(b)` or `Encoding.toHex(b)` into the JSON instead.
 
 ### Html
 
@@ -4105,7 +4174,7 @@ Reflect.assignable(from: Reflect.ErasedType, to: Reflect.ErasedType): bool   // 
 Reflect.valueOf[T](t: Reflect.Type[T], value: T): Reflect.Value              // the box; a union t is resolved to value's member
 Reflect.to[T](d: Reflect.Value, t: Reflect.Type[T]): T                       // the value; panics if d's type is not assignable to T
 Reflect.type(d: Reflect.Value): Reflect.ErasedType                           // d's type, never a union or an alias
-Reflect.same(a: Reflect.Value, b: Reflect.Value): bool                       // one record, array, map, or set, as Record.same and the other three report; == for any other kind
+Reflect.same(a: Reflect.Value, b: Reflect.Value): bool                       // one record, array, map, set, or Bytes, as Record.same and the other four report; == for any other kind
 
 Reflect.scalar(d: Reflect.Value): Reflect.Scalar                             // the value; panics if d's type is not null, void, bool, a number, or string
 Reflect.items(d: Reflect.Value): Array[Reflect.Value]                        // an array's elements or a set's members, in a new array; panics if d's type is neither
@@ -4220,13 +4289,13 @@ is.
 library function reads its arguments. The boxes refer to the original elements, which may be mutable
 values the program goes on changing through their static types; that is the ordinary sharing of
 section 4. So a walker over a value that may refer to itself keeps the boxes on its path and tests
-each child against them with `Reflect.same`, which reports identity for a record, array, map, or
-set, as `Record.same` and the other three do (section 4, Records), and `==` for any other kind. The
-readers never detect a cycle themselves: whether to panic, as `Json.stringify` does, or to print
-`...`, as `String.from` does, is the walker's policy. `field` takes a name from the type's field
-list, so through an anonymous record type it reaches only the fields that type lists, even when the
-record has more. `scalar` gives a leaf in its own kind, so an encoder can render any number with
-`String.from` without testing ten kinds.
+each child against them with `Reflect.same`, which reports identity for a record, array, map, set,
+or `Bytes`, as `Record.same` and the other four do (section 4, Records), and `==` for any other
+kind. The readers never detect a cycle themselves: whether to panic, as `Json.stringify` does, or to
+print `...`, as `String.from` does, is the walker's policy. `field` takes a name from the type's
+field list, so through an anonymous record type it reaches only the fields that type lists, even
+when the record has more. `scalar` gives a leaf in its own kind, so an encoder can render any number
+with `String.from` without testing ten kinds.
 
 **Builders.** `makeScalar` is the inverse of `scalar`: it boxes a leaf at the scalar type `t`, so a
 decoder that holds only a slot's erased type boxes every leaf through one call. It returns `null`
@@ -4344,7 +4413,7 @@ of each kind holds:
 | tag                              | the value a `type` declaration of a record or an alias binds (section 4), marked as one or the other, or the tag of a time type of `stdlib.md` or of `Regex.Pattern`; a record tag also lists the field names in declaration order and the default of each field that has one; every tag carries the functions declared on its type as fields (section 6), and keeps its declaration's type parameters and body, resolved once a type expression reaches it (section 4, Types as values) |
 | sync                             | an object whose state only the functions of its type change (section 11, Synchronization)                                                                                                                                                                                                                                                                                                                                                                                                |
 | time                             | the tag of its type plus the fields that type fixes (`stdlib.md`)                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| bytes                            | an immutable sequence of bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| bytes                            | a mutable, growable sequence of bytes, by reference                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | html                             | an immutable list of nodes: elements, each a name, attributes, and a list of nodes; text; and raw markup                                                                                                                                                                                                                                                                                                                                                                                 |
 | regex                            | the tag of `Regex.Pattern` plus the normalized source and the sorted flags; one is built for each literal when its module is loaded                                                                                                                                                                                                                                                                                                                                                      |
 | random                           | four `uint64` words that each draw changes (section 11, Random)                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -4353,9 +4422,9 @@ of each kind holds:
 | declaration                      | a `type` declaration, compared by identity, which the record, named primitive, and opaque shapes of section 11, Reflect carry                                                                                                                                                                                                                                                                                                                                                            |
 | reflected value                  | a value together with a type value it belongs to, never a union or an alias (section 11, Reflect)                                                                                                                                                                                                                                                                                                                                                                                        |
 
-Arrays, maps, sets, records, functions, sync objects, generators, and resources are references: a
-variable holds a reference, and copying the variable copies the reference. Numbers, booleans,
-strings, `Bytes`, `Html`, `null`, `void`, tags, time values, patterns, types, and declarations are
+Arrays, maps, sets, records, `Bytes`, functions, sync objects, generators, and resources are
+references: a variable holds a reference, and copying the variable copies the reference. Numbers,
+booleans, strings, `Html`, `null`, `void`, tags, time values, patterns, types, and declarations are
 immutable, so for them the distinction never shows; a reflected value is immutable too, and refers
 to its value.
 
@@ -4485,12 +4554,13 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
 - **Pipe `a | f(b)`.** Is `f(a, b)`: `a` evaluates, then `f`, then `b`.
 - **Assignment.** The target's sub-expressions evaluate first, then the right side. A variable
   target rebinds the name in the scope that declared it. A field target must be a record that
-  already has that field. An index target on an array must be an `int` in range; on a map it inserts
-  or replaces. An array destructuring target requires an array with at least as many elements as its
-  positions, and stores element by element left to right, with a rest position receiving a new array
-  of the remainder. Compound assignment reads the target before the right side evaluates, then
-  applies the operator and stores: with `x` at `1`, `x += f()` where `f` sets `x` to `10` and
-  returns `5` leaves `x` at `6`. The value is `void`.
+  already has that field. An index target on an array must be an `int` in range; on `Bytes`
+  likewise, and the value must be a `byte`; on a map it inserts or replaces. An array destructuring
+  target requires an array with at least as many elements as its positions, and stores element by
+  element left to right, with a rest position receiving a new array of the remainder. Compound
+  assignment reads the target before the right side evaluates, then applies the operator and stores:
+  with `x` at `1`, `x += f()` where `f` sets `x` to `10` and returns `5` leaves `x` at `6`. The
+  value is `void`.
 - **Destructuring in `var` and `for`.** A record destructuring requires a record with every named
   field. An array destructuring requires an array with at least as many elements as its fixed
   positions; extra elements are ignored, and a rest binder receives a new array of the remainder.
@@ -4512,13 +4582,13 @@ Operands evaluate left to right (section 5). Below, "must be" means the operatio
   the clause binds, and its block is evaluated; the value is the block's. A send performed on a
   closed channel panics.
 - **`for x in e`.** `e` must be an array, a map, a set, a string, `Bytes`, or a function. Over an
-  array it iterates by index from zero while the index is below the current length, so elements
-  appended during the loop are visited and removed ones are not. Over a map it visits the entries as
-  new `Entry` records in insertion order, reading the map as it goes, like an array. An entry
-  inserted during the loop is visited, an entry removed before the loop reaches it is not, and no
-  entry is visited twice. A key removed and inserted again is a new entry at the end. Over a set it
-  visits the members the same way. Over a string it yields each code point as a one-character
-  string, and over `Bytes` each byte as a `byte`. Over a function it calls the function with a fresh
+  array or `Bytes` it iterates by index from zero while the index is below the current length, so
+  elements appended during the loop are visited and removed ones are not. Over a map it visits the
+  entries as new `Entry` records in insertion order, reading the map as it goes, like an array. An
+  entry inserted during the loop is visited, an entry removed before the loop reaches it is not, and
+  no entry is visited twice. A key removed and inserted again is a new entry at the end. Over a set
+  it visits the members the same way. Over a string it yields each code point as a one-character
+  string. Over `Bytes` each element is a `byte`. Over a function it calls the function with a fresh
   `yield` function; each call of `yield` with one argument binds `x`, runs the body, and returns
   `true`, or `false` when the body ended with `break`. A `return` or a panic in the body propagates
   through the sequence function like any other call, and ends the loop. The loop also ends when the
@@ -4608,7 +4678,7 @@ only panic in the ways the last column lists, which depend on values known at ru
 | `string`, `bool`                                                           | the argument, after unwrapping, is not of that kind                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                 |
 | `len`                                                                      | the argument, after unwrapping, is not an array, a map, a set, a string, `Bytes`, or a channel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                                                                                                                                                                                                                                 |
 | `a.b`, `a.b = v`                                                           | `a` is not a record, or has no field `b`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                                                                                                                                                                                                                                 |
-| `a[i]`, `a[i] = v`                                                         | `a` is not an array or a map, nor `Bytes` for a read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length                                                                                                                                      |
+| `a[i]`, `a[i] = v`                                                         | `a` is not an array, a map, or `Bytes`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `a` is an array or `Bytes` and `i` is not an `int` from `0` up to but excluding the length, or `a` is `Bytes` and `v` is not a `byte`                                                                                           |
 | call                                                                       | the callee is not a function; a call `x.f(args)` whose `x` has no field `f` and whose value has no namespace, or a namespace without `f` (section 5, Calls through `.`); a constructor given other than one positional argument of its base kind; too many positional arguments; a named argument for an unknown or already filled parameter, or to a lambda; a required parameter left unfilled                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
 | record literal                                                             | the head is not a record tag; a spread operand is not a record; an entry or a spread gives a field the tag does not list; a field the tag lists is left without a value and has no default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                                                                                                                                                                                                                                 |
 | array literal                                                              | a spread operand is not an array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |
@@ -4624,7 +4694,7 @@ only panic in the ways the last column lists, which depend on values known at ru
 | `panic`                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | always                                                                                                                                                                                                                          |
 | `assert`                                                                   | the condition is not a `bool`, or the message is not a string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | the condition is `false`                                                                                                                                                                                                        |
 | any call                                                                   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the goroutine's call depth exceeds the runtime's limit                                                                                                                                                                          |
-| a count                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes` or `Channel.new`, which size what the runtime must hold                          |
+| a count                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | above 2^31 − 1 in `Array.filled`, `Array.range`, `String.repeat`, `String.padStart`, `String.padEnd`, `String.fromFloat`, `Crypto.randomBytes`, `Bytes.new` or `Channel.new`, which size what the runtime must hold             |
 | a result size                                                              |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | the string `String.repeat`, `String.padStart`, `String.padEnd` or `String.replace` would return is longer than 2^31 − 1 bytes                                                                                                   |
 | HTML expression                                                            | a content value is not a string, a number, `void`, `Html`, or an array of them; an `Html` in `<title>` or `<textarea>`; an attribute value of another kind; a written `bool` on an attribute that is not boolean; a spread operand that is not a map of strings to strings, `bool`s, or `null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a spread gives a name that is not an attribute name, runs code, or is `key`, or a `bool` to an attribute that is not boolean                                                                                                    |
 | `try`                                                                      | the operand is not a record tagged `Ok` or `Err`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                                                                                                                                                                 |

@@ -92,15 +92,17 @@ hold it is missing, and those that write a file are `Err` when a directory is at
 
 `File.read`, `readLine`, and `readAll` take what they read as text, decoded as all text from outside
 is (section 11 of `ant-lang.md`, String); `File.readBytes`, `readChunk`, and `readExactly` keep the
-bytes as they are. The reads of a handle share one buffer, so a program can read a header line by
-line and the body after it as bytes. `readChunk` returns as soon as there is anything to return, at
-least one byte and at most `max`, and waits only while there is nothing; it is the read for a stream
-whose pieces have no fixed size. `readExactly` waits for all `n` bytes, the read for a protocol that
-announces a length, and is `Err` with the message `unexpected end of file` when the input ends after
-some of them, which are discarded, since they are no whole message; `n` of 0 gives empty `Bytes`
-without reading, at the end of the file too. A `max` below 1 or an `n` below 0 is `Err`.
-`writeChunk` writes the bytes as they are, as `writeText` writes text as UTF-8. A read of a handle
-opened only for writing, and a write to one opened only for reading, is `Err`.
+bytes as they are, each in new `Bytes` (section 11 of `ant-lang.md`, Bytes, Ownership). The reads of
+a handle share one buffer, so a program can read a header line by line and the body after it as
+bytes; what a byte read returns is copied out of that buffer. `readChunk` returns as soon as there
+is anything to return, at least one byte and at most `max`, and waits only while there is nothing;
+it is the read for a stream whose pieces have no fixed size. `readExactly` waits for all `n` bytes,
+the read for a protocol that announces a length, and is `Err` with the message
+`unexpected end of file` when the input ends after some of them, which are discarded, since they are
+no whole message; `n` of 0 gives empty `Bytes` without reading, at the end of the file too. A `max`
+below 1 or an `n` below 0 is `Err`. `writeChunk` writes the bytes as they are, as `writeText` writes
+text as UTF-8. A read of a handle opened only for writing, and a write to one opened only for
+reading, is `Err`.
 
 A handle is also a connection from `Net`, and the reads and writes are the same. A context
 interrupts a read of a connection, a pipe or a terminal, which are the handles that wait; a read of
@@ -358,9 +360,9 @@ the file while it is held.
 ## Http
 
 ```
-type Response = { status: int, headers: Map[string, string], body: string, bytes: Bytes }
+type Response = { status: int, headers: Map[string, string], bytes: Bytes }
 type Request = { method: string, path: string, query: string, headers: Map[string, string],
-                 body: string, bytes: Bytes, remote: string }
+                 bytes: Bytes, remote: string }
 type Reply = { status: int, headers: Map[string, string], body: string | Bytes }
 
 Http.request(method: string, url: string, body: string | Bytes = "",
@@ -371,6 +373,7 @@ Http.get(url: string, headers: Map[string, string] = Map{}, timeout: Time.Durati
 Http.post(url: string, body: string | Bytes, headers: Map[string, string] = Map{},
           timeout: Time.Duration | null = null, ctx: Context | null = null): Result[Http.Response, Error]
                                                                                   // request("POST", url, body, headers, timeout, ctx)
+Http.text(r: Http.Response | Http.Request): string                               // the bytes decoded as all text from outside is; a new string per call
 Http.serve(l: Net.Listener, handler: func(Http.Request): Http.Reply,
            ctx: Context | null = null): Result[void, Error]                       // panics on a response status outside 200 to 599, or on header names that differ only in case, in the handler's goroutine
 ```
@@ -397,12 +400,16 @@ certificate against the host's roots, and a certificate that does not verify is 
 way to skip the check. The proxy variables `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` apply, as in
 Go. `serve` speaks plain HTTP.
 
-A body is sent as given: a string as its UTF-8, `Bytes` as they are. A body that arrives, in a
-`Response` or in a `Request`, is there twice: as received in `bytes`, and in `body` as text, decoded
-as all text from outside is (section 11 of `ant-lang.md`, String). When the bytes are UTF-8 the two
-share one copy, so a program reads whichever it needs at no cost: `body` for JSON or HTML, `bytes`
-for an image, or for a signature computed over what was sent. A handler returns an `Http.Reply`,
-whose body is a string or `Bytes`, so a proxy passes `bytes` on unchanged.
+A body is sent as given: a string as its UTF-8, `Bytes` as they are. `Bytes` are copied when the
+call starts, and a reply's `Bytes` when the handler returns, since the runtime goes on sending after
+either (section 11 of `ant-lang.md`, Bytes, Ownership). A body that arrives, in a `Response` or in a
+`Request`, is held once, as received, in `bytes`. `Http.text` decodes it as all text from outside is
+(section 11 of `ant-lang.md`, String), so a program takes whichever it needs: `r.text()` for JSON or
+HTML, `r.bytes` for an image, or for a signature computed over what was sent. Text can be decoded
+from bytes but bytes cannot be recovered from text decoded lossily, which is why the bytes are what
+is kept. `text` decodes on every call, so a program that needs the text twice binds it once. A
+handler returns an `Http.Reply`, whose body is a string or `Bytes`, so a proxy passes `bytes` on
+unchanged.
 
 `timeout` bounds the whole call, from connecting to the end of the body, and when it passes the
 result is `Err` with the message `timeout`. The duration is taken as `Time.total` takes one without
@@ -487,9 +494,9 @@ it. A `..` right after the root is dropped, since the root is its own parent, an
 start of a relative path is kept. So `Path.clean("/../a")` is `/a` and `Path.clean("a/../..")` is
 `..`.
 
-`Path.base` drops trailing separators first and is the separator for a path made only of
-separators, so `Path.base("a/b/")` is `b` and `Path.base("/")` is `/`. `Path.dir` is the path up to
-its last separator, cleaned, so `Path.dir("a/b/")` is `a/b`, `Path.dir("a/../b/c")` is `b`, and
+`Path.base` drops trailing separators first and is the separator for a path made only of separators,
+so `Path.base("a/b/")` is `b` and `Path.base("/")` is `/`. `Path.dir` is the path up to its last
+separator, cleaned, so `Path.dir("a/b/")` is `a/b`, `Path.dir("a/../b/c")` is `b`, and
 `Path.dir("/")` is `/`; the two rebuild `p` only when it does not end in a separator. `Path.ext` is
 the text from the last dot after the last separator, dot included, or `""` when there is no such
 dot, so `Path.ext("b.tar.gz")` is `.gz`, `Path.ext(".env")` is `.env`, and a path that ends in a
@@ -1047,8 +1054,8 @@ interrupt, and what it then reads is the program's, for its next read, not a chi
 type Cmd = { program: string, args: Array[string] = [], dir: string | null = null,
              env: Map[string, string] | null = null }
 type Pipeline = { cmds: Array[Cmd] }
-type Output = { status: int, statuses: Array[int], stdout: string, stderr: string,
-                stdoutBytes: Bytes, stderrBytes: Bytes }
+type Output = { status: int, statuses: Array[int], stdout: string, stderr: string }
+type OutputBytes = { status: int, statuses: Array[int], stdout: Bytes, stderr: string }
 type Process                          // opaque: a command started by Cmd.start
 
 Cmd.new(program: string, args: Array[string] = [], dir: string | null = null,
@@ -1062,6 +1069,7 @@ Cmd.read(c: Cmd | Cmd.Pipeline, input: string | Bytes = "", ctx: Context | null 
                                       // standard output without one final newline; Err on a nonzero status
 Cmd.readBytes(c: Cmd | Cmd.Pipeline, input: string | Bytes = "", ctx: Context | null = null): Result[Bytes, Error]
 Cmd.capture(c: Cmd | Cmd.Pipeline, input: string | Bytes = "", ctx: Context | null = null): Result[Cmd.Output, Error]
+Cmd.captureBytes(c: Cmd | Cmd.Pipeline, input: string | Bytes = "", ctx: Context | null = null): Result[Cmd.OutputBytes, Error]
 Cmd.start(c: Cmd | Cmd.Pipeline, stdin: File.Handle | null = null, stdout: File.Handle | null = Os.stdout(),
           stderr: File.Handle | null = Os.stderr(), ctx: Context | null = null): Result[Cmd.Process, Error]
                                       // in the background, in a process group of its own; null is the null device
@@ -1110,7 +1118,7 @@ The functions differ in what they do with the command's streams and how long the
 | ------------------------------------------------------- | -------------------------------------- |
 | to run a program the user watches or types into         | `Cmd.run`                              |
 | one value a program prints                              | `Cmd.read`, or `Cmd.readBytes` exactly |
-| the status and both outputs, without failing on nonzero | `Cmd.capture`                          |
+| the status and both outputs, without failing on nonzero | `Cmd.capture`, or `Cmd.captureBytes`   |
 | the output as it comes, a file, or a server             | `Cmd.start`, `Os.openPipe`, `Cmd.wait` |
 
 `Cmd.run` gives the command the program's own standard input, output and error, handed over as they
@@ -1119,16 +1127,20 @@ process group, which the terminal treats as the foreground. What the program has
 standard input stays the program's. The call blocks until the command exits and is `Ok` of its
 status, nonzero included.
 
-`Cmd.capture` captures both outputs whole and keeps each twice, as an HTTP body is: as bytes in
-`stdoutBytes` and `stderrBytes`, and as text in `stdout` and `stderr`, one copy when the output is
-UTF-8. `input` is what the command reads, a string as its UTF-8 and `Bytes` as they are. A nonzero
-exit is `Ok` with its `status`, and `statuses` holds each stage's own. `Cmd.read` does the same and
-returns standard output as text with one final `\n` or `\r\n` removed, and no other white space, as
-a shell's `$(...)` does; this differs from `File.read`, which returns a file exactly, and
-`Cmd.readBytes` returns the output as it was written. For both, a nonzero status is `Err` with the
-message `<program>: exit status <n>`, followed by `: ` and standard error with its trailing white
-space removed when it wrote any. All three stay in the program's process group, as `$(...)` does, so
-a command that opens the terminal itself can use it.
+`Cmd.capture` captures both outputs whole, as text decoded as all text from outside is (section 11
+of `ant-lang.md`, String). `Cmd.captureBytes` keeps standard output as it was written, in `Bytes`,
+and standard error as text: diagnostics are text, as `Cmd.read` treats them in its `Err`, and a
+program that needs them as bytes starts the command with `Cmd.start` and a handle. A program knows
+what the command it runs prints, so it asks for the form, as with `Cmd.read` and `Cmd.readBytes`,
+and each output is held once. `input` is what the command reads, a string as its UTF-8 and `Bytes`
+as they are, copied when the call starts, since the runtime feeds the command from a goroutine of
+its own. A nonzero exit is `Ok` with its `status`, and `statuses` holds each stage's own. `Cmd.read`
+does the same and returns standard output as text with one final `\n` or `\r\n` removed, and no
+other white space, as a shell's `$(...)` does; this differs from `File.read`, which returns a file
+exactly, and `Cmd.readBytes` returns the output as it was written. For both, a nonzero status is
+`Err` with the message `<program>: exit status <n>`, followed by `: ` and standard error with its
+trailing white space removed when it wrote any. All four stay in the program's process group, as
+`$(...)` does, so a command that opens the terminal itself can use it.
 
 `Cmd.start` starts the command and returns once it is running. Each of `stdin`, `stdout` and
 `stderr` is a handle or `null`, the null device; the outputs default to the program's and the input
@@ -1190,12 +1202,12 @@ var fixes = try Cmd.read(Cmd.pipe([
 ```
 
 The pipeline holds a copy of the array, so changing the array later changes no pipeline. The stages
-run at once. The first reads the pipeline's standard input: `input` for `Cmd.read`, `Cmd.readBytes`
-and `Cmd.capture`, the `stdin` handle for `Cmd.start`, and the terminal for `Cmd.run`, where only
-the first stage reads it. The last writes the pipeline's standard output, and each stage's output is
-the next one's input, joined by OS pipes with no copy between. Every stage writes standard error
-where the call sends it; where it is captured, the stages' lines interleave as they arrive, and no
-order between stages is promised. Each stage keeps its own `dir` and `env`.
+run at once. The first reads the pipeline's standard input: `input` for `Cmd.read`, `Cmd.readBytes`,
+`Cmd.capture` and `Cmd.captureBytes`, the `stdin` handle for `Cmd.start`, and the terminal for
+`Cmd.run`, where only the first stage reads it. The last writes the pipeline's standard output, and
+each stage's output is the next one's input, joined by OS pipes with no copy between. Every stage
+writes standard error where the call sends it; where it is captured, the stages' lines interleave as
+they arrive, and no order between stages is promised. Each stage keeps its own `dir` and `env`.
 
 The pipeline's status is that of the rightmost stage that failed, or 0 when none did, as under
 bash's `pipefail`, so `false | cat` fails. A stage before the last that SIGPIPE ended does not
