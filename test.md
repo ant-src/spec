@@ -79,6 +79,8 @@ ok    4 passed, 1 skipped (0.01s)
 ok    no tests (0.00s)
 ```
 
+The line gives the failed count when it is not zero, then always the passed count, then the skipped
+count when it is not zero: `ok    0 passed, 1 skipped` for a run whose one test skipped. A run of no tests says `no tests`.
 The counts are of tests without subtests, and of tests with subtests that failed on their own.
 
 **Verbose.** Under `-v`, each test also prints `=== RUN   file: name` when it starts, its output as

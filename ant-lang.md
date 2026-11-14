@@ -2622,7 +2622,8 @@ library call takes a context as its last parameter, `ctx: Context | null = null`
 the context is done. What giving up means follows the call's return type: a `Result` is `Err` with
 the context's reason as its message, a value-or-null is `null`, and a `void` call returns early, so
 the program asks `Context.isDone` when it needs to know. With `null` the call waits until its
-condition holds or the run is cancelled. Locks and conditions take no context.
+condition holds or the run is cancelled. Locks and conditions take no context, nor do
+`Context.wait`, which waits on its own context, and `Once.do`, which waits for the first run.
 
 ```ant
 var ctx = Context.new(2s)
@@ -3902,7 +3903,7 @@ Random.float(r: Random): float64                               // uniform in [0,
 Random.bool(r: Random): bool                                   // true or false, each half the time
 Random.pick[T](r: Random, xs: Array[T]): T | null              // a uniform element; null when empty, without a draw
 Random.shuffle[T](r: Random, xs: Array[T]): void               // reorders xs in place into a uniform permutation
-Random.fork(r: Random): Random                                 // a generator with r's state, after which r jumps 2^128 draws ahead
+Random.fork(r: Random): Random                                 // a generator seeded from four draws of r
 ```
 
 The values are fixed by what follows, and a later version of Ant may add functions here but never
@@ -3931,12 +3932,12 @@ by `k` bits.
   nothing.
 - **`shuffle`** is Fisher-Yates from the end: for `i` from `len(xs) - 1` down to 1, it swaps `xs[i]`
   with `xs[Random.int(r, 0, i + 1)]`.
-- **`fork`** returns a new generator holding `r`'s four words, and then moves `r` by the jump of
-  `xoshiro256**`: with `t0` to `t3` at 0, for each bit of `0x180ec6d33cfd0aba`,
-  `0xd5a61266f0c9392c`, `0xa9582618e03fc9aa`, and `0x39abdc4529b1661c`, in that order and lowest bit
-  first, a set bit xors `s0` to `s3` into `t0` to `t3`, and then `r` draws; after the 256 bits, `t0`
-  to `t3` become `r`'s words. The new generator goes on with the values `r` would have given, and
-  `r` gives values 2^128 draws further along, so neither reaches the other's within any run.
+- **`fork`** draws four values `d0` to `d3` from `r`, in order, and returns a new generator whose
+  word `si` is the first SplitMix64 output started from `di` as `x`; in the case, one in 2^256, that
+  all four words are zero, it draws four more. The new generator's state is unrelated to `r`'s and
+  to every other fork's, a fork of a fork included, so streams forked in any shape, a tree of
+  goroutines that fork for their own workers among them, share no values but by a chance too small
+to matter.
 
 These values check an implementation:
 
@@ -3948,6 +3949,8 @@ Random.float(f)                                           // 0.08386297105988216
 var xs = Array.range(1, 11)
 Random.shuffle(Random.new(42), xs)
 xs                                                        // [6, 8, 10, 4, 3, 1, 5, 9, 2, 7]
+var child = Random.fork(Random.new(3))
+Array.map(Array.range(0, 3), { Random.int(child, 0, 100) }) // [56, 3, 72]
 ```
 
 ### Result, Error, Panic, and Record
@@ -4179,11 +4182,13 @@ Test.name(): string                   // the current test's full name, as "parse
   marks the test skipped. The test is skipped only when the skip ends the body or that goroutine: in
   a deferred block that runs while a panic unwinds, `Test.skip` is dropped and the panic goes on, so
   a test stays failed, and a body whose `Panic.catch` stops the panic goes on unskipped.
-- **`Test.parallel`** may be called once, from the test's body, and panics otherwise. The test stops
+- **`Test.parallel`** may be called once, from the test's body and not from a deferred block or a
+  goroutine, and panics otherwise. The test stops
   at the call until every test of the same parent that did not call it has ended (for a top-level
   test, every such test of the file), then runs alongside the parent's other parallel tests, at most
-  `-parallel n` at a time (`test.md`). A parent ends after all of its parallel subtests have ended,
-  which is after its own body and deferred blocks. Tests in different files never run at once.
+  `-parallel n` at a time (`test.md`). A parallel subtest resumes from its call only after its
+  parent's body and deferred blocks have finished, and the parent ends after all of its parallel
+  subtests have ended. Tests in different files never run at once.
 - **`Test.tempDir`** returns a new directory at each call, made as `File.tempDir` makes one
   (`stdlib.md`), and fails the test with a panic when it cannot make one. The directory is removed
   after the test's deferred blocks have run and its goroutines have ended or been ended.

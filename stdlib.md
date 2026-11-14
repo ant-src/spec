@@ -461,13 +461,25 @@ Net.address(l: Net.Listener): string                             // the address 
 Net.accept(l: Net.Listener, ctx: Context | null = null): Result[File.Handle, Error]   // the next connection; Err when closed, or with ctx's reason
 Net.close(l: Net.Listener): void                                 // pending and later accepts return Err; nothing twice
 Net.dial(addr: string, ctx: Context | null = null): Result[File.Handle, Error]        // a connection to "host:port"
-Net.peer(f: File.Handle): string | null                          // the other end of a connection, "ip:port"; null for a file or a stream
+Net.peer(f: File.Handle): string | null                          // the other end of a connection, "ip:port"; null for any other handle
 ```
 
 A connection is a `File.Handle`, so `File.readLine`, `readAll`, `writeLine`, `writeText`, `pipe` and
 `close` need nothing new, and a line protocol is a loop over `readLine`. Several goroutines may
 `accept` on one listener, each with a context of its own, and each connection goes to one of them.
 TCP only: there is no TLS, UDP or Unix socket.
+
+`addr` is `host:port`, as in Go: an IPv6 host is in brackets, `[::1]:8080`, and the port is a
+number or a service name such as `http`. In `listen` an empty host listens on every interface, and
+`Net.address` then writes it as `[::]:port`; in `dial` an empty host is the local host. An `Err` of
+`listen` or `dial` names the call and the address as given, then the reason:
+`dial "127.0.0.1:99999": invalid port`. The context of `dial` limits the dial only: the connection
+it returns is not tied to it, so a read that should give up takes a context of its own. A read of a
+connection is at end of file once the other end has closed it and everything it sent has been read.
+`Net.close` stops the listener only: connections it accepted stay open until they are closed, the
+address is free again for a later `listen`, and `Net.address` of a closed listener is the address
+it had. `Net.peer` of a handle from `File.buffered` answers for the connection under it, and of a
+closed connection is the address it had.
 
 ## Path
 
