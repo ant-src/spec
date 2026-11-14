@@ -127,6 +127,7 @@ are ordinary identifiers bound by the prelude, not keywords.
 42          1_000_000     0xFF        0b1010    // integers
 0o755                                           // octal, for file modes
 3.14        1e9           2.5e-3                // floats
+500ms       2h30m         1.5s                  // durations
 "hello"     "line\nbreak" "\u{1F600}"           // strings
 "total: ${count} items"                         // interpolation
 `C:\temp`   `say "hi"`                          // raw strings
@@ -141,12 +142,58 @@ followed by a point always begins a float. The prefixes and the `e` of an expone
 `0XFF`, `0O7`, `0B1`, and `1E9` are errors; hexadecimal digits may be either case. A decimal
 integer, or the digits before a float's point, start with `0` only when they are `0`: `0`, `0.5`,
 and `0e3` are fine, while `007` and `00.5` are errors, since other languages read `007` as octal,
-which Ant writes `0o7`. There are no literal suffixes: an integer literal is always an `int` and a
-float literal is always a `float64`. `1` is never a float; write `1.0`. Other numeric types are
+which Ant writes `0o7`. There are no numeric suffixes: an integer literal is always an `int` and a
+float literal is always a `float64`; the units of a duration literal, below, are the only letters
+that can follow a number. `1` is never a float; write `1.0`. Other numeric types are
 reached through a conversion, as in `byte(255)` or `float32(1.5)`. An integer literal that does not
 fit an `int` is a syntax error, so the most negative `int` is written `Math.minInt`. So is a float
 literal out of the range of `float64`: one so large that it would round to infinity, such as
 `1e400`, or one whose digits are not all zero but that would round to `0.0`, such as `1e-400`.
+
+A duration literal is a span of hours and smaller units, written as in Go: `500ms`, `2h30m`,
+`1.5s`. It is one or more components of a number and a unit, with no white space between them. The
+units are `h`, `m`, `s`, `ms`, `us`, and `ns`, hours through nanoseconds, so `m` is minutes, and
+they appear each at most once, in descending order. A number is spelled as a decimal integer or
+float above, with `_` between digits, but without an exponent; only the last component may have a
+fraction. The literal has type `Time.Duration` (`stdlib.md`, Time) whatever its context, needs no
+import, and is the duration whose fields are the components as written, a fraction spread into the
+smaller fields as `Time.parseDuration` spreads one: `1.5h` is 1 hour and 30 minutes, `1h30.5m` is 1
+hour, 30 minutes, and 30 seconds, and `0.5ms` is 500 microseconds. The fraction is exact, never
+rounded through a `float64`, and must come out as a whole number of nanoseconds.
+
+```ant
+500ms    // Time.duration(milliseconds: 500)
+2h30m    // Time.duration(hours: 2, minutes: 30)
+90m      // Time.duration(minutes: 90)
+1.5h     // Time.duration(hours: 1, minutes: 30)
+0s       // Time.duration()
+```
+
+The lexer reads the whole adjacent run of letters, digits, and points after the number as the
+literal, so a unit that does not exist or trailing characters are an error rather than an
+identifier: `1d`, `1min`, `1M`, `1µs`, `1e3s`, `0x1s`, `1h30`, `0.1ns`, `1m2h`, `1h1h`, and
+`1.5h30m` are syntax errors, as is a value outside the bounds of `Time.Duration`. There are no
+literals for days, weeks, months, or years, whose length depends on the calendar: those are
+`Time.duration(days: 1)` and the like, so `24h` is exactly 24 hours, not the next day across a
+daylight saving change. A `.` after the unit is member access, since the number has ended, so
+`90m.roundDuration(largestUnit: Time.Hour{})` rounds; a `.` after a digit begins a fraction as
+always, so `1.s` is an error. A duration takes no operator: `-5s`, `5s + 1s`, and `2 * 1s` are
+compile errors, a negative span is `Time.negate(5s)`, and a span computed from a number is
+`Time.duration(seconds: n)`. A constant span of hours and smaller units is written as a literal;
+everything else, computed, calendar, or negative, is `Time.duration(...)`.
+
+A literal keeps its fields as written, and `==` on durations compares the ten fields, so two
+literals of the same length are not always equal; `Time.compareDuration` compares lengths:
+
+```ant
+90m == 1h30m                            // false: 90 minutes; 1 hour and 30 minutes
+60s == 1m                               // false
+1.5h == 1h30m                           // true: the fraction spreads to the same fields
+Time.compareDuration(90m, 1h30m) == 0   // true: the same length
+```
+
+`ant check` reports `==` or `!=` between two duration literals of the same length and different
+fields, naming `Time.compareDuration`.
 
 A string is written between double quotes. The escapes are `\n`, `\t`, `\r`, `\\`, `\"`, `\$`, and
 `\u{...}`, whose hexadecimal value must be a Unicode scalar value: at most `10FFFF` and not a
@@ -1659,7 +1706,7 @@ A `select` waits for the first of several things, with a block for each:
 select {
   var line = Channel.receive(lines) { println(line ?? "closed") }
   Channel.send(out, batch) { batch = [] }
-  Time.sleep(Time.duration(seconds: 1)) { flush() }
+  Time.sleep(1s) { flush() }
   Context.wait(ctx) { return }
   else { idle += 1 }
 }
@@ -1695,7 +1742,7 @@ a local of its block and narrows there.
 ```ant
 var event: Event = select {
   var line = Channel.receive(lines) { if line == null { Closed{} } else { Line{ text: line } } }
-  Time.sleep(Time.duration(seconds: 1)) { Timeout{} }
+  Time.sleep(1s) { Timeout{} }
 }
 ```
 
@@ -2571,7 +2618,7 @@ the program asks `Context.isDone` when it needs to know. With `null` the call wa
 condition holds or the run is cancelled. Locks and conditions take no context.
 
 ```ant
-var ctx = Context.new(Time.duration(seconds: 2))
+var ctx = Context.new(2s)
 var reply = Channel.receive(replies, ctx) ?? return Result.fail("no reply")
 ```
 

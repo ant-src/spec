@@ -78,9 +78,9 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
 - **Order.** Declarations, statements, record fields, arguments, and imports stay in written order.
   Imports in particular are never sorted, since their order is the order modules are initialized
   (section 10).
-- **Spelling.** Identifiers, number literals (`0xFF`, `1_000`, `1e9`), the text of strings and their
-  escapes, raw strings, and regular expression literals and their flags are printed exactly as
-  written. Inside a string, only the code between `${` and `}` is formatted (4.9). `ant fmt` never
+- **Spelling.** Identifiers, number literals (`0xFF`, `1_000`, `1e9`), duration literals (`90m`,
+  `1_000ms`), the text of strings and their escapes, raw strings, and regular expression literals
+  and their flags are printed exactly as written. Inside a string, only the code between `${` and `}` is formatted (4.9). `ant fmt` never
   turns a string into a raw string or back.
 - **Parentheses.** Every pair of parentheses the author wrote is kept, even where precedence makes
   it redundant, and none is added.

@@ -564,7 +564,8 @@ through the `parse` functions, which return `Result`.
   `+05:30`.
 - `Duration` is years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds and
   nanoseconds, all of one sign, kept as given: 90 minutes stays 90 minutes until `roundDuration`
-  balances it.
+  balances it. A constant span of hours and smaller units is written as a duration literal, `5s` or
+  `2h30m` (`ant-lang.md`, section 2, Literals); `Time.duration` builds every other one.
 
 Dates are in the ISO 8601 calendar, the proleptic Gregorian calendar extended to year 0 and negative
 years: a year is a leap year when it is divisible by 4, except a century year not divisible by 400,
@@ -701,7 +702,7 @@ Time.parseZoned(s: string, disambiguation: Time.Disambiguation = Time.Compatible
 Time.parsePlainDate(s: string): Result[Time.PlainDate, Error]        // 2026-10-22
 Time.parsePlainTime(s: string): Result[Time.PlainTime, Error]        // 14:03:05.123
 Time.parsePlainDateTime(s: string): Result[Time.PlainDateTime, Error]   // 2026-10-22T14:03:05
-Time.parseDuration(s: string): Result[Time.Duration, Error]          // P1Y2M3DT4H5M6.5S, -PT1H, PT0S
+Time.parseDuration(s: string): Result[Time.Duration, Error]          // P1Y2M3DT4H5M6.5S, -PT1H, PT0S; 2h30m, -500ms
 ```
 
 The forms: an `Instant` is `2026-10-22T14:03:05.5Z`; a `ZonedDateTime` is
@@ -738,6 +739,19 @@ to nine digits; lowercase letters and a comma are `Err`, as above. A fraction is
 smaller fields, as Temporal does: `PT1.5H` is `PT1H30M`, and a fraction of a second goes to
 milliseconds, microseconds and nanoseconds, three digits each, so `PT1.5S` is 1 second and 500
 milliseconds. A string in another calendar is `Err`.
+
+A string whose first character after an optional sign is not `P` is read as Go's
+`time.ParseDuration` reads it, the notation of configuration files, flags and environment
+variables, and of `ant test -timeout`. It is an optional `+` or `-`, then `0` or one or more
+components of a number and a unit; the units are `h`, `m`, `s`, `ms`, `us`, `µs` (U+00B5), `μs`
+(U+03BC) and `ns`. A number is ASCII digits with an optional fraction after a point, with digits on
+at least one side of it and no `_`. As in Go, components come in any order, a unit may repeat, and
+any component may carry a fraction: each adds to its own field, a fraction spread into the smaller
+fields as above, so `"1m2h"` is 2 hours and 1 minute, `"1h1h"` is 2 hours, and `"1.5h30m"` is 1 hour
+and 60 minutes. Digits of a fraction below a nanosecond are dropped, as Go drops them, so `"0.1ns"`
+is zero. Every string Go's `Duration.String` prints parses, as does every duration literal written
+as a string, which is stricter (`ant-lang.md`, section 2, Literals). A value outside the bounds
+above is `Err`, and so are `"5"`, `"1d"` and `"1h 30m"`.
 
 **Conversion.**
 
@@ -910,7 +924,8 @@ Temporal's nine: `Ceil` toward positive infinity, `Floor` toward negative, `Expa
 form says, and `HalfEven` to the nearest with a tie to the even multiple; `HalfExpand`, the default,
 is what `Math.round` does.
 
-Two durations are `==` when their ten fields are, as given, so `PT90M` and `PT1H30M` are not. For
+Two durations are `==` when their ten fields are, as given, so `PT90M` and `PT1H30M` are not, and
+neither are the literals `90m` and `1h30m`; `compareDuration` compares their lengths. For
 the other types `==` is the same moment for an `Instant`, the same moment and zone for a
 `ZonedDateTime`, the same fields for a plain value, and the same zone for a `Zone`, as above. Time
 values are immutable and serve as map keys.
@@ -1075,7 +1090,7 @@ Cmd.start(c: Cmd | Cmd.Pipeline, stdin: File.Handle | null = null, stdout: File.
                                       // in the background, in a process group of its own; null is the null device
 Cmd.wait(p: Cmd.Process, ctx: Context | null = null): Result[int, Error]    // its status once it has exited
 Cmd.kill(p: Cmd.Process, signal: string = "SIGTERM"): Result[void, Error]   // to its process group; Ok when it has exited
-Cmd.stop(p: Cmd.Process, grace: Time.Duration = Time.duration(seconds: 5)): Result[int, Error]
+Cmd.stop(p: Cmd.Process, grace: Time.Duration = 5s): Result[int, Error]
                                       // SIGTERM, then SIGKILL after grace, or SIGKILL alone when it is zero or negative; its status; panics on a grace with years, months or weeks
 Cmd.pid(p: Cmd.Process): int          // the last stage's
 ```

@@ -31,7 +31,7 @@ ant test [flags] [path ...]
 | `-json`        | Print events as JSON lines instead of the report                                                                                  |
 | `-failfast`    | Start no test after the first failure                                                                                             |
 | `-parallel n`  | The most tests that run at once after `Test.parallel()`; the default is the number of CPUs                                        |
-| `-timeout d`   | End the run after `d`, a Go duration such as `30s` or `10m` (the default), and report the tests still running; `0` means no limit |
+| `-timeout d`   | End the run after `d`, read as `Time.parseDuration` reads it, such as `30s` or `10m` (the default), and report the tests still running; `0` means no limit |
 
 **Filtering.** A part of `-run` is a regular expression (`Regex`, section 11) matched anywhere in
 the name of the test at its level: the first part against a top-level test's name, the second
