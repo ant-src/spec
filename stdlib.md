@@ -1327,7 +1327,8 @@ included, trims nothing, reads a line break inside a quoted field as `\n` whiche
 empty line, and is `Err` on a quote inside an unquoted field or a quoted field that never closes,
 naming the line. `stringify` quotes a field when it holds the separator, a quote, or a line break,
 or begins with white space, and ends every row with `\n`; a row of one empty field is written `""`,
-since an empty line is no row to `parse`. A separator is one code point other than `"`, `\r`, `\n`,
+since an empty line is no row to `parse`, and a row of no fields is written as an empty line, as in
+Go, so it does not survive `parse`: CSV has no spelling for it. A separator is one code point other than `"`, `\r`, `\n`,
 U+0000, and U+FFFD. It is part of the program, not of the data, so another value panics in both
 functions, checked before any row is read or written. With a separator, `stringify` cannot fail,
 since it writes to a string, so it returns a `string`.
@@ -1346,7 +1347,8 @@ strings, so the hex digest of a string is `Crypto.sha256(String.toBytes(s)) | En
 `toBase64` writes RFC 4648's standard alphabet with `+` and `/`, or with `url` the URL-safe one with
 `-` and `_`, padded with `=` either way. `fromBase64` reads the alphabet `url` names, with the
 padding present or absent, and ignores `\r` and `\n`; any other character, or a length the alphabet
-cannot have produced, is `Err`.
+cannot have produced, is `Err`. Bits past the last byte in the final character are ignored, as in
+Go, so `fromBase64("aGl=")` is `Bytes(0x68, 0x69)`, as `aGk=` is.
 
 ## Url
 
@@ -1368,28 +1370,40 @@ colon. `opaque` is what follows `scheme:` when it does not start with `/`:
 `path`, and without `opaque` that reference would lose its content. A single `/` after the colon
 starts the path, as RFC 3986 says: `x:/a` and `file:/etc/hosts` have an empty authority and `path`
 `/a` and `/etc/hosts`. `user` is the userinfo as written, a password included. `host` and `port` are
-the two halves of the authority, `port` empty when there is none. `path` is decoded, `%20` read as a
+the two halves of the authority, `port` empty when there is none; `host` keeps its case, and an IPv6
+address is held without its brackets, `::1` for `http://[::1]:80/`, which `stringify` writes back. `path` is decoded, `%20` read as a
 space, but for `%2F` and `%25`, which stay as written: a `/` that is not a separator and a `%` that
 is no escape keep the path's meaning through a round trip, as `/a%2Fb` and `/a/b` are different
 paths. `query` is the raw text after `?`, without it, so `parseQuery` can read it; `fragment` is
 decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`, escapes in `path` or
-`fragment` that do not decode to UTF-8, or a space in the host. `stringify` assembles the parts,
+`fragment` that do not decode to UTF-8, or a space in the host. Outside the host it is lenient, as
+browsers are: a character RFC 3986 does not allow, such as a space, is kept as written. `stringify` assembles the parts,
 escaping what needs it in every part but `query` and `opaque`, which are raw and written as they
 are, and in `path` writing `%2F` and `%25` as they are and escaping any other `%`, so a program
 changes a URL by parsing it, replacing a field, and writing it back. It writes `//` before an
-authority that is not empty, one with a `user`, `host` or `port`, and after `scheme:` before an
-empty one when the scheme is one whose references always have an authority, `http`, `https`, `ws`,
-`wss`, `ftp` or `file`, in any case, or when `path` starts with `//`, which would otherwise read as
-an authority. So `x:/a`, `file:///etc/hosts`, and `http://h/p` come back as written, while `x:///a`
-comes back as `x:/a`, which RFC 3986 takes for the same reference.
+authority that is not empty, one with a `user`, `host` or `port`, and before an empty one after
+`scheme:` when the scheme is one whose references always have an authority, `http`, `https`, `ws`,
+`wss`, `ftp` or `file`, in any case, or, with or without a scheme, when `path` starts with `//`,
+which would otherwise read as an authority: a `path` of `//a` with nothing else is `////a`, which
+`parse` reads back as an empty authority and that path. So `x:/a`, `file:///etc/hosts`, and
+`http://h/p` come back as written, while `x:///a` comes back as `x:/a`, which RFC 3986 takes for the
+same reference. Where the parts do not fit together, `stringify` keeps the reference readable, as
+Go does: a `path` that does not start with `/` gets one after an authority (`https://h/p` for host
+`h`, path `p`), a relative `path` whose first segment holds a `:` gets `./` (`./a:b`), and an
+`opaque` part stands for all that follows `scheme:`, so `user`, `host`, `port` and `path` are not
+written.
 
 `escape` makes a string safe as one key or value of a query: every character but the unreserved ones
-becomes `%XX`, and a space becomes `+`. `parseQuery` reads `k=v&k=v`, each key and value decoded as
+becomes `%XX`, one per byte of its UTF-8 encoding in upper-case hex digits, and a space becomes `+`.
+`unescape` reads `%XX` in either case and `+` as a space, and keeps every other character as it is. `parseQuery` reads `k=v&k=v`, each key and value decoded as
 `unescape` does, with a key's values in order and a repeated key such as `tag=a&tag=b` kept as
-`Map{ "tag": ["a", "b"] }`; a key without `=` has the value `""`. Escapes that decode to bytes that
+`Map{ "tag": ["a", "b"] }`; a key without `=` has the value `""`. A pair splits at its first `=`, so
+`a=b=c` gives `a` the value `b=c` and `=x` has the key `""`; an empty pair, as in `a=1&&b=2` or
+`&`, is skipped. Escapes that decode to bytes that
 are not UTF-8, such as `%FF`, are `Err` in `unescape` and `parseQuery`, since no string can hold
-them. `stringifyQuery` writes the map back in its order, each key and value escaped, so the two
-round-trip, and a request that is signed over its query has a known order. A one-value query is
+them. `stringifyQuery` writes the map back in its order, each key and value escaped, and a key with no
+values writes nothing, so the two round-trip for maps whose keys each have a value, as every map
+`parseQuery` gives does, and a request that is signed over its query has a known order. A one-value query is
 `Map{ "q": ["ant"] }`.
 
 ## Crypto

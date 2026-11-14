@@ -1399,7 +1399,9 @@ annotation.
 
 The branches of an `if` are each checked against the expected type when there is one. Otherwise the
 expression has the union of the branch types, with `never` dropped, so
-`if n > 0 { "positive" } else { null }` has type `string | null`.
+`if n > 0 { "positive" } else { null }` has type `string | null`. Each branch is typed on its own:
+a branch of `[]` or `Map{}` takes nothing from the others, so it needs an expected type, and
+`let keys: Array[string] = if v is Map { v.keys() } else { [] }` annotates.
 
 Literals get no help from context: an integer literal is always `int`, a float literal always
 `float64`, and a string literal never carries a tag. `var id: UserId = "u-1"` is a compile error and
@@ -1735,7 +1737,7 @@ loop on `null`. A closed channel's send is always ready too, and when it is chos
 `Channel.send` does (section 12), so a `select` with `else` panics rather than taking `else`.
 
 A `select` is an expression: its blocks are checked against the expected type, or it has the union
-of their types with `never` dropped, as an `if`. A block's `return`, `break`, and `continue` act on
+of their types with `never` dropped, as an `if`, each block typed on its own. A block's `return`, `break`, and `continue` act on
 the function or loop around the `select`, since the block belongs to that body; a bound variable is
 a local of its block and narrows there.
 
@@ -1943,7 +1945,9 @@ A spread is checked when the element is built, since its names are data: a name 
 attribute name by the rule above, one that runs code (below), or `key` panics, and so does a `bool`
 on a name that is not a boolean attribute. URL attributes are checked as when written. Where a
 spread and another attribute, or two spreads, give one name, compared ignoring ASCII case, the later
-value wins and the attribute keeps the earlier position, as a later field wins in a record literal.
+value wins and the attribute keeps the earlier position and the earlier spelling of its name, as a
+later field wins in a record literal: `<p TITLE="a" {...Map{ title: "b" }} />` is
+`<p TITLE="b"></p>`.
 Names are resolved first and `null` values dropped after, so a later `null` removes an attribute:
 `<button disabled {...Map{ disabled: null }} />` has no `disabled`.
 
@@ -3667,7 +3671,7 @@ bytes and its reader would have to know which encoding to undo; a program writes
 `Html` is the value of an HTML expression (section 5): an immutable list of nodes, each an element,
 a text node, or a raw node of trusted markup. The list is kept in one normal form, so that two
 values built differently but meaning the same are equal: fragments are spliced in, `void` leaves
-nothing, adjacent text nodes are joined, and an empty text node is dropped. `<p>{"a"}{"b"}</p>` and
+nothing, adjacent text nodes are joined, and an empty text node or raw node is dropped. `<p>{"a"}{"b"}</p>` and
 `<p>ab</p>` are one value. `==` compares the nodes, so `Html` serves as a map key, and a test
 compares a component's output against an HTML expression: `assert(badge(3) == <b>3</b>)`.
 
@@ -3683,7 +3687,8 @@ Html.unsafe(s: string): Html              // s as markup, unescaped
 Html.nodes(h: Html): Array[Html.Node]     // the top-level nodes, in order
 ```
 
-`Html.unsafe(s)` returns a raw node holding `s`, which the renderer writes unescaped. It is the one
+`Html.unsafe(s)` returns a raw node holding `s`, which the renderer writes unescaped;
+`Html.unsafe("")` is the empty `Html`. It is the one
 way to make markup from a string, so a search for `Html.unsafe` finds every place a string becomes
 markup. Its use is markup a program trusts: the output of a sanitizer or a Markdown renderer, or an
 SVG file shipped with the program. A raw node is opaque: `Html.unsafe("<b>x</b>")` renders as
