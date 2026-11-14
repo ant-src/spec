@@ -3536,7 +3536,7 @@ Bytes.extend(b: Bytes, src: Bytes): void                       // mutates; src's
 Bytes.pop(b: Bytes): byte | null                               // mutates; removes and returns the last byte; null when empty
 Bytes.truncate(b: Bytes, n: int): void                         // mutates; keeps the first n bytes; panics if n is outside 0 ..= length
 Bytes.fill(b: Bytes, x: byte, from: int = 0, to: int | null = null): void   // mutates; to: the length when null; panics as Array.slice does
-Bytes.copy(dst: Bytes, at: int, src: Bytes, from: int = 0, to: int | null = null): void   // mutates dst; to: src's length when null
+Bytes.copy(dst: Bytes, at: int, src: Bytes, from: int = 0, to: int | null = null): void   // mutates dst; to: src's length when null; panics if a range does not fit, before writing
 Bytes.slice(b: Bytes, from: int, to: int): Bytes               // a copy; panics as Array.slice does
 Bytes.concat(parts: Array[Bytes]): Bytes                       // in new Bytes, even of one part
 Bytes.indexOf(b: Bytes, sub: Bytes, from: int = 0): int | null   // the first index of sub at or after from; from for an empty sub; panics if from is outside 0 ..= length
@@ -3572,8 +3572,8 @@ values), in an order every call states:
 ```
 type Bytes.Order = Bytes.BigEndian | Bytes.LittleEndian   // empty records, as the modes of Time
 
-Bytes.read[T: Number](b: Bytes, t: Reflect.Type[T], at: int, order: Bytes.Order): T
-Bytes.write[T: Number](b: Bytes, t: Reflect.Type[T], at: int, x: T, order: Bytes.Order): void   // mutates
+Bytes.read[T: Number](b: Bytes, t: Reflect.Type[T], at: int, order: Bytes.Order): T   // panics if at or at + size is outside 0 ..= length
+Bytes.write[T: Number](b: Bytes, t: Reflect.Type[T], at: int, x: T, order: Bytes.Order): void   // mutates; panics as read does
 Bytes.append[T: Number](b: Bytes, t: Reflect.Type[T], x: T, order: Bytes.Order): void           // mutates
 Bytes.sizeOf[T: Number](t: Reflect.Type[T]): int               // 1, 2, 4, or 8
 ```
