@@ -2584,7 +2584,10 @@ The host can end a run before that: the `ant` command on an interrupt the progra
 (`stdlib.md`, `Os.interrupt`), a Go program by cancelling the context it gave `Run`. Every goroutine
 then ends at its next call or loop iteration, a blocking call returns with the reason `cancelled`,
 and the process exits after a short grace. That is an end, not an event a program handles; the
-interrupt a program asks for is the event.
+interrupt a program asks for is the event. The run's context has no deadline under `ant run` and
+`ant test`, whose `-timeout` ends the run as an interrupt does; a Go host's context gives the run
+its deadline, if it has one. A program whose goroutines all wait on each other waits until the
+host ends it: nothing detects a deadlock.
 
 ### Synchronization
 
@@ -2726,7 +2729,8 @@ sense of Go's memory model:
 - `Mutex.unlock`, and the release at the end of `withLock`, happen before every later `lock` of the
   same mutex. For an `RwMutex`, a write unlock happens before every later read or write lock, and a
   read unlock before every later write lock.
-- A `WaitGroup.done` happens before the return of the `wait` it unblocks.
+- A `WaitGroup.done`, or a `WaitGroup.add` that brings the counter to zero, happens before the
+  return of the `wait` it unblocks.
 - The completion of the function given to `Once.do` or `Once.value` happens before any call of them
   returns.
 - All operations on all `Atomic` objects form one total order, and a `store` happens before every
@@ -3973,42 +3977,49 @@ namespace, as `String.Cut` is in `String`'s (section 8, Catching a panic). `Reco
 
 The sync objects of section 9. Each is a prelude type with its functions declared on it (section 6),
 so `Mutex` is the type in an annotation and `Mutex.new()` creates one; objects compare by identity.
-The `with` forms acquire, run the function, and release even if it panics. A `ctx` parameter is the
-context of section 9, Waiting: the call gives up when the context is done.
+The `with` forms acquire, run the function, and release even if it panics; the release is
+`unlock`, `readUnlock` or `writeUnlock`, so it panics if the function returned with the lock
+already released. A lock has no owner: any goroutine may release a lock that another took, as in
+Go. A `Mutex` is not reentrant: a goroutine that locks one it holds waits forever. Nor may a
+goroutine read-lock an `RwMutex` it already holds for reading, since a writer waiting between the
+two calls blocks both. A `ctx` parameter is the context of section 9, Waiting: the call gives up
+when the context is done.
 
 ```
-Mutex.new(): Mutex
-Mutex.lock(m: Mutex): void                                     // blocks
+Mutex.new(): Mutex                                             // unlocked
+Mutex.lock(m: Mutex): void                                     // blocks while m is locked, by any goroutine, the caller included
 Mutex.unlock(m: Mutex): void                                   // panics if m is not locked
-Mutex.withLock[T](m: Mutex, f: func(): T): T
+Mutex.withLock[T](m: Mutex, f: func(): T): T                   // panics if f returns with m unlocked
 
-RwMutex.new(): RwMutex
-RwMutex.readLock(m: RwMutex): void                             // blocks while a writer holds m
-RwMutex.readUnlock(m: RwMutex): void                           // panics if m is not read-locked
+RwMutex.new(): RwMutex                                         // unlocked
+RwMutex.readLock(m: RwMutex): void                             // takes one read hold; blocks while a writer holds m or waits in writeLock
+RwMutex.readUnlock(m: RwMutex): void                           // releases one read hold; panics if m is not read-locked
 RwMutex.writeLock(m: RwMutex): void                            // blocks while any reader or writer holds m
 RwMutex.writeUnlock(m: RwMutex): void                          // panics if m is not write-locked
-RwMutex.withRead[T](m: RwMutex, f: func(): T): T
-RwMutex.withWrite[T](m: RwMutex, f: func(): T): T
+RwMutex.withRead[T](m: RwMutex, f: func(): T): T               // panics if f returns with m not read-locked
+RwMutex.withWrite[T](m: RwMutex, f: func(): T): T              // panics if f returns with m not write-locked
 
-WaitGroup.new(): WaitGroup
-WaitGroup.add(wg: WaitGroup, n: int): void                     // panics if the counter would go negative or past the largest int
-WaitGroup.done(wg: WaitGroup): void                            // panics if the counter is already zero
+WaitGroup.new(): WaitGroup                                     // its counter starts at zero
+WaitGroup.add(wg: WaitGroup, n: int): void                     // adds n, which may be negative, to the counter; panics if it would go negative or past the largest int
+WaitGroup.done(wg: WaitGroup): void                            // subtracts one from the counter; panics if it is already zero
 WaitGroup.wait(wg: WaitGroup, ctx: Context | null = null): void   // blocks until the counter is zero, or ctx is done
 
 Once.new(): Once
 Once.do[T](once: Once, f: func(): T): void                     // runs f the first time only and discards its value; later calls wait for it
-Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value; it panics if that run was left by a return before f gave one
+Once.value[T](f: func(): T): func(): T                         // the returned function runs f once and caches the value; it panics if that run was left without a value and without a panic, by a `return` from a `for` body unwinding through f or by `Test.skip`
                                                                // for both: if f panics, the once is complete and every call, waiting or later, panics with the same panic, its trace included
 
 Cond.new(m: Mutex): Cond
-Cond.wait(c: Cond): void                                       // releases m, waits, reacquires; panics if m is not locked
-Cond.signal(c: Cond): void                                     // wakes one goroutine waiting on c, if any
+Cond.wait(c: Cond): void                                       // releases m, waits for a signal or broadcast, reacquires; panics if m is not locked
+Cond.signal(c: Cond): void                                     // wakes one goroutine waiting on c, if any; which one is not specified
 Cond.broadcast(c: Cond): void                                  // wakes every goroutine waiting on c
+                                                               // signal and broadcast may be called with m locked or not; wait returns only after one, but
+                                                               // another goroutine may take m and change the state first, so a waiter tests its condition in a loop
 
 Atomic.new[T](v: T): Atomic[T]
 Atomic.load[T](a: Atomic[T]): T
 Atomic.store[T](a: Atomic[T], v: T): void
-Atomic.add[T: Number](a: Atomic[T], d: T): T                   // returns the new value; panics on overflow
+Atomic.add[T: Number](a: Atomic[T], d: T): T                   // returns the new value; panics on overflow, leaving a as it was
 Atomic.compareAndSwap[T](a: Atomic[T], expected: T, v: T): bool   // compares with ==
 
 Context.new(timeout: Time.Duration | null = null, parent: Context | null = null): Context
@@ -4016,7 +4027,7 @@ Context.new(timeout: Time.Duration | null = null, parent: Context | null = null)
 Context.cancel(ctx: Context): void                             // done now, with the reason "cancelled"; nothing when done already
 Context.isDone(ctx: Context): bool
 Context.reason(ctx: Context): string | null                    // null while running; "cancelled", "timeout", "interrupt", or the parent's reason
-Context.deadline(ctx: Context): Time.Instant | null            // the earliest deadline of ctx and its parents
+Context.deadline(ctx: Context): Time.Instant | null            // the earliest deadline of ctx and its parents, the run's included; null when none has one
 Context.wait(ctx: Context): void                               // blocks until done
 
 Channel.new[T](capacity: int = 0): Channel[T]                            // 0 is a rendezvous; panics if capacity < 0 or is above 2^31 − 1
@@ -4054,7 +4065,7 @@ nothing from any channel until its choice is made.
 Structured fan-out over goroutines (section 9). Each call runs its callbacks on goroutines of its
 own, returns only after all of them have ended, and raises a callback's panic in the caller. Every
 callback receives the call's scope context, which a callback passes to its waits; a callback that
-waited on the caller's `ctx` instead would not see a sibling's panic or a `race` winner.
+waited on the caller's `ctx` instead would not see a sibling's panic or a `race` or `any` winner.
 
 ```
 Parallel.map[T, U](xs: Array[T], f: func(T, Context): U, limit: int, ctx: Context | null = null): Array[U] | null
@@ -4128,8 +4139,9 @@ The rules:
 
 `limit` is required: a program that wants a goroutine per element passes `len(xs)`, which keeps the
 choice visible. `run`, `race`, and `any` take no limit, since their lists are written in the source.
-A `race` or `any` whose `T` includes `null` cannot tell a `null` winner from cancellation; it wraps
-the value in a record. A `run` callback that ends in a value discards it with `_ = …`.
+A `race` whose `T` includes `null` cannot tell a `null` winner from cancellation, so a program wraps
+such a value in a record; `any` needs no wrapper, since its winner arrives in `Ok`. A `run` callback
+that ends in a value discards it with `_ = …`.
 
 | Case                                                     | Result                                                                      |
 | -------------------------------------------------------- | --------------------------------------------------------------------------- |
