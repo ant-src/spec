@@ -31,6 +31,11 @@ definition, of an `interface` through its type parameters, and of a `var` or `le
 annotation, leaving out the body or initializer. A declaration without a doc comment prints only its
 signature.
 
+On a terminal, signatures and code examples are highlighted as in the REPL, and namespace headings
+are bold. Signatures, prose, and code examples keep their source line breaks and spacing.
+`NO_COLOR`, a dumb terminal (`TERM=dumb`), or redirected output disables highlighting and bold
+headings. The REPL's `:doc` renders documentation the same way.
+
 A name without a dot that is a namespace (section 10, Namespaces), a type with functions declared on
 it included, prints its own declaration, if it has one, as above, and then the signature of every
 declaration owned by it, one after another in source order. An interface prints its functions the
