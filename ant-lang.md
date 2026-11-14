@@ -3535,7 +3535,7 @@ Bytes.push(b: Bytes, x: byte): void                            // mutates
 Bytes.extend(b: Bytes, src: Bytes): void                       // mutates; src's bytes as they were at the call
 Bytes.pop(b: Bytes): byte | null                               // mutates; removes and returns the last byte; null when empty
 Bytes.truncate(b: Bytes, n: int): void                         // mutates; keeps the first n bytes; panics if n is outside 0 ..= length
-Bytes.fill(b: Bytes, x: byte, from: int = 0, to: int | null = null): void   // mutates; to: the length when null; panics as Array.slice does
+Bytes.fill(b: Bytes, x: byte, from: int = 0, to: int | null = null): void   // mutates; to: the length when null; panics as Array.slice does, before writing
 Bytes.copy(dst: Bytes, at: int, src: Bytes, from: int = 0, to: int | null = null): void   // mutates dst; to: src's length when null; panics if a range does not fit, before writing
 Bytes.slice(b: Bytes, from: int, to: int): Bytes               // a copy; panics as Array.slice does
 Bytes.concat(parts: Array[Bytes]): Bytes                       // in new Bytes, even of one part
