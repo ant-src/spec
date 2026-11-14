@@ -2990,6 +2990,24 @@ REPL `_` read as a value is the result the last input printed, for one that prin
 still discards. A `let` holds for the rest of the session: a later input may declare other names
 again, but not a name bound by `let`, and it cannot assign one.
 
+An input that completes with a declaration or a result of type `void` prints nothing. Any other
+result except an `Err` is written to standard output as `println` writes it, with `String.from` and
+a newline: a string prints without quotes, while a string inside a container keeps them. On a
+terminal the REPL may color the result and break it over lines when it does not fit. The REPL reads
+each input after the prompt `> ` and each line that continues an unfinished input after `. `. Both
+prompts go to standard output, even when standard input is a pipe or a file.
+
+At the start of an input, a line whose first non-whitespace character is `:` is a command instead of
+Ant code. `:help` lists the commands and the editing keys; `:type expr` prints an expression's type,
+`:doc name` prints standard-library documentation, `:load file.ant` evaluates a file in the session,
+`:reset` starts a new session, and `:quit` (also `:q` or `:exit`) ends it. The session ends with
+status `0` at the end of its input, on Ctrl-D on an empty line in a terminal, or on a quit command.
+`Os.exit` ends it with the supplied status, as in a script. In a terminal Ctrl-C drops the current
+input; pressing it again on an empty line before entering another input ends the session with status
+`130`. An interrupt that ends the session also exits with `130`. In a terminal the REPL edits and
+highlights the line, completes names, and keeps a history in `~/.ant_history`; `:help` lists its
+keys.
+
 ### Tests
 
 A file whose name ends in `_test.ant` is a **test file**. It is a library that may also hold `test`
