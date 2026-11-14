@@ -59,7 +59,6 @@ child process, goes to standard output and standard error as under `ant run`.
 --- FAIL: stack_test.ant: parse/0x10 (0.00s)
     assertion failed: parse(c.input) == c.want (0 == 16)
       c.input = "0x10"
-      c.want = 16
       at test "0x10" (stack_test.ant:26:13)
 ```
 
@@ -80,8 +79,12 @@ ok    no tests (0.00s)
 ```
 
 The line gives the failed count when it is not zero, then always the passed count, then the skipped
-count when it is not zero: `ok    0 passed, 1 skipped` for a run whose one test skipped. A run of no tests says `no tests`.
-The counts are of tests without subtests, and of tests with subtests that failed on their own.
+count when it is not zero: `ok    0 passed, 1 skipped` for a run whose one test skipped. A run of no
+tests says `no tests`. The line starts with `ok` when the command exits with `0` and `FAIL`
+otherwise, so a file that cannot be loaded makes it `FAIL`, though it adds to no count. The counts
+are of tests without subtests, and of tests with subtests that failed on their own; a test counts as
+without subtests when none of its subtests ran, so a parent whose subtests `-run` or `-skip` left
+out all counts as one test.
 
 **Verbose.** Under `-v`, each test also prints `=== RUN   file: name` when it starts, its output as
 it comes, indented by four spaces, and when it ends `--- PASS: file: name (0.00s)`, `--- SKIP:` with

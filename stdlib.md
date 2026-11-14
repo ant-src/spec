@@ -19,7 +19,9 @@ with `Err` and the context's reason as the message, as section 9 (Waiting) has i
 a path, an address, or a URL names it in an `Err`'s message. A call on a handle, which may have no
 path, and a context's reason name no target, so the caller adds it (section 8, Wrapping errors). The
 namespaces are smaller than the Go packages behind them; a function is added when a program needs
-it, and what is here is complete as written.
+it, and what is here is complete as written. A host that embeds Ant without a file system,
+processes, or a network, as the WebAssembly playground is, makes the calls that need them `Err`;
+`Http` there goes through the host's own fetch.
 
 ## File
 
@@ -37,7 +39,7 @@ File.chmod(path: string, mode: int): Result[void, Error]   // sets the bits in 0
 File.touch(path: string, time: Time.Instant | null = null): Result[void, Error]   // sets modified to time, or now; creates an empty file when missing
 File.remove(path: string): Result[void, Error]             // one file, or an empty directory; Err when nothing is there
 File.removeAll(path: string): Result[void, Error]          // a whole tree; Ok when nothing is there and the path could hold something; Err for . and ..
-File.rename(from: string, to: string): Result[void, Error] // replaces a file at to; Err when a directory is at to, since there is no "into" form, and across file systems; Ok and nothing changes when from and to are the same file
+File.rename(from: string, to: string): Result[void, Error] // replaces a file or a link at to, the link itself even when it points to a directory; Err when a directory is at to, since there is no "into" form, and across file systems; Ok and nothing changes when from and to are the same file
 File.copy(from: string, to: string, replace: bool = true): Result[void, Error]   // one file's contents and mode; replaces a file at to
 File.copyAll(from: string, to: string): Result[void, Error]   // a file or a whole tree; to must not exist, or be an empty directory
 File.mkdir(path: string): Result[void, Error]              // with its parents, each made as the path names it, so x/../y makes x too; Ok when it exists
@@ -56,7 +58,7 @@ File.append(path: string): Result[File.Handle, Error]      // for writing at the
 File.lock(path: string, ctx: Context | null = null): Result[File.Handle, Error]   // for reading and writing, holding the file's lock; waits for it
 File.tryLock(path: string): Result[File.Handle | null, Error]   // likewise; null when another handle holds the lock
 File.isTerminal(f: File.Handle): bool                      // f is a terminal, as [[ -t 1 ]] asks of standard output
-File.readLine(f: File.Handle, ctx: Context | null = null): Result[string | null, Error]   // the line without its \n or \r\n; null at end of file
+File.readLine(f: File.Handle, ctx: Context | null = null): Result[string | null, Error]   // the line without its \n or \r\n, and a last line without one whole; null at end of file
 File.readAll(f: File.Handle, ctx: Context | null = null): Result[string, Error]           // the rest of the file
 File.writeLine(f: File.Handle, line: string): Result[void, Error]
 File.writeText(f: File.Handle, text: string): Result[void, Error]   // writeLine without the newline
@@ -351,9 +353,8 @@ copy of it until the child's program has started, so the release can come a mome
 a program that locks again at once uses `lock`, which waits, rather than `tryLock`. Closing is the
 one release, so there is no unlock, and a `File.buffered` over the handle writes out at its close
 before the lock goes. The file stays after the close, since removing it would race with a process
-that has just opened it to lock it, and the next lock reuses it. A program may write its pid into
-the file for people to read; whether the lock is held is what `tryLock` answers, not what the file
-says. The lock is `flock`'s on Unix and `LockFileEx`'s on Windows: advisory on Unix, so it keeps out
+that has just opened it to lock it, and the next lock reuses it. Whether the lock is held is what
+`tryLock` answers, not what the file holds. The lock is `flock`'s on Unix and `LockFileEx`'s on Windows: advisory on Unix, so it keeps out
 only processes that lock too, and mandatory on Windows, where other processes cannot read or write
 the file while it is held.
 
@@ -1192,7 +1193,11 @@ the program's. A buffered handle given as an output is flushed first and its `f`
 header the program wrote comes before the child's output. A file with nothing read ahead, a pipe
 end, and a standard stream are handed over as they are; anything else, such as a file the program
 has read part of or a connection, goes through a copy the runtime runs, which ends a second after
-the child exits at the latest, and the program does not read that handle while the child runs. A
+the child exits at the latest, and the program does not read that handle while the child runs.
+`Cmd.read` and `Cmd.capture` collect an output the same way: once the command has exited, or been
+ended by its context, they wait at most a second more for a child the command left behind to close
+the output, and then return what they have, or `Err` with the context's reason, leaving that child
+running. A
 child has only the three streams it was given. The same handle may be given twice:
 `stdout: p.write, stderr: p.write` merges the outputs, as `2>&1` does.
 

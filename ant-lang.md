@@ -391,7 +391,10 @@ are the same type.
 Types are checked by one command and erased by the other.
 
 `ant check file.ant` runs the checker over the file and every module it imports, including code
-nothing calls, and exits non-zero with the errors. Inference, bounds, and narrowing live here, and
+nothing calls. It prints nothing and exits with `0` when it finds no error; otherwise it reports
+every error, each as `path:line:column: message` with the source line under it marked, then the
+count, and exits with `1`, or with `2` when the file cannot be loaded or the usage is wrong. It
+takes one file. Inference, bounds, and narrowing live here, and
 so does their cost. Every rule in this document that mentions a type is a checker rule, and a
 compile error is an error the checker reports.
 
@@ -900,7 +903,8 @@ later, and a solution is checked against the bound with their solutions in place
 the bound, and when the bound is a union, the solution must be a single member of it, never a union:
 `[T: Ordered]` admits `int` or `string`, not `int | string` and not `Ordered` itself. Inside the
 body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and
-assigned, and an operator applies to `T` when it applies to every member of the bound. That is sound
+assigned, a field every member of a union bound declares can be read as through the union, and an
+operator applies to `T` when it applies to every member of the bound. That is sound
 only because `T` stands for one member, which is what the restriction guarantees:
 
 ```ant
@@ -2953,13 +2957,18 @@ only a `return`, written or reached through `try` or `?? return`, gives it a res
 script body, so `return` and `try` in its top-level initializers, outside a lambda, are syntax
 errors. Command-line arguments come from `Os.args()`.
 
-`ant file.ant`, with any arguments after it, is `ant run file.ant`. So a script whose first line is
+`ant file.ant`, with any arguments after it, is `ant run file.ant`, and so is `ant file` for any
+existing file whose name is not a command's, so a script installed without its suffix still runs.
+So a script whose first line is
 `#!/usr/bin/env ant` (section 2) and that may be executed runs as `./file.ant`, and its arguments
 reach `Os.args()` as they would through `ant run`. A library may have the line too, and runs as any
 library given to `ant run` does.
 
-`ant version` prints the version of the `ant` command, the release it was built from, as in
-`ant v0.1.0`.
+`ant version` prints the version of the `ant` command, as in `ant v0.1.0`: the release it was built
+from, or for a build from another commit a version after the last release that names the commit,
+as Go's pseudo-versions do (`ant v0.1.1-0.20261114133051-294775cc3c24`). It takes no arguments.
+`ant --version` is `ant version`, and `ant help`, `ant -h` and `ant --help` print the usage of every
+command; `-h` or `--help` right after a command prints that command's usage. Each exits with `0`.
 
 The exit status is `0` when the script body ends with its last item or returns anything but an
 `Err`; `1` when it returns an `Err`, after its deferred blocks have run and the `Err`'s `error`
