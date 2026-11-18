@@ -13,15 +13,17 @@ A type a namespace declares is written through the namespace, `Json.Value` or `H
 a namespace that no type declares is reached only through `.` (section 10, Namespaces), and a value
 of such a type reaches the namespace's functions through `.` as well, `h.writeLine(line)` for
 `File.writeLine(h, line)` (section 5, Calls through `.`). A parameter with a default may be omitted
-or named at the call, as for a declared function (section 6, Calling). A function that blocks takes
-a context as its last parameter, `ctx: Context | null = null`, and when the context is done gives up
-with `Err` and the context's reason as the message, as section 9 (Waiting) has it. A call that takes
-a path, an address, or a URL names it in an `Err`'s message. A call on a handle, which may have no
-path, and a context's reason name no target, so the caller adds it (section 8, Wrapping errors). The
-namespaces are smaller than the Go packages behind them; a function is added when a program needs
-it, and what is here is complete as written. A host that embeds Ant without a file system,
-processes, or a network, as the WebAssembly playground is, makes the calls that need them `Err`;
-`Http` there goes through the host's own fetch.
+or named at the call, as for a declared function (section 6, Calling). A function that waits, in the
+sense of section 9 (Waiting), takes a context as its last parameter, `ctx: Context | null = null`,
+and when the context is done gives up with `Err` and the context's reason as the message, as section
+9 (Waiting) has it. A call that takes a path, an address, or a URL names it in an `Err`'s message. A
+call on a handle, which may have no path, and a context's reason name no target, so the caller adds
+it (section 8, Wrapping errors). The namespaces are smaller than the Go packages behind them; a
+function is added when a program needs it, and what is here is complete as written. Where a
+namespace does what a Go package does, it follows Go: the same behavior, the same guarantees, and no
+promise Go does not make, so a case this document leaves open is Go's. A host that embeds Ant
+without a file system, processes, or a network, as the WebAssembly playground is, makes the calls
+that need them `Err`; `Http` there goes through the host's own fetch.
 
 ## File
 
@@ -354,9 +356,9 @@ a program that locks again at once uses `lock`, which waits, rather than `tryLoc
 one release, so there is no unlock, and a `File.buffered` over the handle writes out at its close
 before the lock goes. The file stays after the close, since removing it would race with a process
 that has just opened it to lock it, and the next lock reuses it. Whether the lock is held is what
-`tryLock` answers, not what the file holds. The lock is `flock`'s on Unix and `LockFileEx`'s on Windows: advisory on Unix, so it keeps out
-only processes that lock too, and mandatory on Windows, where other processes cannot read or write
-the file while it is held.
+`tryLock` answers, not what the file holds. The lock is `flock`'s on Unix and `LockFileEx`'s on
+Windows: advisory on Unix, so it keeps out only processes that lock too, and mandatory on Windows,
+where other processes cannot read or write the file while it is held.
 
 ## Http
 
@@ -470,16 +472,16 @@ A connection is a `File.Handle`, so `File.readLine`, `readAll`, `writeLine`, `wr
 `accept` on one listener, each with a context of its own, and each connection goes to one of them.
 TCP only: there is no TLS, UDP or Unix socket.
 
-`addr` is `host:port`, as in Go: an IPv6 host is in brackets, `[::1]:8080`, and the port is a
-number or a service name such as `http`. In `listen` an empty host listens on every interface, and
+`addr` is `host:port`, as in Go: an IPv6 host is in brackets, `[::1]:8080`, and the port is a number
+or a service name such as `http`. In `listen` an empty host listens on every interface, and
 `Net.address` then writes it as `[::]:port`; in `dial` an empty host is the local host. An `Err` of
 `listen` or `dial` names the call and the address as given, then the reason:
 `dial "127.0.0.1:99999": invalid port`. The context of `dial` limits the dial only: the connection
 it returns is not tied to it, so a read that should give up takes a context of its own. A read of a
 connection is at end of file once the other end has closed it and everything it sent has been read.
 `Net.close` stops the listener only: connections it accepted stay open until they are closed, the
-address is free again for a later `listen`, and `Net.address` of a closed listener is the address
-it had. `Net.peer` of a handle from `File.buffered` answers for the connection under it, and of a
+address is free again for a later `listen`, and `Net.address` of a closed listener is the address it
+had. `Net.peer` of a handle from `File.buffered` answers for the connection under it, and of a
 closed connection is the address it had.
 
 ## Path
@@ -754,17 +756,17 @@ milliseconds, microseconds and nanoseconds, three digits each, so `PT1.5S` is 1 
 milliseconds. A string in another calendar is `Err`.
 
 A string whose first character after an optional sign is not `P` is read as Go's
-`time.ParseDuration` reads it, the notation of configuration files, flags and environment
-variables, and of `ant test -timeout`. It is an optional `+` or `-`, then `0` or one or more
-components of a number and a unit; the units are `h`, `m`, `s`, `ms`, `us`, `µs` (U+00B5), `μs`
-(U+03BC) and `ns`. A number is ASCII digits with an optional fraction after a point, with digits on
-at least one side of it and no `_`. As in Go, components come in any order, a unit may repeat, and
-any component may carry a fraction: each adds to its own field, a fraction spread into the smaller
-fields as above, so `"1m2h"` is 2 hours and 1 minute, `"1h1h"` is 2 hours, and `"1.5h30m"` is 1 hour
-and 60 minutes. Digits of a fraction below a nanosecond are dropped, as Go drops them, so `"0.1ns"`
-is zero. Every string Go's `Duration.String` prints parses, as does every duration literal written
-as a string, which is stricter (`ant-lang.md`, section 2, Literals). A value outside the bounds
-above is `Err`, and so are `"5"`, `"1d"` and `"1h 30m"`.
+`time.ParseDuration` reads it, the notation of configuration files, flags and environment variables,
+and of `ant test -timeout`. It is an optional `+` or `-`, then `0` or one or more components of a
+number and a unit; the units are `h`, `m`, `s`, `ms`, `us`, `µs` (U+00B5), `μs` (U+03BC) and `ns`. A
+number is ASCII digits with an optional fraction after a point, with digits on at least one side of
+it and no `_`. As in Go, components come in any order, a unit may repeat, and any component may
+carry a fraction: each adds to its own field, a fraction spread into the smaller fields as above, so
+`"1m2h"` is 2 hours and 1 minute, `"1h1h"` is 2 hours, and `"1.5h30m"` is 1 hour and 60 minutes.
+Digits of a fraction below a nanosecond are dropped, as Go drops them, so `"0.1ns"` is zero. Every
+string Go's `Duration.String` prints parses, as does every duration literal written as a string,
+which is stricter (`ant-lang.md`, section 2, Literals). A value outside the bounds above is `Err`,
+and so are `"5"`, `"1d"` and `"1h 30m"`.
 
 **Conversion.**
 
@@ -938,10 +940,10 @@ form says, and `HalfEven` to the nearest with a tie to the even multiple; `HalfE
 is what `Math.round` does.
 
 Two durations are `==` when their ten fields are, as given, so `PT90M` and `PT1H30M` are not, and
-neither are the literals `90m` and `1h30m`; `compareDuration` compares their lengths. For
-the other types `==` is the same moment for an `Instant`, the same moment and zone for a
-`ZonedDateTime`, the same fields for a plain value, and the same zone for a `Zone`, as above. Time
-values are immutable and serve as map keys.
+neither are the literals `90m` and `1h30m`; `compareDuration` compares their lengths. For the other
+types `==` is the same moment for an `Instant`, the same moment and zone for a `ZonedDateTime`, the
+same fields for a plain value, and the same zone for a `Zone`, as above. Time values are immutable
+and serve as map keys.
 
 ## Os
 
@@ -1197,8 +1199,7 @@ the child exits at the latest, and the program does not read that handle while t
 `Cmd.read` and `Cmd.capture` collect an output the same way: once the command has exited, or been
 ended by its context, they wait at most a second more for a child the command left behind to close
 the output, and then return what they have, or `Err` with the context's reason, leaving that child
-running. A
-child has only the three streams it was given. The same handle may be given twice:
+running. A child has only the three streams it was given. The same handle may be given twice:
 `stdout: p.write, stderr: p.write` merges the outputs, as `2>&1` does.
 
 A context bounds a wait, and the context of a call that starts a command bounds its life:
@@ -1345,10 +1346,10 @@ empty line, and is `Err` on a quote inside an unquoted field or a quoted field t
 naming the line. `stringify` quotes a field when it holds the separator, a quote, or a line break,
 or begins with white space, and ends every row with `\n`; a row of one empty field is written `""`,
 since an empty line is no row to `parse`, and a row of no fields is written as an empty line, as in
-Go, so it does not survive `parse`: CSV has no spelling for it. A separator is one code point other than `"`, `\r`, `\n`,
-U+0000, and U+FFFD. It is part of the program, not of the data, so another value panics in both
-functions, checked before any row is read or written. With a separator, `stringify` cannot fail,
-since it writes to a string, so it returns a `string`.
+Go, so it does not survive `parse`: CSV has no spelling for it. A separator is one code point other
+than `"`, `\r`, `\n`, U+0000, and U+FFFD. It is part of the program, not of the data, so another
+value panics in both functions, checked before any row is read or written. With a separator,
+`stringify` cannot fail, since it writes to a string, so it returns a `string`.
 
 ## Encoding
 
@@ -1388,40 +1389,40 @@ colon. `opaque` is what follows `scheme:` when it does not start with `/`:
 starts the path, as RFC 3986 says: `x:/a` and `file:/etc/hosts` have an empty authority and `path`
 `/a` and `/etc/hosts`. `user` is the userinfo as written, a password included. `host` and `port` are
 the two halves of the authority, `port` empty when there is none; `host` keeps its case, and an IPv6
-address is held without its brackets, `::1` for `http://[::1]:80/`, which `stringify` writes back. `path` is decoded, `%20` read as a
-space, but for `%2F` and `%25`, which stay as written: a `/` that is not a separator and a `%` that
-is no escape keep the path's meaning through a round trip, as `/a%2Fb` and `/a/b` are different
-paths. `query` is the raw text after `?`, without it, so `parseQuery` can read it; `fragment` is
-decoded. `parse` is `Err` on a malformed reference, such as a bad `%XX`, escapes in `path` or
-`fragment` that do not decode to UTF-8, or a space in the host. Outside the host it is lenient, as
-browsers are: a character RFC 3986 does not allow, such as a space, is kept as written. `stringify` assembles the parts,
-escaping what needs it in every part but `query` and `opaque`, which are raw and written as they
-are, and in `path` writing `%2F` and `%25` as they are and escaping any other `%`, so a program
-changes a URL by parsing it, replacing a field, and writing it back. It writes `//` before an
-authority that is not empty, one with a `user`, `host` or `port`, and before an empty one after
-`scheme:` when the scheme is one whose references always have an authority, `http`, `https`, `ws`,
-`wss`, `ftp` or `file`, in any case, or, with or without a scheme, when `path` starts with `//`,
-which would otherwise read as an authority: a `path` of `//a` with nothing else is `////a`, which
-`parse` reads back as an empty authority and that path. So `x:/a`, `file:///etc/hosts`, and
-`http://h/p` come back as written, while `x:///a` comes back as `x:/a`, which RFC 3986 takes for the
-same reference. Where the parts do not fit together, `stringify` keeps the reference readable, as
-Go does: a `path` that does not start with `/` gets one after an authority (`https://h/p` for host
-`h`, path `p`), a relative `path` whose first segment holds a `:` gets `./` (`./a:b`), and an
-`opaque` part stands for all that follows `scheme:`, so `user`, `host`, `port` and `path` are not
-written.
+address is held without its brackets, `::1` for `http://[::1]:80/`, which `stringify` writes back.
+`path` is decoded, `%20` read as a space, but for `%2F` and `%25`, which stay as written: a `/` that
+is not a separator and a `%` that is no escape keep the path's meaning through a round trip, as
+`/a%2Fb` and `/a/b` are different paths. `query` is the raw text after `?`, without it, so
+`parseQuery` can read it; `fragment` is decoded. `parse` is `Err` on a malformed reference, such as
+a bad `%XX`, escapes in `path` or `fragment` that do not decode to UTF-8, or a space in the host.
+Outside the host it is lenient, as browsers are: a character RFC 3986 does not allow, such as a
+space, is kept as written. `stringify` assembles the parts, escaping what needs it in every part but
+`query` and `opaque`, which are raw and written as they are, and in `path` writing `%2F` and `%25`
+as they are and escaping any other `%`, so a program changes a URL by parsing it, replacing a field,
+and writing it back. It writes `//` before an authority that is not empty, one with a `user`, `host`
+or `port`, and before an empty one after `scheme:` when the scheme is one whose references always
+have an authority, `http`, `https`, `ws`, `wss`, `ftp` or `file`, in any case, or, with or without a
+scheme, when `path` starts with `//`, which would otherwise read as an authority: a `path` of `//a`
+with nothing else is `////a`, which `parse` reads back as an empty authority and that path. So
+`x:/a`, `file:///etc/hosts`, and `http://h/p` come back as written, while `x:///a` comes back as
+`x:/a`, which RFC 3986 takes for the same reference. Where the parts do not fit together,
+`stringify` keeps the reference readable, as Go does: a `path` that does not start with `/` gets one
+after an authority (`https://h/p` for host `h`, path `p`), a relative `path` whose first segment
+holds a `:` gets `./` (`./a:b`), and an `opaque` part stands for all that follows `scheme:`, so
+`user`, `host`, `port` and `path` are not written.
 
 `escape` makes a string safe as one key or value of a query: every character but the unreserved ones
 becomes `%XX`, one per byte of its UTF-8 encoding in upper-case hex digits, and a space becomes `+`.
-`unescape` reads `%XX` in either case and `+` as a space, and keeps every other character as it is. `parseQuery` reads `k=v&k=v`, each key and value decoded as
-`unescape` does, with a key's values in order and a repeated key such as `tag=a&tag=b` kept as
-`Map{ "tag": ["a", "b"] }`; a key without `=` has the value `""`. A pair splits at its first `=`, so
-`a=b=c` gives `a` the value `b=c` and `=x` has the key `""`; an empty pair, as in `a=1&&b=2` or
-`&`, is skipped. Escapes that decode to bytes that
-are not UTF-8, such as `%FF`, are `Err` in `unescape` and `parseQuery`, since no string can hold
-them. `stringifyQuery` writes the map back in its order, each key and value escaped, and a key with no
-values writes nothing, so the two round-trip for maps whose keys each have a value, as every map
-`parseQuery` gives does, and a request that is signed over its query has a known order. A one-value query is
-`Map{ "q": ["ant"] }`.
+`unescape` reads `%XX` in either case and `+` as a space, and keeps every other character as it is.
+`parseQuery` reads `k=v&k=v`, each key and value decoded as `unescape` does, with a key's values in
+order and a repeated key such as `tag=a&tag=b` kept as `Map{ "tag": ["a", "b"] }`; a key without `=`
+has the value `""`. A pair splits at its first `=`, so `a=b=c` gives `a` the value `b=c` and `=x`
+has the key `""`; an empty pair, as in `a=1&&b=2` or `&`, is skipped. Escapes that decode to bytes
+that are not UTF-8, such as `%FF`, are `Err` in `unescape` and `parseQuery`, since no string can
+hold them. `stringifyQuery` writes the map back in its order, each key and value escaped, and a key
+with no values writes nothing, so the two round-trip for maps whose keys each have a value, as every
+map `parseQuery` gives does, and a request that is signed over its query has a known order. A
+one-value query is `Map{ "q": ["ant"] }`.
 
 ## Crypto
 

@@ -144,22 +144,22 @@ integer, or the digits before a float's point, start with `0` only when they are
 and `0e3` are fine, while `007` and `00.5` are errors, since other languages read `007` as octal,
 which Ant writes `0o7`. There are no numeric suffixes: an integer literal is always an `int` and a
 float literal is always a `float64`; the units of a duration literal, below, are the only letters
-that can follow a number. `1` is never a float; write `1.0`. Other numeric types are
-reached through a conversion, as in `byte(255)` or `float32(1.5)`. An integer literal that does not
-fit an `int` is a syntax error, so the most negative `int` is written `Math.minInt`. So is a float
-literal out of the range of `float64`: one so large that it would round to infinity, such as
-`1e400`, or one whose digits are not all zero but that would round to `0.0`, such as `1e-400`.
+that can follow a number. `1` is never a float; write `1.0`. Other numeric types are reached through
+a conversion, as in `byte(255)` or `float32(1.5)`. An integer literal that does not fit an `int` is
+a syntax error, so the most negative `int` is written `Math.minInt`. So is a float literal out of
+the range of `float64`: one so large that it would round to infinity, such as `1e400`, or one whose
+digits are not all zero but that would round to `0.0`, such as `1e-400`.
 
-A duration literal is a span of hours and smaller units, written as in Go: `500ms`, `2h30m`,
-`1.5s`. It is one or more components of a number and a unit, with no white space between them. The
-units are `h`, `m`, `s`, `ms`, `us`, and `ns`, hours through nanoseconds, so `m` is minutes, and
-they appear each at most once, in descending order. A number is spelled as a decimal integer or
-float above, with `_` between digits, but without an exponent; only the last component may have a
-fraction. The literal has type `Time.Duration` (`stdlib.md`, Time) whatever its context, needs no
-import, and is the duration whose fields are the components as written, a fraction spread into the
-smaller fields as `Time.parseDuration` spreads one: `1.5h` is 1 hour and 30 minutes, `1h30.5m` is 1
-hour, 30 minutes, and 30 seconds, and `0.5ms` is 500 microseconds. The fraction is exact, never
-rounded through a `float64`, and must come out as a whole number of nanoseconds.
+A duration literal is a span of hours and smaller units, written as in Go: `500ms`, `2h30m`, `1.5s`.
+It is one or more components of a number and a unit, with no white space between them. The units are
+`h`, `m`, `s`, `ms`, `us`, and `ns`, hours through nanoseconds, so `m` is minutes, and they appear
+each at most once, in descending order. A number is spelled as a decimal integer or float above,
+with `_` between digits, but without an exponent; only the last component may have a fraction. The
+literal has type `Time.Duration` (`stdlib.md`, Time) whatever its context, needs no import, and is
+the duration whose fields are the components as written, a fraction spread into the smaller fields
+as `Time.parseDuration` spreads one: `1.5h` is 1 hour and 30 minutes, `1h30.5m` is 1 hour, 30
+minutes, and 30 seconds, and `0.5ms` is 500 microseconds. The fraction is exact, never rounded
+through a `float64`, and must come out as a whole number of nanoseconds.
 
 ```ant
 500ms    // Time.duration(milliseconds: 500)
@@ -394,9 +394,9 @@ Types are checked by one command and erased by the other.
 nothing calls. It prints nothing and exits with `0` when it finds no error; otherwise it reports
 every error, each as `path:line:column: message` with the source line under it marked, then the
 count, and exits with `1`, or with `2` when the file cannot be loaded or the usage is wrong. It
-takes one file. Inference, bounds, and narrowing live here, and
-so does their cost. Every rule in this document that mentions a type is a checker rule, and a
-compile error is an error the checker reports.
+takes one file. Inference, bounds, and narrowing live here, and so does their cost. Every rule in
+this document that mentions a type is a checker rule, and a compile error is an error the checker
+reports.
 
 `ant run file.ant` does no static work beyond parsing. It loads the import graph, so a syntax error
 anywhere stops the program before any module runs, and then it runs with annotations parsed and
@@ -904,8 +904,8 @@ the bound, and when the bound is a union, the solution must be a single member o
 `[T: Ordered]` admits `int` or `string`, not `int | string` and not `Ordered` itself. Inside the
 body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and
 assigned, a field every member of a union bound declares can be read as through the union, and an
-operator applies to `T` when it applies to every member of the bound. That is sound
-only because `T` stands for one member, which is what the restriction guarantees:
+operator applies to `T` when it applies to every member of the bound. That is sound only because `T`
+stands for one member, which is what the restriction guarantees:
 
 ```ant
 func bigger[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
@@ -1403,8 +1403,8 @@ annotation.
 
 The branches of an `if` are each checked against the expected type when there is one. Otherwise the
 expression has the union of the branch types, with `never` dropped, so
-`if n > 0 { "positive" } else { null }` has type `string | null`. Each branch is typed on its own:
-a branch of `[]` or `Map{}` takes nothing from the others, so it needs an expected type, and
+`if n > 0 { "positive" } else { null }` has type `string | null`. Each branch is typed on its own: a
+branch of `[]` or `Map{}` takes nothing from the others, so it needs an expected type, and
 `let keys: Array[string] = if v is Map { v.keys() } else { [] }` annotates.
 
 Literals get no help from context: an integer literal is always `int`, a float literal always
@@ -1741,9 +1741,9 @@ loop on `null`. A closed channel's send is always ready too, and when it is chos
 `Channel.send` does (section 12), so a `select` with `else` panics rather than taking `else`.
 
 A `select` is an expression: its blocks are checked against the expected type, or it has the union
-of their types with `never` dropped, as an `if`, each block typed on its own. A block's `return`, `break`, and `continue` act on
-the function or loop around the `select`, since the block belongs to that body; a bound variable is
-a local of its block and narrows there.
+of their types with `never` dropped, as an `if`, each block typed on its own. A block's `return`,
+`break`, and `continue` act on the function or loop around the `select`, since the block belongs to
+that body; a bound variable is a local of its block and narrows there.
 
 ```ant
 var event: Event = select {
@@ -1951,9 +1951,8 @@ on a name that is not a boolean attribute. URL attributes are checked as when wr
 spread and another attribute, or two spreads, give one name, compared ignoring ASCII case, the later
 value wins and the attribute keeps the earlier position and the earlier spelling of its name, as a
 later field wins in a record literal: `<p TITLE="a" {...Map{ title: "b" }} />` is
-`<p TITLE="b"></p>`.
-Names are resolved first and `null` values dropped after, so a later `null` removes an attribute:
-`<button disabled {...Map{ disabled: null }} />` has no `disabled`.
+`<p TITLE="b"></p>`. Names are resolved first and `null` values dropped after, so a later `null`
+removes an attribute: `<button disabled {...Map{ disabled: null }} />` has no `disabled`.
 
 ```ant
 <input type="checkbox" name={field} checked={task.done} disabled />
@@ -2127,8 +2126,10 @@ is `Point.distance(p, q)`, `p | Point.distance(q)` through the pipe, or `p.dista
 value (section 5, Calls through `.`). The type must be declared at the top level of the same module
 and may be a record, a named primitive type, or an alias, including an alias of a union, since a
 module owns only its own types. A type's namespace is therefore closed, and the prelude's types
-cannot be extended. An interface declares its functions in its body and takes none (section 4,
-Interfaces).
+cannot be extended. A function declared on any other name, such as a prelude type, a type of another
+module, a type declared in a block, or a name that is no type, is a syntax error, as a redeclaration
+is (section 3): the namespace a declaration goes into is known before anything runs. An interface
+declares its functions in its body and takes none (section 4, Interfaces).
 
 The function is an ordinary function. It need not take the type as a parameter, which is how
 `Point.origin()` and `UserId.parse(s)` are written; it is a value like any other; and named
@@ -2594,8 +2595,8 @@ then ends at its next call or loop iteration, a blocking call returns with the r
 and the process exits after a short grace. That is an end, not an event a program handles; the
 interrupt a program asks for is the event. The run's context has no deadline under `ant run` and
 `ant test`, whose `-timeout` ends the run as an interrupt does; a Go host's context gives the run
-its deadline, if it has one. A program whose goroutines all wait on each other waits until the
-host ends it: nothing detects a deadlock.
+its deadline, if it has one. A program whose goroutines all wait on each other waits until the host
+ends it: nothing detects a deadlock.
 
 ### Synchronization
 
@@ -2621,13 +2622,16 @@ func fetchAll(urls: Array[string], ctx: Context): Array[Result[Http.Response, Er
 ### Waiting
 
 A context becomes done once: when a call cancels it, when its deadline passes, or when its parent is
-done. Every context descends from the run's, so a cancelled run ends every wait. Every blocking
-library call takes a context as its last parameter, `ctx: Context | null = null`, and gives up when
-the context is done. What giving up means follows the call's return type: a `Result` is `Err` with
-the context's reason as its message, a value-or-null is `null`, and a `void` call returns early, so
-the program asks `Context.isDone` when it needs to know. With `null` the call waits until its
-condition holds or the run is cancelled. Locks and conditions take no context, nor do
-`Context.wait`, which waits on its own context, and `Once.do`, which waits for the first run.
+done. Every context descends from the run's, so a cancelled run ends every wait. Every library call
+that waits for another goroutine, a process, a peer, or the clock takes a context as its last
+parameter, `ctx: Context | null = null`, and gives up when the context is done. What giving up means
+follows the call's return type: a `Result` is `Err` with the context's reason as its message, a
+value-or-null is `null`, and a `void` call returns early, so the program asks `Context.isDone` when
+it needs to know. With `null` the call waits until its condition holds or the run is cancelled.
+Locks and conditions take no context, nor do `Context.wait`, which waits on its own context, and
+`Once.do`, which waits for the first run. A call that waits only for the OS to read or write takes
+none either, as in Go: a call on a path and a write to a handle. A read of a handle whose other end
+may wait, such as a connection or a pipe, takes one (`stdlib.md`, File).
 
 ```ant
 var ctx = Context.new(2s)
@@ -2958,15 +2962,14 @@ script body, so `return` and `try` in its top-level initializers, outside a lamb
 errors. Command-line arguments come from `Os.args()`.
 
 `ant file.ant`, with any arguments after it, is `ant run file.ant`, and so is `ant file` for any
-existing file whose name is not a command's, so a script installed without its suffix still runs.
-So a script whose first line is
-`#!/usr/bin/env ant` (section 2) and that may be executed runs as `./file.ant`, and its arguments
-reach `Os.args()` as they would through `ant run`. A library may have the line too, and runs as any
-library given to `ant run` does.
+existing file whose name is not a command's, so a script installed without its suffix still runs. So
+a script whose first line is `#!/usr/bin/env ant` (section 2) and that may be executed runs as
+`./file.ant`, and its arguments reach `Os.args()` as they would through `ant run`. A library may
+have the line too, and runs as any library given to `ant run` does.
 
 `ant version` prints the version of the `ant` command, as in `ant v0.1.0`: the release it was built
-from, or for a build from another commit a version after the last release that names the commit,
-as Go's pseudo-versions do (`ant v0.1.1-0.20261114133051-294775cc3c24`). It takes no arguments.
+from, or for a build from another commit a version after the last release that names the commit, as
+Go's pseudo-versions do (`ant v0.1.1-0.20261114133051-294775cc3c24`). It takes no arguments.
 `ant --version` is `ant version`, and `ant help`, `ant -h` and `ant --help` print the usage of every
 command; `-h` or `--help` right after a command prints that command's usage. Each exits with `0`.
 
@@ -3699,9 +3702,10 @@ bytes and its reader would have to know which encoding to undo; a program writes
 `Html` is the value of an HTML expression (section 5): an immutable list of nodes, each an element,
 a text node, or a raw node of trusted markup. The list is kept in one normal form, so that two
 values built differently but meaning the same are equal: fragments are spliced in, `void` leaves
-nothing, adjacent text nodes are joined, and an empty text node or raw node is dropped. `<p>{"a"}{"b"}</p>` and
-`<p>ab</p>` are one value. `==` compares the nodes, so `Html` serves as a map key, and a test
-compares a component's output against an HTML expression: `assert(badge(3) == <b>3</b>)`.
+nothing, adjacent text nodes are joined, and an empty text node or raw node is dropped.
+`<p>{"a"}{"b"}</p>` and `<p>ab</p>` are one value. `==` compares the nodes, so `Html` serves as a
+map key, and a test compares a component's output against an HTML expression:
+`assert(badge(3) == <b>3</b>)`.
 
 ```
 type Html.Node = Html.Element | Html.Text | Html.Raw
@@ -3716,12 +3720,11 @@ Html.nodes(h: Html): Array[Html.Node]     // the top-level nodes, in order
 ```
 
 `Html.unsafe(s)` returns a raw node holding `s`, which the renderer writes unescaped;
-`Html.unsafe("")` is the empty `Html`. It is the one
-way to make markup from a string, so a search for `Html.unsafe` finds every place a string becomes
-markup. Its use is markup a program trusts: the output of a sanitizer or a Markdown renderer, or an
-SVG file shipped with the program. A raw node is opaque: `Html.unsafe("<b>x</b>")` renders as
-`<b>x</b>` does but is not `==` to it. `Html` has no constructor and no literal besides the HTML
-expression.
+`Html.unsafe("")` is the empty `Html`. It is the one way to make markup from a string, so a search
+for `Html.unsafe` finds every place a string becomes markup. Its use is markup a program trusts: the
+output of a sanitizer or a Markdown renderer, or an SVG file shipped with the program. A raw node is
+opaque: `Html.unsafe("<b>x</b>")` renders as `<b>x</b>` does but is not `==` to it. `Html` has no
+constructor and no literal besides the HTML expression.
 
 `Html.nodes` reads a value one level at a time: an element's `children` is an `Html`, read with
 `Html.nodes` again. Names are as written, attributes in their final order, a boolean attribute that
@@ -3964,7 +3967,7 @@ by `k` bits.
   all four words are zero, it draws four more. The new generator's state is unrelated to `r`'s and
   to every other fork's, a fork of a fork included, so streams forked in any shape, a tree of
   goroutines that fork for their own workers among them, share no values but by a chance too small
-to matter.
+  to matter.
 
 These values check an implementation:
 
@@ -4012,13 +4015,12 @@ namespace, as `String.Cut` is in `String`'s (section 8, Catching a panic). `Reco
 
 The sync objects of section 9. Each is a prelude type with its functions declared on it (section 6),
 so `Mutex` is the type in an annotation and `Mutex.new()` creates one; objects compare by identity.
-The `with` forms acquire, run the function, and release even if it panics; the release is
-`unlock`, `readUnlock` or `writeUnlock`, so it panics if the function returned with the lock
-already released. A lock has no owner: any goroutine may release a lock that another took, as in
-Go. A `Mutex` is not reentrant: a goroutine that locks one it holds waits forever. Nor may a
-goroutine read-lock an `RwMutex` it already holds for reading, since a writer waiting between the
-two calls blocks both. A `ctx` parameter is the context of section 9, Waiting: the call gives up
-when the context is done.
+The `with` forms acquire, run the function, and release even if it panics; the release is `unlock`,
+`readUnlock` or `writeUnlock`, so it panics if the function returned with the lock already released.
+A lock has no owner: any goroutine may release a lock that another took, as in Go. A `Mutex` is not
+reentrant: a goroutine that locks one it holds waits forever. Nor may a goroutine read-lock an
+`RwMutex` it already holds for reading, since a writer waiting between the two calls blocks both. A
+`ctx` parameter is the context of section 9, Waiting: the call gives up when the context is done.
 
 ```
 Mutex.new(): Mutex                                             // unlocked
@@ -4210,12 +4212,12 @@ Test.name(): string                   // the current test's full name, as "parse
   a deferred block that runs while a panic unwinds, `Test.skip` is dropped and the panic goes on, so
   a test stays failed, and a body whose `Panic.catch` stops the panic goes on unskipped.
 - **`Test.parallel`** may be called once, from the test's body and not from a deferred block or a
-  goroutine, and panics otherwise. The test stops
-  at the call until every test of the same parent that did not call it has ended (for a top-level
-  test, every such test of the file), then runs alongside the parent's other parallel tests, at most
-  `-parallel n` at a time (`test.md`). A parallel subtest resumes from its call only after its
-  parent's body and deferred blocks have finished, and the parent ends after all of its parallel
-  subtests have ended. Tests in different files never run at once.
+  goroutine, and panics otherwise. The test stops at the call until every test of the same parent
+  that did not call it has ended (for a top-level test, every such test of the file), then runs
+  alongside the parent's other parallel tests, at most `-parallel n` at a time (`test.md`). A
+  parallel subtest resumes from its call only after its parent's body and deferred blocks have
+  finished, and the parent ends after all of its parallel subtests have ended. Tests in different
+  files never run at once.
 - **`Test.tempDir`** returns a new directory at each call, made as `File.tempDir` makes one
   (`stdlib.md`), and fails the test with a panic when it cannot make one. The directory is removed
   after the test's deferred blocks have run and its goroutines have ended or been ended.
