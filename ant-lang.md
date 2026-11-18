@@ -2544,13 +2544,15 @@ declared, `pop` or `Point.norm`; a lambda's or an anonymous `func`'s is named `f
 12). A `defer` block has no frame of its own: a panic in one is reported in the frame of the body
 that registered it. The prelude is not written in Ant, so a call of a prelude function has no frame:
 a lambda the prelude calls, as `Array.map` calls its argument, is a frame directly above the one
-that called the prelude function. A path is the module's path as the program was given it: the entry
-file as on the command line, an imported module joined to its importer's directory. It runs past `f`
-to the goroutine's root. A panic in a deferred block replaces the one in progress (section 12), so
-`catch` sees the last. A caught panic is not reported. `Panic.raise(p)` panics with `p`'s message
-and trace, the trace unchanged, so a panic that a caller does not handle goes on as though it had
-not been caught; a later `catch` returns a new record equal to `p`, so `Record.same` with `p` is
-false. Left unhandled, it is reported where it ends a goroutine.
+that called the prelude function. A callback the prelude calls on a goroutine of its own, as
+`Parallel` does, has no caller there, so arguments that do not fit it panic in a frame of the
+function that called the prelude function, at that call. A path is the module's path as the program
+was given it: the entry file as on the command line, an imported module joined to its importer's
+directory. It runs past `f` to the goroutine's root. A panic in a deferred block replaces the one in
+progress (section 12), so `catch` sees the last. A caught panic is not reported. `Panic.raise(p)`
+panics with `p`'s message and trace, the trace unchanged, so a panic that a caller does not handle
+goes on as though it had not been caught; a later `catch` returns a new record equal to `p`, so
+`Record.same` with `p` is false. Left unhandled, it is reported where it ends a goroutine.
 
 ```ant
 type Job = { id: int, input: string }
