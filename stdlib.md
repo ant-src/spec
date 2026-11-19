@@ -29,7 +29,7 @@ that need them `Err`; `Http` there goes through the host's own fetch.
 
 ```
 type Handle                                                // opaque: an open file, a standard stream, a connection, or a buffer over one
-type Info = { name: string, size: int, isDir: bool, isSymlink: bool, modified: Time.Instant, mode: int }
+type Info = { name: string, size: int, isDir: bool, isSymlink: bool, modified: Time.Instant, mode: int, uid: int | null, gid: int | null }
 
 File.read(path: string): Result[string, Error]
 File.readBytes(path: string): Result[Bytes, Error]
@@ -38,6 +38,7 @@ File.writeBytes(path: string, bytes: Bytes, replace: bool = true): Result[void, 
 File.exists(path: string): bool                            // anything at path that stat can reach, a directory included; false at a dangling link and when stat is Err for any reason
 File.stat(path: string, follow: bool = true): Result[File.Info, Error]   // follow: false describes a link itself
 File.chmod(path: string, mode: int): Result[void, Error]   // sets the bits in 0o7777 exactly
+File.chown(path: string, uid: int, gid: int, follow: bool = true): Result[void, Error]   // sets the owner and group; -1 keeps one; follow: false changes a link itself
 File.touch(path: string, time: Time.Instant | null = null): Result[void, Error]   // sets modified to time, or now; creates an empty file when missing
 File.remove(path: string): Result[void, Error]             // one file, or an empty directory; Err when nothing is there
 File.removeAll(path: string): Result[void, Error]          // a whole tree; Ok when nothing is there and the path could hold something; Err for . and ..
@@ -70,6 +71,7 @@ File.writeChunk(f: File.Handle, bytes: Bytes): Result[void, Error]
 File.pipe(src: File.Handle, dst: File.Handle, ctx: Context | null = null): Result[void, Error]   // copies the rest of src to dst
 File.buffered(f: File.Handle, size: int = 4096): File.Handle   // a handle over f whose writes are held until full, flush or close
 File.flush(f: File.Handle): Result[void, Error]            // hands what was written to f to the OS; Ok on a handle not buffered
+File.sync(f: File.Handle): Result[void, Error]             // flushes, then has the OS write the file to storage
 File.close(f: File.Handle): Result[void, Error]            // a buffered handle writes out first; Ok on a standard stream and on a closed handle
 ```
 
@@ -77,12 +79,14 @@ File.close(f: File.Handle): Result[void, Error]            // a buffered handle 
 does not follow symbolic links, lists files and not directories, and returns them in lexical order.
 Lexical order is the order in which strings compare, code point by code point, so `"10.txt"` comes
 before `"9.txt"` and `"Zeta"` before `"apple"`. `modified` is the time of the last write, and `mode`
-holds the permissions (see Modes). `isSymlink` is true only for `stat(path, follow: false)` of a
-link, since `stat` otherwise describes what the link points at. `name` is the last element of
-`path`, `Path.base(path)`, also when a link is followed. `size` is the length of a regular file in
-bytes; for a directory, and for a link described with `follow: false`, it is what the host reports,
-as is a link's own `mode`, so a program does not rely on them. `remove` refuses a directory with
-entries; `removeAll` is the recursive form, named so the dangerous one is the longer name.
+holds the permissions (see Modes). `uid` and `gid` are the ids of the user and the group that own
+the file, as `ls -n` shows them; Windows has no such ids, and there they are null, as `Os.uid` is.
+`isSymlink` is true only for `stat(path, follow: false)` of a link, since `stat` otherwise describes
+what the link points at. `name` is the last element of `path`, `Path.base(path)`, also when a link
+is followed. `size` is the length of a regular file in bytes; for a directory, and for a link
+described with `follow: false`, it is what the host reports, as is a link's own `mode`, so a program
+does not rely on them. `remove` refuses a directory with entries; `removeAll` is the recursive form,
+named so the dangerous one is the longer name.
 
 A path is used as written: `~` and `$NAME` are not expanded as a shell expands them, so a path under
 the home directory is `Path.join([try Os.home(), ...])`. A relative path is taken against the
@@ -161,6 +165,13 @@ func writeReport(path: string, rows: Array[string]): Result[void, Error] {
 }
 ```
 
+`File.sync` flushes as `File.flush` does and then asks the OS to write the file to storage, Go's
+`(*os.File).Sync`, `fsync` on Unix, so that what was written survives a crash or a power loss; a
+close alone hands it to the OS but does not wait for the disk. A program that replaces a file by
+writing a temporary file and renaming it syncs the temporary file before the rename, so that the new
+name never points at data the disk has not kept. It is `Err` where the OS refuses, as for a pipe, as
+Go's is, and for a connection and a closed handle.
+
 `File.isTerminal` is true when `f` is a terminal, as `[[ -t 1 ]]` asks of standard output, so a
 program colours its output or shows progress only when a person is watching:
 `File.isTerminal(Os.stdout())`. It is false for a file, a pipe and a connection, and for a closed
@@ -173,6 +184,12 @@ handle, which is no longer anything; a handle from `File.buffered` answers for t
 2 of `ant-lang.md`) and printed by `String.fromInt(mode, base: 8)`. What kind of file it is, `isDir`
 and `isSymlink` say, not `mode`. `chmod` sets the bits exactly and is `Err` for a mode outside that
 range.
+
+`chown` sets the user and the group that own a file, by id, as Go's `os.Chown` does, and `-1` for
+either keeps it. It follows a link, as `chmod` does; `follow: false` changes the link itself, Go's
+`os.Lchown`. Only root may give a file away; an owner may change its group to one it belongs to. On
+Windows it is `Err`, as Go's is. Names are not looked up: a script that has a name runs `id -u name`
+with `Cmd.read` for the id.
 
 A new file is created with `0o666` and a new directory with `0o777`, less the process's umask, as
 the shell creates them, so under the usual umask `022` they are `0o644` and `0o755`. That is how
@@ -962,6 +979,7 @@ Os.configDir(): Result[string, Error] // where the user's programs keep their co
 Os.cacheDir(): Result[string, Error]  // where they keep what can be made again
 Os.pid(): int                         // this process's id
 Os.uid(): int | null                  // the effective user id, 0 for root; null on Windows
+Os.gid(): int | null                  // the effective group id; null on Windows
 Os.hostname(): Result[string, Error]  // the name the host's kernel reports, as hostname prints it
 Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 Os.stdin(): File.Handle               // the program's standard input
@@ -1022,9 +1040,10 @@ Windows. An empty name, or one holding `=`, names no variable, and `Os.env` give
 
 `Os.pid` is this process's id, as `Cmd.pid` is a child's. `Os.uid` is the effective user id, the one
 that decides what the process may touch, so `Os.uid() == 0` asks what `[[ $EUID -eq 0 ]]` asks;
-Windows has no user ids, and there it is null. `Os.hostname` is Go's `os.Hostname`: the host's own
-name, not looked up in DNS, so it may or may not hold a domain; it is `Err` only when the host
-cannot report one.
+Windows has no user ids, and there it is null. `Os.gid` is the effective group id, Go's
+`os.Getegid`; it is null on Windows too. `Os.hostname` is Go's `os.Hostname`: the host's own name,
+not looked up in DNS, so it may or may not hold a domain; it is `Err` only when the host cannot
+report one.
 
 `Os.cwd` is the working directory the `ant` command was started in, or the host's for an embedded
 run, not the directory of the script, and nothing in Ant changes it. It is `Err` when the host
