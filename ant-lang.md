@@ -2481,9 +2481,11 @@ panic: assertion failed: len(stack) > 0 (0 > 0): pop on empty stack
   `assert(Array.contains(xs, 5))` does; a namespace, or a record whose field `f` is called, is not.
   A text that repeats is shown once, with its first value. A part that `&&`, `||`, `??`, or `?.`
   skipped did not run and is not shown.
-- **Values.** Every value is rendered in full by `String.from`, as inside an array, so a string is
-  quoted: `name == "Anne" ("Ann" == "Anne")`. These are the values the evaluation already produced;
-  nothing is evaluated a second time.
+- **Values.** Every value is rendered by `String.from`, as inside an array, so a string is quoted:
+  `name == "Anne" ("Ann" == "Anne")`. The comparison's values are shown in full. A part's value
+  longer than 200 code points shows its first 100 and its last 100, joined by `…`, so that one large
+  input does not bury the report. These are the values the evaluation already produced; nothing is
+  evaluated a second time.
 - **Narrowing.** After `assert(cond)`, the rest of the block is narrowed as after
   `if !cond { panic(...) }` (section 7, Narrowing), so `assert(user != null)` leaves `user` a
   `User`.
