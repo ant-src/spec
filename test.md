@@ -102,7 +102,7 @@ else; what a program prints outside a test, as it initializes, goes to standard 
 | `"output"` | `file`, `test`, `output`: the text of one write                 | a test prints                  |
 | `"pass"`   | `file`, `test`, `elapsed`: seconds as a number                  | a test passes                  |
 | `"skip"`   | `file`, `test`, `elapsed`, `reason`                             | a test is skipped              |
-| `"fail"`   | `file`, `test`, `elapsed`, `message`: the failures, as reported | a test fails                   |
+| `"fail"`   | `file`, `test`, `elapsed`, `message`: the failures, as reported | a test fails or times out      |
 | `"done"`   | `passed`, `failed`, `skipped`, `elapsed`                        | the run ends, as the last line |
 | `"error"`  | the fields of an `ant check -json` error                        | the checker reports an error   |
 
@@ -119,7 +119,9 @@ report, and the report stays the tests'.
 
 When `-timeout` runs out, the command writes `test timed out after d` to standard error, then
 `running tests:` and the full name of each test still running, indented by four spaces, ends the run
-as an interrupt does (section 9), and exits with status `1`.
+as an interrupt does (section 9), and exits with status `1`. Under `-json` it then writes a `"fail"`
+event for each test still running, whose `message` is `test timed out after d`, and the `"done"`
+event, which counts as failed each of those tests with no subtest still running.
 
 ## 4. Exit status
 
