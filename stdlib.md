@@ -1041,9 +1041,10 @@ first. Variable names are matched as the host matches them: exactly on Unix, and
 Windows. An empty name, or one holding `=`, names no variable, and `Os.env` gives null for it.
 
 `Os.cpus` is the number of CPUs the program may use at once, Go's `runtime.GOMAXPROCS(0)`: the
-host's logical CPUs, or fewer when a container's CPU limit or the `GOMAXPROCS` environment variable
-lowers it, and never below 1. A container's limit can change while the program runs, and so can
-`Os.cpus`, so a program reads it when it sizes work, as `Parallel.map(xs, f, Os.cpus())` does.
+host's logical CPUs, or fewer under a container's CPU limit, and never below 1. The `GOMAXPROCS`
+environment variable, when set to a positive number, is the count instead, above the host's CPUs
+too, as Go has it. A container's limit can change while the program runs, and so can `Os.cpus`, so a
+program reads it when it sizes work, as `Parallel.map(xs, f, Os.cpus())` does.
 
 `Os.pid` is this process's id, as `Cmd.pid` is a child's. `Os.uid` is the effective user id, the one
 that decides what the process may touch, so `Os.uid() == 0` asks what `[[ $EUID -eq 0 ]]` asks;
