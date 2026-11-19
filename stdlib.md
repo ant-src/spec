@@ -80,13 +80,13 @@ does not follow symbolic links, lists files and not directories, and returns the
 Lexical order is the order in which strings compare, code point by code point, so `"10.txt"` comes
 before `"9.txt"` and `"Zeta"` before `"apple"`. `modified` is the time of the last write, and `mode`
 holds the permissions (see Modes). `uid` and `gid` are the ids of the user and the group that own
-the file, as `ls -n` shows them; Windows has no such ids, and there they are null, as `Os.uid` is.
-`isSymlink` is true only for `stat(path, follow: false)` of a link, since `stat` otherwise describes
-what the link points at. `name` is the last element of `path`, `Path.base(path)`, also when a link
-is followed. `size` is the length of a regular file in bytes; for a directory, and for a link
-described with `follow: false`, it is what the host reports, as is a link's own `mode`, so a program
-does not rely on them. `remove` refuses a directory with entries; `removeAll` is the recursive form,
-named so the dangerous one is the longer name.
+the file, as `ls -n` shows them; they are null where `Os.uid` is, on Windows and WebAssembly, which
+have no such ids. `isSymlink` is true only for `stat(path, follow: false)` of a link, since `stat`
+otherwise describes what the link points at. `name` is the last element of `path`,
+`Path.base(path)`, also when a link is followed. `size` is the length of a regular file in bytes;
+for a directory, and for a link described with `follow: false`, it is what the host reports, as is a
+link's own `mode`, so a program does not rely on them. `remove` refuses a directory with entries;
+`removeAll` is the recursive form, named so the dangerous one is the longer name.
 
 A path is used as written: `~` and `$NAME` are not expanded as a shell expands them, so a path under
 the home directory is `Path.join([try Os.home(), ...])`. A relative path is taken against the
@@ -264,8 +264,11 @@ such as a FIFO or a device, is `Err`, and is not opened, since opening a FIFO wa
 `to` is a directory, since there is no "into" form: `Path.join` says where. It follows a link at
 either end: the contents copied are those of the link's target, and a link at `to` has its target
 replaced, or created when the link dangles, as `write` does through it. To replace the link itself,
-`remove` it first. The times are not copied, so the copy is new to a build tool, and the copy is not
-atomic: a reader can see `to` half-written, which a copy to a temporary file and a `rename` avoid.
+`remove` it first. The times are not copied, so the copy is new to a build tool. Nor is the owner: a
+new file at `to` belongs to the user the program runs as, as every file it creates does, and a file
+it replaces keeps its owner, since the copy writes into it; `chown` gives it another. The copy is
+not atomic: a reader can see `to` half-written, which a copy to a temporary file and a `rename`
+avoid.
 
 `copyAll` is the recursive form, named so the bigger operation has the longer name. It copies a file
 as `copy` does, or a whole tree: every directory and file with its mode, and every link inside the
@@ -980,8 +983,8 @@ Os.home(): Result[string, Error]      // the user's home directory
 Os.configDir(): Result[string, Error] // where the user's programs keep their configuration
 Os.cacheDir(): Result[string, Error]  // where they keep what can be made again
 Os.pid(): int                         // this process's id
-Os.uid(): int | null                  // the effective user id, 0 for root; null on Windows
-Os.gid(): int | null                  // the effective group id; null on Windows
+Os.uid(): int | null                  // the effective user id, 0 for root; null on Windows and WebAssembly
+Os.gid(): int | null                  // the effective group id; null where Os.uid is
 Os.hostname(): Result[string, Error]  // the name the host's kernel reports, as hostname prints it
 Os.exit(status: int): never           // ends the process at once; no deferred block runs, in any goroutine
 Os.stdin(): File.Handle               // the program's standard input
@@ -1044,7 +1047,7 @@ Windows. An empty name, or one holding `=`, names no variable, and `Os.env` give
 host's logical CPUs, or fewer under a container's CPU limit, and never below 1. The `GOMAXPROCS`
 environment variable, when set to a positive number, is the count instead, above the host's CPUs
 too, as Go has it. A container's limit can change while the program runs, and so can `Os.cpus`, so a
-program reads it when it sizes work, as `Parallel.map(xs, f, Os.cpus())` does.
+program reads it when it sizes work, as `Parallel.map(xs, f, limit: Os.cpus())` does.
 
 `Os.pid` is this process's id, as `Cmd.pid` is a child's. `Os.uid` is the effective user id, the one
 that decides what the process may touch, so `Os.uid() == 0` asks what `[[ $EUID -eq 0 ]]` asks;
