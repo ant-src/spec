@@ -418,7 +418,8 @@ different types, a call on a value that is not a function, a field read on a val
 record. Section 12 lists every such check.
 
 Editors and continuous integration run `check`; the terminal runs `run`. No flag makes `run` check
-first.
+first. `ant test` runs the checker over its test files before it runs them, unless `-nocheck` is
+given (`test.md`).
 
 A `type` declaration is the one thing the interpreter keeps of the type language. It binds the name
 to a fresh tag, or, for a named primitive type, to a constructor function that carries one. A record

@@ -20,8 +20,10 @@ ant test [flags] [path ...]
   order of their paths.
 - Each test file runs as a program of its own: its modules are loaded and initialized for that file,
   so the module state of one file never reaches another's.
-- `ant test`, like `ant run`, does not type-check (section 4, Checking and running). `ant check`
-  checks test files, named or under a directory, with their imports.
+- Before any test runs, the checker runs over the test files and every module they import, as
+  `ant check` runs over the same files (section 4, Checking and running), so a run that passes is a
+  run of files that check. When it reports an error no test runs (Check errors, below). `-nocheck`
+  leaves the check out, and the tests then run as `ant run` runs a program, with types erased.
 
 | Flag           | Meaning                                                                                                                                                    |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -30,6 +32,7 @@ ant test [flags] [path ...]
 | `-v`           | Print every test as it starts and ends, with its output                                                                                                    |
 | `-json`        | Print events as JSON lines instead of the report                                                                                                           |
 | `-failfast`    | Start no test after the first failure                                                                                                                      |
+| `-nocheck`     | Run the tests without checking the test files first                                                                                                        |
 | `-parallel n`  | The most tests that run at once after `Test.parallel()`; the default is the number of CPUs                                                                 |
 | `-timeout d`   | End the run after `d`, read as `Time.parseDuration` reads it, such as `30s` or `10m` (the default), and report the tests still running; `0` means no limit |
 
@@ -81,10 +84,10 @@ ok    no tests (0.00s)
 The line gives the failed count when it is not zero, then always the passed count, then the skipped
 count when it is not zero: `ok    0 passed, 1 skipped` for a run whose one test skipped. A run of no
 tests says `no tests`. The line starts with `ok` when the command exits with `0` and `FAIL`
-otherwise, so a file that cannot be loaded makes it `FAIL`, though it adds to no count. The counts
-are of tests without subtests, and of tests with subtests that failed on their own; a test counts as
-without subtests when none of its subtests ran, so a parent whose subtests `-run` or `-skip` left
-out all counts as one test.
+otherwise, so under `-nocheck` a file that cannot be loaded makes it `FAIL`, though it adds to no
+count. The counts are of tests without subtests, and of tests with subtests that failed on their
+own; a test counts as without subtests when none of its subtests ran, so a parent whose subtests
+`-run` or `-skip` left out all counts as one test.
 
 **Verbose.** Under `-v`, each test also prints `=== RUN   file: name` when it starts, its output as
 it comes, indented by four spaces, and when it ends `--- PASS: file: name (0.00s)`, `--- SKIP:` with
@@ -101,6 +104,13 @@ else; what a program prints outside a test, as it initializes, goes to standard 
 | `"skip"`   | `file`, `test`, `elapsed`, `reason`                             | a test is skipped              |
 | `"fail"`   | `file`, `test`, `elapsed`, `message`: the failures, as reported | a test fails                   |
 | `"done"`   | `passed`, `failed`, `skipped`, `elapsed`                        | the run ends, as the last line |
+| `"error"`  | the fields of an `ant check -json` error                        | the checker reports an error   |
+
+**Check errors.** When the checker reports an error, the command writes every error to standard
+error as `ant check` writes them, with the count, and runs no test, so it prints no report and no
+last line. Under `-json` it writes each error to standard output as an `"error"` event, with `path`,
+`line`, `column`, `message`, and `start` and `end` as `ant check -json` gives them, and no `"done"`
+event. A file that cannot be loaded is one of these errors, and the other files do not run either.
 
 ## 3. Time limit
 
@@ -113,10 +123,10 @@ as an interrupt does (section 9), and exits with status `1`.
 | Status | When                                                                                                                             |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `0`    | no test failed, including when tests were skipped and when there were none                                                       |
-| `1`    | a test failed, or the time ran out                                                                                               |
+| `1`    | a test failed, the checker reported an error, or the time ran out                                                                |
 | `2`    | a file could not be loaded, because of a syntax error, an import cycle, a missing module, or a bad import, or the usage is wrong |
 
-A file that cannot be loaded is reported as `ant run` reports one, on standard error, and the other
-files still run. A panic while a file's modules are initialized is reported as `ant run` reports
-one; the file's tests do not run, and the file counts as one failed test. `Os.exit` in a test ends
-the command with its status, as it ends a program.
+Under `-nocheck`, a file that cannot be loaded is reported as `ant run` reports one, on standard
+error, and the other files still run. A panic while a file's modules are initialized is reported as
+`ant run` reports one; the file's tests do not run, and the file counts as one failed test.
+`Os.exit` in a test ends the command with its status, as it ends a program.
