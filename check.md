@@ -89,6 +89,8 @@ error, which is reported:
   declaration, so its uses are checked;
 - in the body of a lambda rejected for its parameters (`lambda`), a name that is not declared, since
   it is likely one of the parameters the author meant.
+- a use of a name declared twice in one scope that fits only the later declaration: uses are checked
+  against the first, so that the redeclaration (`redeclared`) is the one error.
 
 ## 3. Codes
 
