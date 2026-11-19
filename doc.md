@@ -46,6 +46,16 @@ A namespace that no type declares, such as `Array` or `Time`, has the doc of its
 indented. A module prints its doc, if it has one, with every non-empty line indented by four spaces,
 and then the signature of each exported declaration in source order.
 
+When a name names nothing, the line on standard error that says so, `ant doc: no declaration name`,
+ends with what to look at instead, when there is something: `; did you mean A or B?`, naming up to
+three declarations with the same name after the dot under another owner, nearest to the name first,
+or else up to three names within one edit of it, for a name of up to four characters, or two edits,
+for a longer one, where an edit inserts, deletes, or replaces a character or swaps two neighbors,
+ignoring case; or else, for `Owner.name` whose owner exists, `; ant doc Owner lists its members`.
+`ant doc Array.join` reports
+`ant doc: no declaration Array.join; did you mean Path.join or String.join?`. The REPL's `:doc`
+reports the same, without the `ant doc: ` prefix.
+
 | Exit status | When                                                                     |
 | ----------- | ------------------------------------------------------------------------ |
 | `0`         | the declaration or the module was found                                  |
