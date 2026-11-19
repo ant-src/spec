@@ -394,9 +394,10 @@ Types are checked by one command and erased by the other.
 including code nothing calls. A path is a file, checked whatever its name, or a directory, searched
 recursively for `.ant` files, leaving out directories whose names begin with `.`; a directory with
 none is a usage error. With no path, it is `.`. Each module is checked once, however many of the
-files reach it, and each declaration file on its own. A file whose program cannot be loaded, for an
-error such as a syntax error, a missing module, an import cycle, or an import of a script, is
-reported and not checked; the other files still are. Each error is reported as a diagnostic that
+files reach it, and each declaration file on its own. A program that cannot be loaded, for an error
+such as a syntax error, a missing module, an import cycle, or an import of a script, is reported and
+still checked as far as it can be read, so that one run reports every error; what follows only from
+a load error is not reported (`check.md` section 2). Each error is reported as a diagnostic that
 carries a code naming the rule it breaks; `check.md` defines the diagnostics, their text and JSON
 forms, the codes, and the exit status. Inference, bounds, and narrowing live here, and so does their
 cost. Every rule in this document that mentions a type is a checker rule, and a compile error is an

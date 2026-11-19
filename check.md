@@ -46,6 +46,27 @@ their count, as `1 error` or `3 errors`. When there is no diagnostic, it writes 
 line of its own, with the fields above, and writes nothing else. `start` and `end` are left out when
 there is no span.
 
+**Every error in one run.** A module with a syntax error is read past it: each statement or
+declaration the parser can read after the error is checked as if the error were not there, and a
+module that imports it is checked too. A brace on the line after the header of an `if`, `for`,
+`while`, or `select` clause is read as the block the header lacks.
+
+**Errors that follow from others.** An error is not reported when it follows only from another
+error, which is reported:
+
+- a second syntax error at the position of one, and, after the first syntax error of a file, one at
+  the end of the file, which only says that what the first broke never closed;
+- an error other than a syntax error on a line that has one, since the line was not read as written;
+- an error whose message would name a type the checker could not determine, once any error has been
+  reported;
+- in a module with a syntax error, a name that is not declared, since its declaration may be in what
+  the parser could not read; and a name imported from such a module that it does not declare;
+- a use of a name that an import could not bind: from a module that cannot be read, from a script,
+  or a name the module does not declare; a name imported without `export` is bound to its
+  declaration, so its uses are checked;
+- in the body of a lambda rejected for its parameters (`lambda`), a name that is not declared, since
+  it is likely one of the parameters the author meant.
+
 ## 3. Codes
 
 A code names a rule. Several messages may share a code, and a message may be reworded without its
