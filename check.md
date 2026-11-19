@@ -5,19 +5,20 @@ Draft 0.1 · November 2026
 `ant check` runs the checker over a program and reports what it finds. Which files it reads, and
 what the checker accepts, are defined by the language (`ant-lang.md` section 4, Checking and
 running): every rule of that document that mentions a type is a checker rule. This document covers
-the command's output: the diagnostics it reports, the codes that name their rules, and its exit
-status.
+the command's output: the diagnostics it reports, the codes that name their rules, the warnings it
+gives about code it accepts, and its exit status.
 
 ## 1. Command
 
 ```
-ant check [-json] [path ...]
+ant check [-json] [-strict] [path ...]
 ant check -explain code
 ```
 
 | Flag            | Meaning                                                                               |
 | --------------- | ------------------------------------------------------------------------------------- |
 | `-json`         | Write each diagnostic as a JSON object on standard output instead of the text report  |
+| `-strict`       | Exit with `1` on a warning as on an error (section 5)                                 |
 | `-explain code` | Print what the code means, an example that has it, and the example fixed, then exit 0 |
 
 `-explain` takes no path. An unknown code is a usage error.
@@ -30,7 +31,7 @@ A diagnostic is one thing the checker reports. It has:
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `path`, `line`, `column` | Where it is reported. `line` and `column` are `0` for a diagnostic about a whole file, such as one that cannot be read                                                                                      |
 | `start`, `end`           | For a diagnostic at a position, the span it is about, each a `line` and a `column`, with `end` just past the span                                                                                           |
-| `severity`               | `"error"`                                                                                                                                                                                                   |
+| `severity`               | `"error"`, or `"warning"` for a warning (section 4)                                                                                                                                                         |
 | `code`                   | The rule it enforces, from the catalog (section 3)                                                                                                                                                          |
 | `message`                | What is wrong, as one sentence that names types and code as the program writes them. Its wording is not part of this contract; its `code` is                                                                |
 | `help`                   | Optional: one sentence on how to fix it, when the message does not say                                                                                                                                      |
@@ -41,11 +42,12 @@ Lines and columns count from 1, and columns count bytes. Diagnostics are reporte
 then line, then column.
 
 **Text.** Without `-json`, the command writes each diagnostic to standard error: a first line
-`path:line:column: message [code]`, then, for a diagnostic at a position, the source lines of its
-span, numbered, with the span marked. Under the source come, each on a line of its own, `= help:`
-and the help, `= fix:` and the title of each fix, and `= note: path:line:column: message` for each
-related place. A blank line separates two diagnostics, and a last line gives their count, as
-`1 error` or `3 errors`. When there is no diagnostic, it writes nothing.
+`path:line:column: message [code]`, with `warning: ` before the message of a warning, then, for a
+diagnostic at a position, the source lines of its span, numbered, with the span marked. Under the
+source come, each on a line of its own, `= help:` and the help, `= fix:` and the title of each fix,
+and `= note: path:line:column: message` for each related place. A blank line separates two
+diagnostics, and a last line gives their count, as `1 error`, `3 errors`, `2 warnings`, or
+`1 error, 2 warnings`. When there is no diagnostic, it writes nothing.
 
 **JSON.** With `-json`, the command writes each diagnostic to standard output as a JSON object on a
 line of its own, with the fields above, and writes nothing else. `start` and `end` are left out when
@@ -96,9 +98,9 @@ code is then retired, listed here with the codes that replace it, and never reus
 
 | Code                | Rule                                                                                                                                                                                        |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `syntax`            | The source does not parse: a token, a keyword, a reserved word, an escape, or a construct out of place (section 2)                                                                          |
-| `missing-module`    | A module given or imported cannot be read (section 10)                                                                                                                                      |
-| `import`            | An import that is not allowed: an import cycle, or an import of a script, a declaration file, or, outside a test file, a test file (section 10)                                             |
+| `syntax`            | The source does not parse: a token, a keyword, a reserved word, an escape, or a construct out of place (`ant-lang.md` section 2)                                                            |
+| `missing-module`    | A module given or imported cannot be read (`ant-lang.md` section 10)                                                                                                                        |
+| `import`            | An import that is not allowed: an import cycle, or an import of a script, a declaration file, or, outside a test file, a test file (`ant-lang.md` section 10)                               |
 | `undefined`         | A name, type, or member of a namespace is not declared                                                                                                                                      |
 | `not-exported`      | A name is used outside its module without `export`, or an export names a private type in its signature                                                                                      |
 | `redeclared`        | A name is declared twice in one scope, a field twice in one record type, a declaration takes a prelude name, or a function on a type shares its name with a field                           |
@@ -114,7 +116,7 @@ code is then retired, listed here with the codes that replace it, and never reus
 | `needs-annotation`  | The checker cannot infer a type, and asks for it to be written                                                                                                                              |
 | `no-common-type`    | The branches, clauses, elements, entries, or returns of a construct have no type in common                                                                                                  |
 | `bound`             | A type argument is outside its parameter's bound, or a bound does not provide what is used                                                                                                  |
-| `invalid-union`     | A union, written or formed by substitution, breaks a rule of unions: two members `is` cannot tell apart (section 4, Unions)                                                                 |
+| `invalid-union`     | A union, written or formed by substitution, breaks a rule of unions: two members `is` cannot tell apart (`ant-lang.md` section 4, Unions)                                                   |
 | `type-declaration`  | A `type` declaration the language does not allow: an alias that names itself, a recursion that never ends, or a second tag for one type                                                     |
 | `spread`            | A spread in a literal of a value it cannot spread, or of a record with a field the literal's type lacks                                                                                     |
 | `missing-field`     | A record literal leaves out a field that has no default                                                                                                                                     |
@@ -124,21 +126,40 @@ code is then retired, listed here with the codes that replace it, and never reus
 | `lambda`            | A lambda `{ ... }` whose shape does not fit its expected type, or that has no expected type                                                                                                 |
 | `is-test`           | An `is` test the checker cannot carry out: of an interface, an alias, or a type whose type arguments the value does not fix                                                                 |
 | `useless-test`      | A test whose result is known, or an `else` that cannot run                                                                                                                                  |
-| `duration-equality` | `==` or `!=` between two duration literals of the same length and different fields (section 2)                                                                                              |
-| `markup`            | Markup holds a value or an attribute that it does not take (section 5, HTML expressions)                                                                                                    |
+| `duration-equality` | `==` or `!=` between two duration literals of the same length and different fields (`ant-lang.md` section 2)                                                                                |
+| `markup`            | Markup holds a value or an attribute that it does not take (`ant-lang.md` section 5, HTML expressions)                                                                                      |
 | `conversion`        | A conversion to a type it does not apply to                                                                                                                                                 |
 | `void-value`        | `_` is read, or a call that returns `void` is bound                                                                                                                                         |
-| `reflect`           | `type(...)` is used where it cannot be (section 11, Reflect)                                                                                                                                |
+| `reflect`           | `type(...)` is used where it cannot be (`ant-lang.md` section 11, Reflect)                                                                                                                  |
 | `internal`          | The checker failed. This is a bug in the implementation                                                                                                                                     |
+
+The warnings of section 4 have codes of their own: `unused-result`, `unused-import`,
+`unused-variable`, and `named-interpolation`.
 
 `ant check -explain code` prints a code's entry from the documentation of `ant check`, which gives
 the same rule as this table, an example that has the diagnostic, and the example fixed. This table
 is normative; an explanation that disagrees with it is a bug in the explanation.
 
-## 4. Exit status
+## 4. Warnings
 
-| Status | When                                                                                                           |
-| ------ | -------------------------------------------------------------------------------------------------------------- |
-| `0`    | No diagnostic was reported, or `-explain` printed an explanation                                               |
-| `1`    | A diagnostic was reported, and every file could be loaded                                                      |
-| `2`    | A file could not be loaded (section 4, Checking and running), or the usage is wrong, including an unknown code |
+A warning reports code the checker accepts that is almost always a mistake. A warning is added only
+when it catches a real bug, the bug happens in practice, and it rarely fires on correct code. Each
+is silenced by writing what the code means, never by a comment or a setting. Warnings are reported
+only for a module with no error, since a module the checker rejected was not checked as written.
+
+| Code                  | Reported on                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Silenced by                                                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `unused-result`       | a value whose type is a `Result` or a union with a `Result` member, which is discarded: a statement of a block other than its last; the last of a block whose value is discarded, the body of a function or lambda that returns `void`, a test, a loop, or a `go` block, or a branch of an `if` or `select` that is itself discarded; or a statement of a script's top level. Not anything in a `defer` block, whose values the language discards (`ant-lang.md` section 8) | `try`, or `_ = ` before it                                                                                               |
+| `unused-import`       | a name an import binds that the module uses neither as a value nor as a type                                                                                                                                                                                                                                                                                                                                                                                                | removing it; the fix that removes it is auto while another name of the import remains, so that the module stays imported |
+| `unused-variable`     | a `let` or `var` in a function, a lambda, a block, or a test, or a name of its destructuring, that the module never uses                                                                                                                                                                                                                                                                                                                                                    | removing it, or binding `_`                                                                                              |
+| `named-interpolation` | a value of a named primitive type in a string's `${...}`, which shows it as its constructor, `UserId("u-1")`; markup rejects one for that reason (`ant-lang.md` section 5, HTML expressions)                                                                                                                                                                                                                                                                                | converting it to its base type, as `string(id)`, or `String.from(id)` for the constructor form                           |
+
+`ant test` does not report warnings; its report is the tests' (`test.md` section 2).
+
+## 5. Exit status
+
+| Status | When                                                                                                                         |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `0`    | No error was reported, though warnings may have been, or `-explain` printed an explanation                                   |
+| `1`    | An error was reported, or under `-strict` a warning, and every file could be loaded                                          |
+| `2`    | A file could not be loaded (`ant-lang.md` section 4, Checking and running), or the usage is wrong, including an unknown code |

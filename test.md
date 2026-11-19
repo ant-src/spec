@@ -110,8 +110,10 @@ else; what a program prints outside a test, as it initializes, goes to standard 
 error as `ant check` writes them, with the count, and runs no test, so it prints no report and no
 last line. Under `-json` it writes each error to standard output as an `"error"` event, with `path`,
 `line`, `column`, `severity`, `code`, `message`, and `start` and `end` as `ant check -json` gives
-them (`check.md` section 2), and no `"done"` event. A file that cannot be loaded is one of these
-errors, and the other files do not run either.
+them (`check.md` section 2), whose `severity` is always `"error"`, and no `"done"` event. A file
+that cannot be loaded is one of these errors, and the other files do not run either. The checker's
+warnings (`check.md` section 4) are not reported, and do not stop the run: they are `ant check`'s to
+report, and the report stays the tests'.
 
 ## 3. Time limit
 
