@@ -29,6 +29,7 @@ ant test [flags] [path ...]
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-run regexp`  | Run only the tests whose full name matches. The pattern is split on `/` into levels (Filtering, below): `-run 'parse/0x'`                                  |
 | `-skip regexp` | Leave out the tests that match, the same way                                                                                                               |
+| `-list regexp` | List the top-level tests whose names match, and run none (Listing, below)                                                                                  |
 | `-v`           | Print every test as it starts and ends, with its output                                                                                                    |
 | `-json`        | Print events as JSON lines instead of the report                                                                                                           |
 | `-failfast`    | Start no test after the first failure                                                                                                                      |
@@ -43,11 +44,20 @@ level, as far as the pattern has parts, so `-run parse` runs `parse` and all its
 `-run parse/0x` runs `parse` and the subtests of it whose names contain `0x`. A parent whose
 subtests are left out still runs its body, which is how its subtests are found. `-skip` leaves out a
 test when its full name has at least as many levels as the pattern and each matches, and with it its
-subtests. A test left out is neither run nor counted.
+subtests. A test left out is neither run nor counted. When `-run` or `-skip` is given and leaves no
+test to run, the command writes `ant test: warning: no tests to run` to standard error after the
+report; the status stays `0`.
 
 The pattern is split on each `/` that is not escaped with a backslash and not inside brackets or
 parentheses, so a name that holds a `/` is matched by `\/` or `[/]`: `-run 'a\/b/c'` runs subtest
 `c` of the test `a/b`.
+
+**Listing.** `-list` takes one regular expression, matched anywhere in a top-level test's name, and
+prints each top-level test of the files whose name matches, in the order of the files and then of
+the tests, as `file: name`, the file named as in the report (section 2). Under `-json` it prints
+each as `{"action": "list", "file": file, "test": name}` instead. It runs no test and no module, so
+subtests, whose names a body computes, are not listed. The files are checked first, as for a run,
+and an error lists nothing.
 
 ## 2. Output
 
