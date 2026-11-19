@@ -30,8 +30,8 @@ formatted by its path.
 checker: a file with type errors is formatted like any other. A file must parse as a module (section
 10), the same as `ant run` and `ant check` require; a script is a module too. A file that does not
 parse is left untouched, and its error is reported as those commands report it,
-`path:line:col: message`, with `<stdin>` as the path for standard input. The remaining files are
-still formatted.
+`path:line:col: message [code]` (`check.md` section 2), with `<stdin>` as the path for standard
+input. The remaining files are still formatted.
 
 In place, a file is written only when its formatted contents differ from what is on disk, and the
 new contents replace the old in one step, so an interrupted run leaves either the old file or the
@@ -80,8 +80,8 @@ A `2` outranks a `1`: a run that finds both a syntax error and an unformatted fi
   (section 10).
 - **Spelling.** Identifiers, number literals (`0xFF`, `1_000`, `1e9`), duration literals (`90m`,
   `1_000ms`), the text of strings and their escapes, raw strings, and regular expression literals
-  and their flags are printed exactly as written. Inside a string, only the code between `${` and `}` is formatted (4.9). `ant fmt` never
-  turns a string into a raw string or back.
+  and their flags are printed exactly as written. Inside a string, only the code between `${` and
+  `}` is formatted (4.9). `ant fmt` never turns a string into a raw string or back.
 - **Parentheses.** Every pair of parentheses the author wrote is kept, even where precedence makes
   it redundant, and none is added.
 - **`else` placement.** `} else {` on one line and `else` at the start of the next line are both

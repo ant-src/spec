@@ -7,6 +7,7 @@ Specification for Ant, a typed language with errors as values, pipes for data, a
 - [fmt.md](fmt.md) — `ant fmt`, the source formatter
 - [doc.md](doc.md) — `ant doc` and doc comments
 - [test.md](test.md) — `ant test`, the test runner
+- [check.md](check.md) — `ant check`, its diagnostics and their codes
 
 ## License
 
