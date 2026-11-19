@@ -21,16 +21,16 @@ ant test [flags] [path ...]
 - Each test file runs as a program of its own: its modules are loaded and initialized for that file,
   so the module state of one file never reaches another's.
 - `ant test`, like `ant run`, does not type-check (section 4, Checking and running). `ant check`
-  accepts a test file and checks it with its imports.
+  checks test files, named or under a directory, with their imports.
 
-| Flag           | Meaning                                                                                                                           |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `-run regexp`  | Run only the tests whose full name matches. The pattern is split on `/` into levels (Filtering, below): `-run 'parse/0x'`         |
-| `-skip regexp` | Leave out the tests that match, the same way                                                                                      |
-| `-v`           | Print every test as it starts and ends, with its output                                                                           |
-| `-json`        | Print events as JSON lines instead of the report                                                                                  |
-| `-failfast`    | Start no test after the first failure                                                                                             |
-| `-parallel n`  | The most tests that run at once after `Test.parallel()`; the default is the number of CPUs                                        |
+| Flag           | Meaning                                                                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-run regexp`  | Run only the tests whose full name matches. The pattern is split on `/` into levels (Filtering, below): `-run 'parse/0x'`                                  |
+| `-skip regexp` | Leave out the tests that match, the same way                                                                                                               |
+| `-v`           | Print every test as it starts and ends, with its output                                                                                                    |
+| `-json`        | Print events as JSON lines instead of the report                                                                                                           |
+| `-failfast`    | Start no test after the first failure                                                                                                                      |
+| `-parallel n`  | The most tests that run at once after `Test.parallel()`; the default is the number of CPUs                                                                 |
 | `-timeout d`   | End the run after `d`, read as `Time.parseDuration` reads it, such as `30s` or `10m` (the default), and report the tests still running; `0` means no limit |
 
 **Filtering.** A part of `-run` is a regular expression (`Regex`, section 11) matched anywhere in

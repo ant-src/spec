@@ -390,13 +390,20 @@ are the same type.
 
 Types are checked by one command and erased by the other.
 
-`ant check file.ant` runs the checker over the file and every module it imports, including code
-nothing calls. It prints nothing and exits with `0` when it finds no error; otherwise it reports
-every error, each as `path:line:column: message` with the source line under it marked, then the
-count, and exits with `1`, or with `2` when the file cannot be loaded or the usage is wrong. It
-takes one file. Inference, bounds, and narrowing live here, and so does their cost. Every rule in
-this document that mentions a type is a checker rule, and a compile error is an error the checker
-reports.
+`ant check [path...]` runs the checker over the files the paths name and every module they import,
+including code nothing calls. A path is a file, checked whatever its name, or a directory, searched
+recursively for `.ant` files, leaving out directories whose names begin with `.`; with no path, it
+is `.`. Each module is checked once, however many of the files reach it, and a declaration file on
+its own. A file whose program cannot be loaded, for a syntax error, a missing module, an import
+cycle, or an import of a script, is reported and not checked; the other files still are. The command
+prints nothing and exits with `0` when it finds no error; otherwise it reports every error, each as
+`path:line:column: message` with the source line under it marked, then the count, and exits with
+`1`, or with `2` when a file cannot be loaded or the usage is wrong. Under `-json` it writes instead
+one JSON object per error to standard output, each on a line of its own: `path`, `line`, `column`,
+and `message`, and, for an error at a position, `start` and `end`, each a `line` and a `column`,
+bounding the span it marks, with `end` just past it. Columns count bytes from 1. Inference, bounds,
+and narrowing live here, and so does their cost. Every rule in this document that mentions a type is
+a checker rule, and a compile error is an error the checker reports.
 
 `ant run file.ant` does no static work beyond parsing. It loads the import graph, so a syntax error
 anywhere stops the program before any module runs, and then it runs with annotations parsed and
