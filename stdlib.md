@@ -1048,10 +1048,11 @@ program reads it when it sizes work, as `Parallel.map(xs, f, Os.cpus())` does.
 
 `Os.pid` is this process's id, as `Cmd.pid` is a child's. `Os.uid` is the effective user id, the one
 that decides what the process may touch, so `Os.uid() == 0` asks what `[[ $EUID -eq 0 ]]` asks;
-Windows has no user ids, and there it is null. `Os.gid` is the effective group id, Go's
-`os.Getegid`; it is null on Windows too. `Os.hostname` is Go's `os.Hostname`: the host's own name,
-not looked up in DNS, so it may or may not hold a domain; it is `Err` only when the host cannot
-report one.
+Windows has no user ids, and there it is null, as on a host without them, such as WebAssembly.
+`Os.gid` is the effective group id, Go's `os.Getegid`, and null where `Os.uid` is. `File.Info`'s
+`uid` and `gid` are null on the same hosts. `Os.hostname` is Go's `os.Hostname`: the host's own
+name, not looked up in DNS, so it may or may not hold a domain; it is `Err` only when the host
+cannot report one.
 
 `Os.cwd` is the working directory the `ant` command was started in, or the host's for an embedded
 run, not the directory of the script, and nothing in Ant changes it. It is `Err` when the host
