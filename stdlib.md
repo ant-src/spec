@@ -972,6 +972,7 @@ Os.args(): Array[string]              // the arguments after the program path: `
 Os.program(): string                  // the program path: `ant run main.ant a b` gives "main.ant"; "" in the REPL
 Os.platform(): string                 // the operating system: "darwin", "linux", "windows", ...
 Os.arch(): string                     // the processor architecture: "arm64", "amd64", ...
+Os.cpus(): int                        // the CPUs the program may use at once; at least 1
 Os.env(name: string): string | null   // null when name is not set; "" when it is set empty
 Os.environ(): Map[string, string]     // every variable
 Os.cwd(): Result[string, Error]       // the working directory, absolute
@@ -1038,6 +1039,11 @@ a directory of its own name, made with `File.mkdir`, which makes the root too, a
 belongs there rather than in the shared temporary directory, where someone else can take the name
 first. Variable names are matched as the host matches them: exactly on Unix, and ignoring case on
 Windows. An empty name, or one holding `=`, names no variable, and `Os.env` gives null for it.
+
+`Os.cpus` is the number of CPUs the program may use at once, Go's `runtime.GOMAXPROCS(0)`: the
+host's logical CPUs, or fewer when a container's CPU limit or the `GOMAXPROCS` environment variable
+lowers it, and never below 1. A container's limit can change while the program runs, and so can
+`Os.cpus`, so a program reads it when it sizes work, as `Parallel.map(xs, f, Os.cpus())` does.
 
 `Os.pid` is this process's id, as `Cmd.pid` is a child's. `Os.uid` is the effective user id, the one
 that decides what the process may touch, so `Os.uid() == 0` asks what `[[ $EUID -eq 0 ]]` asks;
