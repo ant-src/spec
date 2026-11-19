@@ -26,25 +26,46 @@ ant check -explain code
 
 A diagnostic is one thing the checker reports. It has:
 
-| Field                    | Meaning                                                                                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`, `line`, `column` | Where it is reported. `line` and `column` are `0` for a diagnostic about a whole file, such as one that cannot be read                       |
-| `start`, `end`           | For a diagnostic at a position, the span it is about, each a `line` and a `column`, with `end` just past the span                            |
-| `severity`               | `"error"`                                                                                                                                    |
-| `code`                   | The rule it enforces, from the catalog (section 3)                                                                                           |
-| `message`                | What is wrong, as one sentence that names types and code as the program writes them. Its wording is not part of this contract; its `code` is |
+| Field                    | Meaning                                                                                                                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`, `line`, `column` | Where it is reported. `line` and `column` are `0` for a diagnostic about a whole file, such as one that cannot be read                                                                                      |
+| `start`, `end`           | For a diagnostic at a position, the span it is about, each a `line` and a `column`, with `end` just past the span                                                                                           |
+| `severity`               | `"error"`                                                                                                                                                                                                   |
+| `code`                   | The rule it enforces, from the catalog (section 3)                                                                                                                                                          |
+| `message`                | What is wrong, as one sentence that names types and code as the program writes them. Its wording is not part of this contract; its `code` is                                                                |
+| `help`                   | Optional: one sentence on how to fix it, when the message does not say                                                                                                                                      |
+| `fixes`                  | Optional: edits that would remove it, each fix a `title`, an `auto` flag, and `edits`, each edit a `path`, a `start`, an `end`, and the `text` that replaces what lies between them; `start == end` inserts |
+| `related`                | Optional: other places that explain it, each a `path`, `line`, `column`, and `message`                                                                                                                      |
 
 Lines and columns count from 1, and columns count bytes. Diagnostics are reported in order of path,
 then line, then column.
 
 **Text.** Without `-json`, the command writes each diagnostic to standard error: a first line
 `path:line:column: message [code]`, then, for a diagnostic at a position, the source lines of its
-span, numbered, with the span marked. A blank line separates two diagnostics, and a last line gives
-their count, as `1 error` or `3 errors`. When there is no diagnostic, it writes nothing.
+span, numbered, with the span marked. Under the source come, each on a line of its own, `= help:`
+and the help, `= fix:` and the title of each fix, and `= note: path:line:column: message` for each
+related place. A blank line separates two diagnostics, and a last line gives their count, as
+`1 error` or `3 errors`. When there is no diagnostic, it writes nothing.
 
 **JSON.** With `-json`, the command writes each diagnostic to standard output as a JSON object on a
 line of its own, with the fields above, and writes nothing else. `start` and `end` are left out when
-there is no span.
+there is no span, and `help`, `fixes`, and `related` when there is none.
+
+**Help and fixes.** A fix is `auto` only when applying it removes the diagnostic, it is the only fix
+offered, and no other edit could be meant: the error admits one repair. `ant code fix` applies auto
+fixes without asking; an editor offers every fix. The checker offers at least these:
+
+| Code                               | When                                                                                                                                        | Help, and fix                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `no-member`                        | `x.f(...)`, where a prelude function `f` of another namespace takes `x` first and the arguments                                             | the namespace that has it; a fix that calls it as `Ns.f(x, ...)`, auto when one namespace does                    |
+| `no-member`, `undefined`           | a name near one that exists, within one edit for a name of up to four characters and two for a longer one, swapping two neighbors being one | the nearest names; for a prelude namespace or type with none near, that `ant doc` lists its members               |
+| `arguments`                        | `Result.ok()`                                                                                                                               | that a `Result[void, E]` holds `void`; a fix that passes it, auto when the call is expected to be such a `Result` |
+| `type-mismatch`                    | a map literal's key written `[k]`                                                                                                           | that a computed key is written `(k)`; a fix that writes it so, not auto, since an array may be the key meant      |
+| `syntax`                           | a reserved word                                                                                                                             | what Ant writes in its place, or, where a name was expected, to choose another                                    |
+| `syntax`                           | a subtest's name that is not a string                                                                                                       | the name written as a template, `test "${...}"`                                                                   |
+| `type-mismatch`, `needs-narrowing` | a field path, such as `r.x`, used after an `is` test of it in the same function                                                             | that a test narrows only a local or a parameter; the test as a related place                                      |
+| `missing-else`                     | a chain of `is` tests of a local that leaves members of its union out                                                                       | the members left out                                                                                              |
+| `redeclared`                       | a declaration that takes a prelude name                                                                                                     | to choose another name, and how to see the prelude's                                                              |
 
 **Every error in one run.** A module with a syntax error is read past it: each statement or
 declaration the parser can read after the error is checked as if the error were not there, and a
