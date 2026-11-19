@@ -186,10 +186,11 @@ and `isSymlink` say, not `mode`. `chmod` sets the bits exactly and is `Err` for 
 range.
 
 `chown` sets the user and the group that own a file, by id, as Go's `os.Chown` does, and `-1` for
-either keeps it. It follows a link, as `chmod` does; `follow: false` changes the link itself, Go's
-`os.Lchown`. Only root may give a file away; an owner may change its group to one it belongs to. On
-Windows it is `Err`, as Go's is. Names are not looked up: a script that has a name runs `id -u name`
-with `Cmd.read` for the id.
+either keeps it; an id below `-1` or above `4294967294`, the largest a 32-bit id leaves beside `-1`,
+is `Err` before anything is changed. It follows a link, as `chmod` does; `follow: false` changes the
+link itself, Go's `os.Lchown`. Only root may give a file away; an owner may change its group to one
+it belongs to. On Windows it is `Err`, as Go's is. Names are not looked up: a script that has a name
+runs `id -u name` with `Cmd.read` for the id.
 
 A new file is created with `0o666` and a new directory with `0o777`, less the process's umask, as
 the shell creates them, so under the usual umask `022` they are `0o644` and `0o755`. That is how
