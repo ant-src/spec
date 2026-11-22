@@ -1309,18 +1309,24 @@ section 11, Reflect): a walk of the type's shape that builds the value with the 
 it with the readers, with the format's own policy for unions, missing fields, and numbers.
 
 `parse` reads one JSON text as RFC 8259 defines it, with white space around the value and nothing
-else. An object that repeats a key is a map with the key in its first place and its last value, so
-`{"a": 1, "b": 2, "a": 3}` is `Map{ "a": 3.0, "b": 2.0 }`. Arrays and objects nest at most 10000
-deep, or 1000 on WebAssembly, whose stack is small; no document needs more, and deeper nesting is
-`Err`, as is a number too large for a `float64`, such as `1e400`; a number too small for one is
-`0.0` or the nearest value it has. The message of a text that stops before its value does is
-`unexpected end of JSON input`; of one that goes on after its value,
+else. An object is a map with its keys in the order of the text. One that repeats a name is `Err`,
+as in Go's `encoding/json/v2`, with `duplicate name "a"` and the line and column of the second, so
+`{"a": 1, "b": 2, "a": 3}` is `duplicate name "a" at line 1, column 18`: RFC 8259 leaves the meaning
+of such an object open, and two readers that take different values from it can be told different
+things by one text. Names are compared after their escapes are read, so `"a"` and `"\u0061"` are
+one.
+
+Arrays and objects nest at most 10000 deep, or 1000 on WebAssembly, whose stack is small; no
+document needs more, and deeper nesting is `Err`, as is a number too large for a `float64`, such as
+`1e400`; a number too small for one is `0.0` or the nearest value it has. The message of a text that
+stops before its value does is `unexpected end of JSON input`; of one that goes on after its value,
 `unexpected text after the JSON value`; and of any other malformed text, what was expected and what
 was found, with the line and column where it was found.
 
-A `\u` escape of a surrogate pair in a JSON string is the one code point the pair encodes, and a
-surrogate escape outside a pair, which encodes no text, becomes U+FFFD, as text from outside does
-(section 11 of `ant-lang.md`, String).
+A `\u` escape of a surrogate pair in a JSON string is the one code point the pair encodes. A
+surrogate escape outside a pair encodes no text, and it is `Err`, as in Go's `encoding/json/v2`,
+with the escape and where it is: `"\ud800"` is `unpaired surrogate \ud800 at line 1, column 2`. The
+escape is shown with lowercase digits.
 
 `Json.stringify` renders numbers as `String.from` does, so `1e21` is `1e+21`. `NaN` and the
 infinities have no JSON form, and `Json.stringify` panics on them, as Go's `encoding/json` refuses
