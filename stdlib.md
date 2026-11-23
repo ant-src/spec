@@ -82,21 +82,25 @@ name, so a listing that tells directories from files costs no `File.stat` per en
 `os.ReadDir`. An entry describes what is in the directory and not what a link there points to: for a
 symbolic link `isSymlink` is true and `isDir` is false, also when the link points to a directory,
 and `File.stat` of the path tells what it points to. For every other entry `isDir` is what
-`File.stat` reports. Like `File.list` it follows a link at `dir` itself. An entry carries no size,
-time, or mode, which `File.stat` has.
+`File.stat` reports, so an entry's `name`, `isDir`, and `isSymlink` are those of
+`File.stat(path, follow: false)`. Like `File.list` it follows a link at `dir` itself. An entry
+carries no size, time, or mode, which `File.stat` has.
 
-`File.list` returns names and `File.walk` paths: `walk` descends into every directory below `dir`,
-does not follow symbolic links, lists files and not directories, and returns them in lexical order.
-Lexical order is the order in which strings compare, code point by code point, so `"10.txt"` comes
-before `"9.txt"` and `"Zeta"` before `"apple"`. `modified` is the time of the last write, and `mode`
-holds the permissions (see Modes). `uid` and `gid` are the ids of the user and the group that own
-the file, as `ls -n` shows them; they are null where `Os.uid` is, on Windows and WebAssembly, which
-have no such ids. `isSymlink` is true only for `stat(path, follow: false)` of a link, since `stat`
-otherwise describes what the link points at. `name` is the last element of `path`,
-`Path.base(path)`, also when a link is followed. `size` is the length of a regular file in bytes;
-for a directory, and for a link described with `follow: false`, it is what the host reports, as is a
-link's own `mode`, so a program does not rely on them. `remove` refuses a directory with entries;
-`removeAll` is the recursive form, named so the dangerous one is the longer name.
+`list` and `readDir` return every entry of `dir`, those whose names begin with a dot among them, and
+never `.` or `..`; `walk` lists the files with such names too, and descends into the directories
+with them. `File.list` returns names and `File.walk` paths: `walk` descends into every directory
+below `dir`, does not follow symbolic links, lists files and not directories, and returns them in
+lexical order. Lexical order is the order in which strings compare, code point by code point, so
+`"10.txt"` comes before `"9.txt"` and `"Zeta"` before `"apple"`. `modified` is the time of the last
+write, and `mode` holds the permissions (see Modes). `uid` and `gid` are the ids of the user and the
+group that own the file, as `ls -n` shows them; they are null where `Os.uid` is, on Windows and
+WebAssembly, which have no such ids. `isSymlink` is true only for `stat(path, follow: false)` of a
+link, whose `isDir` is then false, also when the link points to a directory, since `stat` otherwise
+describes what the link points at. `name` is the last element of `path`, `Path.base(path)`, also
+when a link is followed. `size` is the length of a regular file in bytes; for a directory, and for a
+link described with `follow: false`, it is what the host reports, as is a link's own `mode`, so a
+program does not rely on them. `remove` refuses a directory with entries; `removeAll` is the
+recursive form, named so the dangerous one is the longer name.
 
 A path is used as written: `~` and `$NAME` are not expanded as a shell expands them, so a path under
 the home directory is `Path.join([try Os.home(), ...])`. A relative path is taken against the

@@ -94,10 +94,10 @@ ok    no tests (0.00s)
 The line gives the failed count when it is not zero, then always the passed count, then the skipped
 count when it is not zero: `ok    0 passed, 1 skipped` for a run whose one test skipped. A run of no
 tests says `no tests`. The line starts with `ok` when the command exits with `0` and `FAIL`
-otherwise, so under `-nocheck` a file that cannot be loaded makes it `FAIL`, though it adds to no
-count. The counts are of tests without subtests, and of tests with subtests that failed on their
-own; a test counts as without subtests when none of its subtests ran, so a parent whose subtests
-`-run` or `-skip` left out all counts as one test.
+otherwise, so a file that cannot be loaded when it is run (section 4) makes it `FAIL`, though it
+adds to no count. The counts are of tests without subtests, and of tests with subtests that failed
+on their own; a test counts as without subtests when none of its subtests ran, so a parent whose
+subtests `-run` or `-skip` left out all counts as one test.
 
 **Verbose.** Under `-v`, each test also prints `=== RUN   file: name` when it starts, its output as
 it comes, indented by four spaces, and when it ends `--- PASS: file: name (0.00s)`, `--- SKIP:` with
@@ -106,16 +106,16 @@ the reason on the next line, or `--- FAIL:` with its failures.
 **JSON.** Under `-json`, the command writes one JSON object per line to standard output, and nothing
 else; what a program prints outside a test, as it initializes, goes to standard error instead:
 
-| `action`   | Other fields                                                    | When                           |
-| ---------- | --------------------------------------------------------------- | ------------------------------ |
-| `"run"`    | `file`, `test`                                                  | a test starts                  |
-| `"output"` | `file`, `test`, `output`: the text of one write                 | a test prints                  |
-| `"pass"`   | `file`, `test`, `elapsed`: seconds as a number                  | a test passes                  |
-| `"skip"`   | `file`, `test`, `elapsed`, `reason`                             | a test is skipped              |
-| `"fail"`   | `file`, `test`, `elapsed`, `message`: the failures, as reported | a test fails or times out      |
-| `"done"`   | `passed`, `failed`, `skipped`, `elapsed`                        | the run ends, as the last line |
-| `"list"`   | `file`, `test`                                                  | `-list` names a test           |
-| `"error"`  | the fields of an `ant check -json` error                        | the checker reports an error   |
+| `action`   | Other fields                                                    | When                                                     |
+| ---------- | --------------------------------------------------------------- | -------------------------------------------------------- |
+| `"run"`    | `file`, `test`                                                  | a test starts                                            |
+| `"output"` | `file`, `test`, `output`: the text of one write                 | a test prints                                            |
+| `"pass"`   | `file`, `test`, `elapsed`: seconds as a number                  | a test passes                                            |
+| `"skip"`   | `file`, `test`, `elapsed`, `reason`                             | a test is skipped                                        |
+| `"fail"`   | `file`, `test`, `elapsed`, `message`: the failures, as reported | a test fails or times out                                |
+| `"done"`   | `passed`, `failed`, `skipped`, `elapsed`                        | the run ends, as the last line                           |
+| `"list"`   | `file`, `test`                                                  | `-list` names a test                                     |
+| `"error"`  | the fields of an `ant check -json` error                        | the checker reports an error, or a file cannot be loaded |
 
 **Check errors.** When the checker reports an error, the command writes every error to standard
 error as `ant check` writes them, with the count, and runs no test, so it prints no report and no
@@ -137,13 +137,16 @@ subtest still running.
 
 ## 4. Exit status
 
-| Status | When                                                                                                                             |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `0`    | no test failed, including when tests were skipped and when there were none                                                       |
-| `1`    | a test failed, the checker reported an error, or the time ran out                                                                |
-| `2`    | a file could not be loaded, because of a syntax error, an import cycle, a missing module, or a bad import, or the usage is wrong |
+| Status | When                                                                                                                                                                                     |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`    | no test failed, including when tests were skipped and when there were none                                                                                                               |
+| `1`    | a test failed, the checker reported an error, or the time ran out                                                                                                                        |
+| `2`    | a file could not be loaded, because of a syntax error, an import cycle, a missing module, a bad import, or a read of a name that only a declaration file declares, or the usage is wrong |
 
-Under `-nocheck`, a file that cannot be loaded is reported as `ant run` reports one, on standard
-error, and the other files still run. A panic while a file's modules are initialized is reported as
-`ant run` reports one; the file's tests do not run, and the file counts as one failed test.
-`Os.exit` in a test ends the command with its status, as it ends a program.
+A file may fail to load when it is run: under `-nocheck` any file that cannot be loaded, and with
+the check a test file that reads a name only a declaration file declares (`ant-lang.md` section 10,
+Declaration files), which the checker accepts. It is reported as `ant run` reports one, on standard
+error, or under `-json` as `"error"` events on standard output, as a check error is; the other files
+still run, and the `"done"` event still ends the run. A panic while a file's modules are initialized
+is reported as `ant run` reports one; the file's tests do not run, and the file counts as one failed
+test. `Os.exit` in a test ends the command with its status, as it ends a program.

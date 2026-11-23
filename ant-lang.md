@@ -2989,11 +2989,12 @@ The exit status is `0` when the script body ends with its last item or returns a
 `Err`; `1` when it returns an `Err`, after its deferred blocks have run and the `Err`'s `error`
 field and a newline have been written to standard error, an `Error` as its `message` alone and any
 other error through `String.from`, or when the main goroutine panics; and `2` when the program could
-not be loaded because of a syntax error, an import cycle, a missing module, or an import of a
-script. `try` and `Result.unwrap` both end a script on an `Err`: `try` as an expected failure,
-reported as the error alone, and `unwrap` as a bug, reported as a panic with its stack trace.
-`Os.exit` ends the process with the status it is given and skips deferred blocks. A library given to
-`ant run` is initialized, and the program exits with `0`.
+not be loaded because of a syntax error, an import cycle, a missing module, an import of a script,
+or a read of a name that only a declaration file declares (Declaration files, below). `try` and
+`Result.unwrap` both end a script on an `Err`: `try` as an expected failure, reported as the error
+alone, and `unwrap` as a bug, reported as a panic with its stack trace. `Os.exit` ends the process
+with the status it is given and skips deferred blocks. A library given to `ant run` is initialized,
+and the program exits with `0`.
 
 The REPL that a bare `ant` starts runs each input as a script body of its own, whose declarations
 stay for the inputs after it: `return` ends the input, `try` returns an `Err` from it, `?? return`
@@ -3173,8 +3174,9 @@ that program: it declares what a host adds to the prelude, so that a script writ
 checked, completed, and documented with no host at hand. `prelude.d.ant` is never one.
 
 - Its declarations join the prelude of every module of the program, wherever the module is, as the
-  host's own signatures do. `ant check` and an editor read them for the program, and report the
-  file's own errors, those `ant check` of the file reports, with the program's.
+  host's own signatures do. `ant check`, `ant code`, and an editor read them for the program, and
+  `ant check` and an editor report the file's own errors, those `ant check` of the file reports,
+  with the program's.
 - Only the directory of the root module is searched, and not the directories above it or those of
   the modules the root imports. A module that is checked as a root of its own, as an editor checks
   the file it has open, sees the declaration files beside itself.
@@ -3185,9 +3187,12 @@ checked, completed, and documented with no host at hand. `prelude.d.ant` is neve
   a syntax error declares nothing for a run, so a program beside it that reads none of its names, or
   that runs in a host which provides them, runs as it would without the file.
 - The file declares and does not implement. A program that reads a name which only a declaration
-  file declares cannot run: `ant run` and `ant test` report it as a load error, at the first place
-  the name is read, and exit with status 2 before any module is initialized. A program beside such a
-  file that does not read its names runs as it would without the file.
+  file declares cannot run: `ant run` and `ant test` report it as a load error with the code
+  `undefined` (`check.md` section 3), at the first place the name is read, and exit with status 2
+  before any module is initialized. A program beside such a file that does not read its names runs
+  as it would without the file.
+- The REPL has no root module and reads no declaration files, also for a file that `:load`
+  evaluates: a name that only such a file declares is not defined there.
 
 ## 11. Standard library
 
