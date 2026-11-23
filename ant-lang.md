@@ -3181,6 +3181,9 @@ checked, completed, and documented with no host at hand. `prelude.d.ant` is neve
 - A name the host that loads the program provides is the host's: the checker takes the host's
   signatures for it, and what a declaration file declares on that name is not read. So a host may
   keep its signatures in such a file, give them to the program itself, and have them read once.
+- An error in such a file is the checker's to report, and keeps no program from running: a file with
+  a syntax error declares nothing for a run, so a program beside it that reads none of its names, or
+  that runs in a host which provides them, runs as it would without the file.
 - The file declares and does not implement. A program that reads a name which only a declaration
   file declares cannot run: `ant run` and `ant test` report it as a load error, at the first place
   the name is read, and exit with status 2 before any module is initialized. A program beside such a
