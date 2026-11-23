@@ -394,14 +394,16 @@ Types are checked by one command and erased by the other.
 including code nothing calls. A path is a file, checked whatever its name, or a directory, searched
 recursively for `.ant` files, leaving out directories whose names begin with `.`; a directory with
 none is a usage error. With no path, it is `.`. Each module is checked once, however many of the
-files reach it, and each declaration file on its own. A program that cannot be loaded, for an error
-such as a syntax error, a missing module, an import cycle, or an import of a script, is reported and
-still checked as far as it can be read, so that one run reports every error; what follows only from
-a load error is not reported (`check.md` section 2). Each error is reported as a diagnostic that
-carries a code naming the rule it breaks; `check.md` defines the diagnostics, their text and JSON
-forms, the codes, and the exit status. Inference, bounds, and narrowing live here, and so does their
-cost. Every rule in this document that mentions a type is a checker rule, and a compile error is an
-error the checker reports.
+files reach it, and each declaration file on its own. A program whose root has declaration files
+beside it is checked with their declarations in its prelude (section 10, Declaration files), and a
+module that such a program shares with the other files is checked with each. A program that cannot
+be loaded, for an error such as a syntax error, a missing module, an import cycle, or an import of a
+script, is reported and still checked as far as it can be read, so that one run reports every error;
+what follows only from a load error is not reported (`check.md` section 2). Each error is reported
+as a diagnostic that carries a code naming the rule it breaks; `check.md` defines the diagnostics,
+their text and JSON forms, the codes, and the exit status. Inference, bounds, and narrowing live
+here, and so does their cost. Every rule in this document that mentions a type is a checker rule,
+and a compile error is an error the checker reports.
 
 `ant run file.ant` does no static work beyond parsing. It loads the import graph, so a syntax error
 anywhere stops the program before any module runs, and then it runs with annotations parsed and
@@ -3165,6 +3167,24 @@ every type they mention must resolve, every default must fit its type, a name ma
 and no declaration may take a prelude name, except in a file named `prelude.d.ant`, which is checked
 as the prelude's own source. `ant fmt` formats a declaration file as it does a module, and `ant doc`
 lists every declaration in it, since all are visible.
+
+A declaration file in the directory of a program's root module is a **host's declaration file** for
+that program: it declares what a host adds to the prelude, so that a script written for a host is
+checked, completed, and documented with no host at hand. `prelude.d.ant` is never one.
+
+- Its declarations join the prelude of every module of the program, wherever the module is, as the
+  host's own signatures do. `ant check` and an editor read them for the program, and report the
+  file's own errors, those `ant check` of the file reports, with the program's.
+- Only the directory of the root module is searched, and not the directories above it or those of
+  the modules the root imports. A module that is checked as a root of its own, as an editor checks
+  the file it has open, sees the declaration files beside itself.
+- A name the host that loads the program provides is the host's: the checker takes the host's
+  signatures for it, and what a declaration file declares on that name is not read. So a host may
+  keep its signatures in such a file, give them to the program itself, and have them read once.
+- The file declares and does not implement. A program that reads a name which only a declaration
+  file declares cannot run: `ant run` and `ant test` report it as a load error, at the first place
+  the name is read, and exit with status 2 before any module is initialized. A program beside such a
+  file that does not read its names runs as it would without the file.
 
 ## 11. Standard library
 
