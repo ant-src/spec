@@ -30,6 +30,7 @@ that need them `Err`; `Http` there goes through the host's own fetch.
 ```
 type Handle                                                // opaque: an open file, a standard stream, a connection, or a buffer over one
 type Info = { name: string, size: int, isDir: bool, isSymlink: bool, modified: Time.Instant, mode: int, uid: int | null, gid: int | null }
+type Entry = { name: string, isDir: bool, isSymlink: bool }   // an entry of a directory, as readDir reports it
 
 File.read(path: string): Result[string, Error]
 File.readBytes(path: string): Result[Bytes, Error]
@@ -52,6 +53,7 @@ File.symlink(target: string, link: string): Result[void, Error]   // makes link,
 File.readLink(path: string): Result[string, Error]         // a link's target, as stored
 File.realPath(path: string): Result[string, Error]         // absolute and clean, with every link resolved
 File.list(dir: string): Result[Array[string], Error]       // the names in dir, in lexical order
+File.readDir(dir: string): Result[Array[File.Entry], Error]   // the entries in dir, in that order, each with its kind
 File.walk(dir: string): Result[Array[string], Error]       // every file below dir, as paths relative to it
 File.glob(pattern: string, dir: string = ".", hidden: bool = false): Result[Array[string], Error]   // the paths below dir that match pattern, in lexical order
 
@@ -74,6 +76,14 @@ File.flush(f: File.Handle): Result[void, Error]            // hands what was wri
 File.sync(f: File.Handle): Result[void, Error]             // flushes, then has the OS write the file to storage
 File.close(f: File.Handle): Result[void, Error]            // a buffered handle writes out first; Ok on a standard stream and on a closed handle
 ```
+
+`File.readDir` is `File.list` with the kind of each entry, which the directory holds beside the
+name, so a listing that tells directories from files costs no `File.stat` per entry; it is Go's
+`os.ReadDir`. An entry describes what is in the directory and not what a link there points to: for a
+symbolic link `isSymlink` is true and `isDir` is false, also when the link points to a directory,
+and `File.stat` of the path tells what it points to. For every other entry `isDir` is what
+`File.stat` reports. Like `File.list` it follows a link at `dir` itself. An entry carries no size,
+time, or mode, which `File.stat` has.
 
 `File.list` returns names and `File.walk` paths: `walk` descends into every directory below `dir`,
 does not follow symbolic links, lists files and not directories, and returns them in lexical order.
