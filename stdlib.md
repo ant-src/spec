@@ -41,7 +41,7 @@ through a file, as `a.txt/b`, is not `Error.NotExist`, and a path in a directory
 search is `Error.Permission`, which `File.exists` reports as `false` like a missing one. On Windows
 the codes are those Go maps, so a missing file is `Error.NotExist` there too, and a file locked by
 another process has no kind. Where a function reports one of these conditions itself, it uses the
-same kind: `File.copyAll` onto something that exists is `Error.Exist`. Every other `Err` has no
+same kind: `File.copyAll` is `Error.Exist` when it refuses what is at `to`. Every other `Err` has no
 kind: a parse error, a bad argument, a call on a closed handle or listener, a call that its context
 ended, a network failure such as a refused connection, a program that no lookup finds, for which
 `Os.which` is the check, and any `Err` on a host without the facility.
