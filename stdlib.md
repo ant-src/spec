@@ -25,6 +25,27 @@ promise Go does not make, so a case this document leaves open is Go's. A host th
 without a file system, processes, or a network, as the WebAssembly playground is, makes the calls
 that need them `Err`; `Http` there goes through the host's own fetch.
 
+An `Err` says which failure it was where Go can (`ant-lang.md` section 8, Error kinds): its `kind`
+is that of the first of these sentinels that Go's `errors.Is` matches for the error behind it, and
+`null` when none does.
+
+| `kind`             | Go sentinel        | On Unix               | Typical calls                                                      |
+| ------------------ | ------------------ | --------------------- | ------------------------------------------------------------------ |
+| `Error.NotExist`   | `fs.ErrNotExist`   | `ENOENT`              | reading, statting or removing a missing path                       |
+| `Error.Exist`      | `fs.ErrExist`      | `EEXIST`, `ENOTEMPTY` | `replace: false` onto a file; removing a directory with entries    |
+| `Error.Permission` | `fs.ErrPermission` | `EACCES`, `EPERM`     | a file the user may not read; `chown` as a user; a port below 1024 |
+
+The sets are Go's, and the names say what Go's say, not more. `Error.Exist` also means that a
+directory is not empty, so `File.remove` of a directory with entries is `Error.Exist`. A path
+through a file, as `a.txt/b`, is not `Error.NotExist`, and a path in a directory the user may not
+search is `Error.Permission`, which `File.exists` reports as `false` like a missing one. On Windows
+the codes are those Go maps, so a missing file is `Error.NotExist` there too, and a file locked by
+another process has no kind. Where a function reports one of these conditions itself, it uses the
+same kind: `File.copyAll` onto something that exists is `Error.Exist`. Every other `Err` has no
+kind: a parse error, a bad argument, a call on a closed handle or listener, a call that its context
+ended, a network failure such as a refused connection, a program that no lookup finds, for which
+`Os.which` is the check, and any `Err` on a host without the facility.
+
 ## File
 
 ```
@@ -265,10 +286,10 @@ shell's `noclobber` and `cp -n`, and it holds even against a program that takes 
 try File.write(output, report, replace: false)   // never overwrites an earlier report
 ```
 
-The `Err` does not say why, as no library `Error` does, so a program that treats an existing file
-differently from other failures checks `File.exists` after it. `append` never replaces, `copyAll`
-and `symlink` already refuse what exists, and `tempFile` picks a free name, so they have no such
-parameter; neither has `rename`, since Go has no rename that refuses to replace.
+The `Err` is `Error.Exist` when something is there, so a program that treats an existing file
+differently from other failures tests its kind. `append` never replaces, `copyAll` and `symlink`
+already refuse what exists, and `tempFile` picks a free name, so they have no such parameter;
+neither has `rename`, since Go has no rename that refuses to replace.
 
 ### Copies
 

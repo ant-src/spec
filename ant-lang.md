@@ -838,8 +838,9 @@ it only beside `null` and `void`: `Shape | null` is fine, `Shape | Error` is a c
 
 A union of named record or primitive types is a tagged union: the tag each value carries tells the
 members apart. `s is Circle` tests the tag (section 5). In the branch it guards, `s` has type
-`Circle`; in the `else` branch, `s` has the union minus `Circle` (section 7). There is no `kind`
-field and no pattern matching: `is` with `if` is the only way to narrow a union of records.
+`Circle`; in the `else` branch, `s` has the union minus `Circle` (section 7). No field tells the
+members apart and there is no pattern matching: `is` with `if` is the only way to narrow a union of
+records.
 
 ```ant
 type Circle = { radius: float64 }
@@ -2325,12 +2326,12 @@ type Result[T, E] = Ok[T] | Err[E]
 
 `Result.ok(value)` and `Result.err(error)` are plain functions that build the two records;
 `Ok{ value: 1 }` is the same value as `Result.ok(1)`. The error type is whatever the author chooses.
-The standard library uses `Error`, a record `{ message: string }` that context can be added to (see
-Wrapping errors); user code often declares a tagged union of its own. `Result.fail(message)` is
-`Result.err(Error{ message })` typed `Result[T, Error]`, the short way to fail with a message. It
-fits only where the error type is `Error` itself: under a wider one, such as `ParseError | Error`,
-it is a compile error, since type arguments are invariant (section 4), and `Result.err`, which takes
-its error type from the expected one, is the form to write.
+The standard library uses `Error`, a record of a message and a kind (Error kinds, below) that
+context can be added to (see Wrapping errors); user code often declares a tagged union of its own.
+`Result.fail(message)` is `Result.err(Error{ message })` typed `Result[T, Error]`, the short way to
+fail with a message. It fits only where the error type is `Error` itself: under a wider one, such as
+`ParseError | Error`, it is a compile error, since type arguments are invariant (section 4), and
+`Result.err`, which takes its error type from the expected one, is the form to write.
 
 ```ant
 type EmptyInput = {}
@@ -2357,6 +2358,34 @@ return `Result[Config, ParseError | Error]` and `try` both kinds of call. The na
 `Result[Config, ParseError]` is not itself assignable to the wider type, since type arguments are
 invariant (section 4): `try` widens on the way out, and `Result.mapErr(r, { x })` widens explicitly
 where `try` does not apply.
+
+**Error kinds.** `Error` carries a kind beside its message, for the few failures a program tells
+apart:
+
+```
+type Error = { message: string, kind: Error.Kind | null = null }
+type Error.Kind = Error.NotExist | Error.Exist | Error.Permission
+```
+
+The message is for a person and the kind is for the program. `Error.Kind` is an enumeration (section
+4, Tagged unions), tested with `is`: `r.error.kind is Error.NotExist` holds when what the call named
+is not there, whatever words the platform has for it. `stdlib.md` says when the library sets each
+kind. Most failures have none, and their `kind` is `null`, as it is in `Error{ message: "..." }`
+(section 4, Field defaults).
+
+```ant
+func readOr(path: string, fallback: string): Result[string, Error] {
+  let text = File.read(path)
+  if text is Err && text.error.kind is Error.NotExist { return Result.ok(fallback) }
+  text
+}
+```
+
+A program may set a kind on an `Error` it builds, and the kind then claims the library's meaning. It
+cannot add kinds: a failure a program names in its own terms is a type of its own, as `ParseError`
+is. `text.error.kind` is a field path and does not narrow (section 7), so a chain meant to cover
+every kind binds the kind to a local and has an arm for `null` beside one for each member. The field
+shares only its name with the kind that every value carries (section 4, Kinds).
 
 ### `try`
 
@@ -2394,10 +2423,10 @@ Besides the two constructors and `Result.fail`, `Result` provides `Result.map`, 
 ### Wrapping errors
 
 `Error.wrap(e, context)` returns a new `Error` whose message is `context`, `: `, and the message of
-`e`, as Go's `fmt.Errorf("%s: %w")` writes it; `e` is untouched, and an empty `context` is joined
-like any other. `Result.wrapErr(r, context)` returns `r` itself when it is an `Ok`, and an `Err`
-holding `Error.wrap(r.error, context)` when it is an `Err`. Under `try`, a `wrapErr` stage is
-parenthesized together with the call it wraps, as any pipeline is (see `try`):
+`e`, as Go's `fmt.Errorf("%s: %w")` writes it, and whose kind is `e`'s; `e` is untouched, and an
+empty `context` is joined like any other. `Result.wrapErr(r, context)` returns `r` itself when it is
+an `Ok`, and an `Err` holding `Error.wrap(r.error, context)` when it is an `Err`. Under `try`, a
+`wrapErr` stage is parenthesized together with the call it wraps, as any pipeline is (see `try`):
 
 ```ant
 func loadConfig(path: string): Result[Config, Error] {
@@ -2412,10 +2441,16 @@ println(config)
 
 On a truncated `app.json` the script ends with the message
 `load config: parse app.json: unexpected end of JSON input` (section 10, Scripts). A wrapped error
-keeps only text: it is a fresh record, so `Record.same` with the original is false, and there is no
-chain of causes to walk. An error that code branches on is a type of its own (see `Result`), where a
-cause is an ordinary field, and `Result.mapErr` turns it into an `Error` when a person is to read
-it.
+keeps its text and its kind and nothing else: it is a fresh record, so `Record.same` with the
+original is false, and there is no chain of causes to walk. An error that code branches on is a type
+of its own (see `Result`), where a cause is an ordinary field, and `Result.mapErr` turns it into an
+`Error` when a person is to read it; for the library's errors it is the `kind`.
+
+A kind says what failed, not which call failed, and it travels as far as the error does: if
+`loadConfig` also read the files that a config includes, its `Err` for a missing one would be
+`Error.NotExist`, as for a missing `app.json`. So a program tests a kind on the result of the call
+it is about, and a function whose `Err` should not pass a kind on drops it with `Result.mapErr`,
+building an `Error` of the message alone.
 
 Messages follow one convention, so that the joined text reads as one line:
 
@@ -3242,7 +3277,11 @@ Besides the namespaces below, the prelude declares these names in every module:
 type Ok[T] = { value: T }
 type Err[E] = { error: E }
 type Result[T, E] = Ok[T] | Err[E]
-type Error = { message: string }                 // the library's error type; see Result, Error, Panic, and Record
+type Error = { message: string, kind: Error.Kind | null = null }   // the library's error type; see Result, Error, Panic, and Record
+type Error.Kind = Error.NotExist | Error.Exist | Error.Permission   // what failed, where the library can say (stdlib.md)
+type Error.NotExist = {}                         // nothing is at the path
+type Error.Exist = {}                            // something is at the path already, or a directory is not empty
+type Error.Permission = {}                       // the OS denied the operation
 type Panic = { message: string, trace: Array[Panic.Frame] }   // a caught panic; see Result, Error, Panic, and Record
 type Panic.Frame = { function: string, path: string, line: int, column: int }   // innermost first in a trace
 type Entry[K, V] = { key: K, value: V }          // yielded by maps
@@ -4035,7 +4074,7 @@ Result.unwrapOr[T, E](r: Result[T, E], fallback: T): T
 Result.all[T, E](rs: Array[Result[T, E]]): Result[Array[T], E]   // the first Err, or Ok of every value
 Result.wrapErr[T](r: Result[T, Error], context: string): Result[T, Error]   // r when Ok; else an Err of Error.wrap(r.error, context)
 
-Error.wrap(e: Error, context: string): Error                   // Error{ message: "${context}: ${e.message}" }, a new record
+Error.wrap(e: Error, context: string): Error                   // Error{ message: "${context}: ${e.message}", kind: e.kind }, a new record
 
 Panic.catch[T](f: func(): T): Result[T, Panic]                 // Ok of f's value, or Err of the panic that left f, after its deferred blocks ran
 Panic.raise(p: Panic): never                                   // panics with p's message and trace
@@ -4047,7 +4086,8 @@ Record.same[T: {}](a: T, b: T): bool                           // identity; {} b
 names the alias in a type and its functions in an expression; `Error.wrap` is declared on `Error`
 likewise, and `Error{ message: "..." }` is still a literal (section 8, Wrapping errors).
 `Panic.catch` and `Panic.raise` are declared on `Panic`, and `Panic.Frame` is a type in its
-namespace, as `String.Cut` is in `String`'s (section 8, Catching a panic). `Record` is a namespace.
+namespace, as `String.Cut` is in `String`'s and `Error.Kind` and its three members are in `Error`'s
+(section 8, Catching a panic). `Record` is a namespace.
 
 ### Synchronization
 
