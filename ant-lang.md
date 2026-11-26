@@ -3376,6 +3376,7 @@ Array.unique[T](xs: Array[T]): Array[T]                        // the first of e
 Array.uniqueBy[T, K](xs: Array[T], key: func(T): K): Array[T]  // the first of each == key, in order
 Array.chunk[T](xs: Array[T], n: int): Array[Array[T]]          // in order, n elements each, the last fewer when the length is not a multiple of n; panics if n < 1
 Array.groupBy[T, K](xs: Array[T], key: func(T): K): Map[K, Array[T]]   // keys in first-seen order, elements in order
+Array.countBy[T, K](xs: Array[T], key: func(T): K): Map[K, int]   // how many elements have each key; keys in first-seen order
 Array.entries[T](xs: Array[T]): Array[Indexed[T]]              // each element with its index, from 0, in order
 Array.range(from: int, to: int): Array[int]                    // empty when to <= from; panics if to − from is above 2^31 − 1
 Array.filled[T](n: int, v: T): Array[T]                        // the same v in every slot; panics if n < 0 or n is above 2^31 − 1
