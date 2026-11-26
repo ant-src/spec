@@ -696,12 +696,14 @@ var tags = Set.of(["red", "blue"])          // Set[string]
 var seen: Set[int] = Set.of([])
 ```
 
-Square brackets build arrays. A map literal is `Map{ key: value, ... }`, with the same type-name
-prefix as a record literal. A key that is a single word, an identifier or a keyword, is the string
-of that word, as in JavaScript, so `Map{ name: 1 }` has the key `"name"`. Any other expression is
-evaluated as the key, and a parenthesized identifier `(name)` is the variable. A bare identifier
-alone is shorthand: `Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare
-word before `:` is a name: the field of a record, the string key of a map.
+Square brackets build arrays. The type of an array is `Array[T]`: square brackets after a type hold
+its type arguments, at least one, so `int[]` is a syntax error and not an array type. A map literal
+is `Map{ key: value, ... }`, with the same type-name prefix as a record literal. A key that is a
+single word, an identifier or a keyword, is the string of that word, as in JavaScript, so
+`Map{ name: 1 }` has the key `"name"`. Any other expression is evaluated as the key, and a
+parenthesized identifier `(name)` is the variable. A bare identifier alone is shorthand:
+`Map{ name }` means `Map{ "name": name }`. In both brace literals, then, a bare word before `:` is a
+name: the field of a record, the string key of a map.
 
 `Array[T]` is dense and growable. `Map[K, V]` keys compare the way `==` does, so a record or an
 array can be a key. A map keeps insertion order: `for`, `Map.keys`, `Map.values`, `Map.entries`, and
@@ -886,7 +888,8 @@ type Handler = func(request: Request): Response
 
 ### Generics
 
-Type parameters go in square brackets after the name. They apply to types and functions.
+Type parameters go in square brackets after the name, at least one, as type arguments do. They apply
+to types and functions.
 
 ```ant
 type Pair[A, B] = { first: A, second: B }
