@@ -816,7 +816,9 @@ type parameters, and named record or primitive types that take no type arguments
 `T | NotFound`, and `Ok[T] | Err[E]` are fine; `T | Array[int]` would become ambiguous once `T` is
 an array, and `T | Box[int]` once `T` is a `Box[string]`. With these two restrictions every value in
 a union carries the discriminator of one declared member at that member's type arguments, and the
-checker's work for `is` and for exhaustive chains is one lookup per member.
+checker's work for `is` and for exhaustive chains is one lookup per member. Inside a generic body
+the types that two type parameters of a union stand for are not known, so `is` asks more of them
+there when its target takes type arguments (section 5, `is`).
 
 Substituting type arguments forms unions too, and the same rules apply where the arguments are
 written. `type Either[A, B] = A | B` is allowed, since two type parameters may share a union, but
@@ -1661,6 +1663,17 @@ argument of `T`. Through an interface it narrows to the one instantiation of `T`
 interface, which the interface's signatures together determine, and it is a compile error when they
 do not: `s is Box` is an error on a `Shape` and gives a `Box[int]` on a `Container[int]`. An
 interface is never the target: `is Shape` is a compile error.
+
+A discriminator carries no type arguments, so it does not tell one `Box` from another, nor one
+array, map, set, or function from another. When `T` takes type arguments, or is `Array`, `Map`,
+`Set`, or `func`, the members that may hold a `T` must therefore hold the same one, and where type
+parameters share the union (section 4, Unions), each of them must hold it, since the type a
+parameter stands for is not known in the body; otherwise the test is a compile error. With
+`x: A | B`, `x is Box` gives a `Box[int]` under `[A: { value: int }, B: { value: int }]`. It is an
+error under `[A: { value: int }, B: { value: string }]`, where a `Box` is a `Box[int]` through `A`
+and a `Box[string]` through `B`, and under `[A, B: { value: int }]`, where `A` may be a
+`Box[string]`. A `T` without type arguments is one type whichever member holds it, so there a type
+parameter that holds none leaves the test to the other members.
 
 `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected.
 As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
