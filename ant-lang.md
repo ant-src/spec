@@ -1645,15 +1645,17 @@ a named record or primitive type, a time type, or `Regex.Pattern`. An alias is n
 value carries. So `x is Id` is a compile error that says to test the members, and a panic in an
 unchecked program.
 
-The static type of `x` must be a union with `T` as a member, an anonymous record type to which the
-named record type `T` is assignable, or an interface that `T` satisfies (section 4, Interfaces). In
-the second case the test narrows `x` to the one instantiation of `T` assignable to that type, and it
-is a compile error when the anonymous type does not determine every type argument of `T`; in the
-third the test narrows `x` to the one instantiation of `T` that satisfies the interface, which the
-interface's signatures together determine, and it is a compile error when they do not: `s is Box` is
-an error on a `Shape` and gives a `Box[int]` on a `Container[int]`. An interface is never the
-target: `is Shape` is a compile error. Otherwise the test is always true or always false, which is a
-compile error.
+The static type of `x` must be a union with `T` as a member, or must be or have as a member an
+anonymous record type to which the named record type `T` is assignable, or an interface that `T`
+satisfies (section 4, Interfaces). In the first of these the test narrows that member to the one
+instantiation of `T` assignable to it, and it is a compile error when the anonymous type does not
+determine every type argument of `T`; in the second the test narrows that member to the one
+instantiation of `T` that satisfies the interface, which the interface's signatures together
+determine, and it is a compile error when they do not: `s is Box` is an error on a `Shape` and gives
+a `Box[int]` on a `Container[int]`. In both cases the member stays when the test fails, since other
+types fit it too: with `x: { name: string } | null`, `x is Person` gives a `Person` when true and
+leaves the type as it was when false. An interface is never the target: `is Shape` is a compile
+error. Otherwise the test is always true or always false, which is a compile error.
 
 `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected.
 As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
