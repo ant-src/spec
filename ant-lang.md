@@ -967,10 +967,10 @@ that breaks a bound panics in an unchecked program (section 12).
 
 A bound may be an interface (Interfaces, below), and every interface is a bound: inside the body a
 `T` bounded by `Shape` has the functions `Shape` lists, called through `.`, and a solution must
-satisfy the interface, as a single member when it is a union. There are no `where` clauses and no
-type parameters that take type arguments. A user type cannot customize `String.from` or ordering, so
-records sort through `Array.sortBy` or `Array.sortWith`, or through a `compare` of their own behind
-an interface bound. A generic type with different type arguments is a different type:
+satisfy the interface, as a single type when the bound is a union. There are no `where` clauses and
+no type parameters that take type arguments. A user type cannot customize `String.from` or ordering,
+so records sort through `Array.sortBy` or `Array.sortWith`, or through a `compare` of their own
+behind an interface bound. A generic type with different type arguments is a different type:
 `Array[Circle]` is not an `Array[Shape]` (see Assignability).
 
 ### Type declarations
@@ -1155,7 +1155,7 @@ var queue: Array[Compare] = []       // compile error: Compare is a bound only
 ```
 
 A union solves an interface bound only when the interface is a type, matching the rule that a union
-bound takes a single member (Generics).
+bound takes a single type, never a union (Generics).
 
 **Type or bound.** For an interface that is a type, both forms are legal and behave the same at run
 time, where types are erased. They differ only in what the checker accepts. `xs: Array[Shape]` takes
