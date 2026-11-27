@@ -797,10 +797,10 @@ as `Array[User]` and `Array[Order]` (see Tagged unions), or a variable assigned 
 path and `Box[string]` on another is a compile error at the join, which says to narrow first or to
 give the whole an expected type.
 
-An anonymous record type has no discriminator and cannot be tested by `is`, so a union may contain
-at most one, as in `{ name: string } | null`, and never alongside a named record type. The reason is
-that width subtyping lets a value in by shape while `is` tests only the tag, which carries no type
-arguments:
+An anonymous record type has no discriminator and cannot be the target of `is`, so a union may
+contain at most one, as in `{ name: string } | null`, and never alongside a named record type. The
+reason is that width subtyping lets a value in by shape while `is` tests only the tag, which carries
+no type arguments:
 
 ```ant
 type Box[T] = { value: T }
@@ -912,12 +912,13 @@ parameter, its own or another's: `[T: T]` and `[T: U, U: R]` are compile errors,
 expands to one. A bound may name the other type parameters of the same declaration, earlier or
 later, and a solution is checked against the bound with their solutions in place: with
 `[T, U: Array[T]]`, `f(1, [2])` sets `U` to `Array[int]`. A solution for `T` must be assignable to
-the bound, and when the bound is a union, the solution must be a single member of it, never a union:
-`[T: Ordered]` admits `int` or `string`, not `int | string` and not `Ordered` itself. Inside the
-body, `T` is known only to be assignable to its bound: the fields of a record bound can be read and
-assigned, a field every member of a union bound declares can be read as through the union, and an
-operator applies to `T` when it applies to every member of the bound. That is sound only because `T`
-stands for one member, which is what the restriction guarantees:
+the bound, and when the bound is a union, the solution must be a single type assignable to one
+member of it, never a union: `[T: Ordered]` admits `int` or `string`, not `int | string` and not
+`Ordered` itself, and `[T: { name: string } | null]` admits a `Person`. Inside the body, `T` is
+known only to be assignable to its bound: the fields of a record bound can be read and assigned, a
+field every member of a union bound declares can be read as through the union, and an operator
+applies to `T` when it applies to every member of the bound. That is sound only because `T` stands
+for one type within one member, which is what the restriction guarantees:
 
 ```ant
 func bigger[T: Ordered](a: T, b: T): T { if a > b { a } else { b } }
@@ -928,8 +929,9 @@ func choose(a: Number, b: Number): Number {
 ```
 
 Without a bound, `T` is opaque; `==`, `Map` keys, and `Set` members still work, because they work on
-every type. A bounded parameter may be tested against a member of its bound, so with `[T: Ordered]`,
-`x is string` narrows `x` to `string`. The narrowed `x` is a plain `string` and no longer a `T`, so
+every type. A bounded parameter is tested by `is` as a value of its bound is (section 5, `is`), so
+with `[T: Ordered]`, `x is string` narrows `x` to `string`, and with `[T: { name: string }]`,
+`x is Person` narrows `x` to `Person`. The narrowed `x` is a plain `string` and no longer a `T`, so
 it cannot be returned where a `T` is expected; a copy taken before the test keeps the `T`, as in
 `orDefault` below. Bounds are the way to accept any array whose elements have a given field, since
 type arguments are invariant and `Array[Person]` is not an `Array[{ name: string }]`. Nothing
@@ -955,7 +957,7 @@ max(1, 2.0)                       // compile error: int and float64 are differen
 
 The bound of a generic type's parameter holds wherever the type is written, in an annotation, a
 literal whose arguments are inferred, a type expression, or another declaration: each type argument
-must be assignable to its bound, and a single member of a union bound, by the rules above. With
+must be assignable to its bound, and fit a union bound by the rules above. With
 `type B[T: string] = { v: T }`, `B[int]` is a compile error. Inside a generic declaration or
 function, a type parameter given as an argument fits when its own bound does, so
 `type W[X: string] = { b: B[X] }` checks and `type V[X] = { b: B[X] }` does not. A type expression
@@ -1645,17 +1647,20 @@ a named record or primitive type, a time type, or `Regex.Pattern`. An alias is n
 value carries. So `x is Id` is a compile error that says to test the members, and a panic in an
 unchecked program.
 
-The static type of `x` must be a union with `T` as a member, or must be or have as a member an
-anonymous record type to which the named record type `T` is assignable, or an interface that `T`
-satisfies (section 4, Interfaces). In the first of these the test narrows that member to the one
-instantiation of `T` assignable to it, and it is a compile error when the anonymous type does not
-determine every type argument of `T`; in the second the test narrows that member to the one
-instantiation of `T` that satisfies the interface, which the interface's signatures together
-determine, and it is a compile error when they do not: `s is Box` is an error on a `Shape` and gives
-a `Box[int]` on a `Container[int]`. In both cases the member stays when the test fails, since other
-types fit it too: with `x: { name: string } | null`, `x is Person` gives a `Person` when true and
-leaves the type as it was when false. An interface is never the target: `is Shape` is a compile
-error. Otherwise the test is always true or always false, which is a compile error.
+A member of the static type of `x`, or the type itself when it is not a union, may hold a `T` when
+it is `T`, an anonymous record type to which the named record type `T` is assignable, an interface
+that `T` satisfies (section 4, Interfaces), or a type parameter whose bound has such a member
+(section 4, Generics). The test needs a member that may hold a `T` and a member that may hold
+something else, which may be the same one; otherwise it is always true or always false, which is a
+compile error. When the test holds, `x` narrows to what its members hold of `T`; when it fails, a
+member that is `T` drops out and the others stay, since other types fit them too: with
+`x: { name: string } | null`, `x is Person` gives a `Person` when true and leaves the type as it was
+when false. Through an anonymous record type the test narrows to the one instantiation of `T`
+assignable to it, and it is a compile error when the anonymous type does not determine every type
+argument of `T`. Through an interface it narrows to the one instantiation of `T` that satisfies the
+interface, which the interface's signatures together determine, and it is a compile error when they
+do not: `s is Box` is an error on a `Shape` and gives a `Box[int]` on a `Container[int]`. An
+interface is never the target: `is Shape` is a compile error.
 
 `is` binds like a comparison, so `!(x is Circle)` and `x is Circle || x is Rect` read as expected.
 As the condition of an `if` on a local variable or a parameter, it narrows (section 7).
@@ -2230,9 +2235,9 @@ The checker narrows after a test, as in the last example, but only for a local v
 parameter, or a top-level `let` (below):
 
 - A condition narrows after `x is T`, `x == null`, or `x != null`, through `&&`, `||`, and `!`. The
-  `else` branch gets the complement: the union minus the tested member. A test on an interface
-  narrows the `then` branch to `T` and leaves the `else` branch the interface, whose satisfying
-  types are an open set (section 4, Interfaces).
+  `else` branch gets the complement: the union minus the tested member. A test through an interface,
+  an anonymous record type, or a bounded type parameter narrows the `then` branch to `T` and leaves
+  that member in the `else` branch, since it holds other types too (section 5, `is`).
 - When an `if` has no `else` and its branch has type `never`, because it ends in `return`, `break`,
   `continue`, or an expression of type `never`, such as `panic(...)`, `Panic.raise(p)`, or a call of
   a function declared to return `never`, the complement applies to the rest of the block, so
@@ -2244,10 +2249,11 @@ parameter, or a top-level `let` (below):
 - An assignment narrows the variable to the type of the assigned expression, and where branches
   meet, the variable has the union of the branch types, so `if c == null { c = load() }` leaves `c`
   a `Config`. In that union, and in the type of an `if` or of a body whose branches it joins, a
-  member that satisfies an interface among the members is absorbed by it: a `Shape` narrowed to a
-  `Circle` in one branch is a `Shape` again where the branches meet (section 4, Interfaces). The
-  narrowing holds even when it makes a later test dead: with `v: UserId | string`, after
-  `v = "plain"` the test `v is UserId` is a compile error, since `v` is then a `string`.
+  member that satisfies an interface among the members is absorbed by it, and so is a named record
+  type assignable to an anonymous record type among them: a `Shape` narrowed to a `Circle` in one
+  branch is a `Shape` again where the branches meet (section 4, Interfaces). The narrowing holds
+  even when it makes a later test dead: with `v: UserId | string`, after `v = "plain"` the test
+  `v is UserId` is a compile error, since `v` is then a `string`.
 - Otherwise a narrowing lasts until the next assignment to the variable. Inside a loop, an
   assignment anywhere in the body cancels it from the loop head on.
 
